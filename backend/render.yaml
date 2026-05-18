@@ -1,0 +1,23 @@
+# render.yaml – Render deployment config for Abdulmula Fashion ERP backend
+services:
+  - type: web
+    name: abdulmula-erp-api
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: JWT_EXPIRE
+        value: 15m
+      - key: JWT_REFRESH_EXPIRE
+        value: 7d
+      - key: CLIENT_URL
+        sync: false
