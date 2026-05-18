@@ -2,7 +2,6 @@
 // NO public register endpoint
 
 require('dotenv').config();
-console.log('ENV TEST:', process.env.MONGO_URI);
 
 
 const express       = require('express');
@@ -50,7 +49,7 @@ app.use(express.json({ limit:'10mb' }));
 app.use(express.urlencoded({ extended:true }));
 
 // ── Logging ───────────────────────────────────────────────────
-if (process.env.NODE_ENV === 'development') app.use(morgan('dev'));
+app.use(morgan('combined'));
 
 // ── Health check ──────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({
@@ -77,7 +76,6 @@ app.use((req, res) => res.status(404).json({
   success:false, message:`${req.method} ${req.originalUrl} not found.`
 }));
 
-app.use(morgan('combined'));
 // ── Error handler ──────────────────────────────────────────────
 app.use(errorHandler);
 
