@@ -47,7 +47,11 @@ api.interceptors.response.use(
         const refreshToken = localStorage.getItem('refreshToken');
         if (!refreshToken) throw new Error('No refresh token');
 
-        const { data } = await axios.post('/api/auth/refresh', { refreshToken });
+        const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+  timeout: 15000,
+  headers: { 'Content-Type': 'application/json' }
+});
         localStorage.setItem('accessToken',  data.data.accessToken);
         localStorage.setItem('refreshToken', data.data.refreshToken);
 
