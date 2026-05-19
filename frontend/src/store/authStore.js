@@ -56,7 +56,7 @@ fetchMe: async () => {
   try {
 
     const response = await fetch(
-      'https://abdulmula-fashion-erp.onrender.com/api/api/auth/me',
+      'https://abdulmula-fashion-erp.onrender.com/api',
       {
         headers: {
           Authorization: `Bearer ${token}`,
