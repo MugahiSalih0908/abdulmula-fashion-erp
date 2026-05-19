@@ -68,7 +68,7 @@ export default function ReceiptModal({ invoice, onClose, cashReceived, changeAmo
                 {invoice.discountTotal>0&&<div className="flex justify-between text-xs text-green-600"><span>Discount</span><span>−${invoice.discountTotal?.toFixed(2)}</span></div>}
                 {invoice.taxAmount>0&&<div className="flex justify-between text-xs text-gray-500"><span>Tax ({invoice.taxRate}%)</span><span>${invoice.taxAmount?.toFixed(2)}</span></div>}
                 <div className="flex justify-between font-black text-base pt-1 border-t border-gray-200">
-                  <span>TOTAL</span><span>${(invoice?.grandTotal || 0).toFixed(2)}</span>
+                  <span>TOTAL</span><span>${invoice.grandTotal?.toFixed(2)}</span>
                 </div>
                 {cashReceived>0&&invoice.paymentMethod==='Cash'&&(
                   <>
@@ -123,6 +123,6 @@ function buildText(invoice, cashReceived, changeAmount) {
     invoice.balanceDue>0 ? `BALANCE DUE: $${invoice.balanceDue?.toFixed(2)}` : '',
     '==============================',
     'Thank you for shopping with us!',
-    '==============================' 
+    '=============================='
   ].filter(Boolean).join('\n');
 }

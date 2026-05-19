@@ -58,8 +58,9 @@ export default function AppLayout() {
                style={{ background:'#d4a017', color:'#111' }}>AF</div>
           <div>
             <p className="text-white font-bold text-sm leading-tight">Abdulmula Fashion</p>
+            MSA
             <p className="text-xs leading-tight capitalize" style={{ color:'#d4a017' }}>
-              {user?.role} · ERP v5
+              {user?.role} · ERP v6
             </p>
           </div>
         </div>
