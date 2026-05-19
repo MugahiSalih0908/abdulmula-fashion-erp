@@ -2,20 +2,25 @@
   "name": "Abdulmula Fashion ERP",
   "short_name": "AF ERP",
   "description": "Premium POS & ERP for Abdulmula Fashion, Juba, South Sudan",
+
   "start_url": "/",
   "scope": "/",
+
   "display": "standalone",
   "orientation": "portrait-primary",
+
   "theme_color": "#111111",
   "background_color": "#111111",
+
   "categories": ["business", "finance", "productivity"],
   "lang": "en",
+
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/icons/icon-512.png",
@@ -24,20 +29,30 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [],
+
   "shortcuts": [
     {
       "name": "Open POS",
       "short_name": "POS",
       "description": "Open the Point of Sale",
       "url": "/pos",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Dashboard",
       "short_name": "Dashboard",
       "url": "/dashboard",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }
