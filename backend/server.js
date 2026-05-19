@@ -52,9 +52,21 @@ app.use(express.urlencoded({ extended:true }));
 app.use(morgan('combined'));
 
 // ── Health check ──────────────────────────────────────────────
+// ── Root route ───────────────────────────────────────────────
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Abdulmula Fashion ERP API running'
+  });
+});
+
+// ── Health check ─────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({
-  success:true, version:'5.0', env: process.env.NODE_ENV,
-  time: new Date().toISOString(), service:'Abdulmula Fashion ERP'
+  success: true,
+  version: '5.0',
+  env: process.env.NODE_ENV,
+  time: new Date().toISOString(),
+  service: 'Abdulmula Fashion ERP'
 }));
 
 // ── API Routes ────────────────────────────────────────────────
