@@ -56,7 +56,7 @@ fetchMe: async () => {
   try {
 
     const response = await fetch(
-      'http://localhost:5000/api/auth/me',
+      'https://abdulmula-fashion-erp.onrender.com/api/api/auth/me',
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -90,7 +90,7 @@ fetchMe: async () => {
 
     try {
 
-      const response = await fetch('http://localhost:5000/api/auth/login', {
+      const response = await fetch('https://abdulmula-fashion-erp.onrender.com/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

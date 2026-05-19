@@ -114,7 +114,7 @@ This creates `admin@abdulmula.com` / `Admin@12345` with `isVerified: true`.
 
 ```bash
 # Terminal 1
-cd backend  && npm run dev   # → http://localhost:5000
+cd backend  && npm run dev   #https://abdulmula-fashion-erp.onrender.com/api
 
 # Terminal 2
 cd frontend && npm run dev   # → http://localhost:5173

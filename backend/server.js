@@ -26,8 +26,8 @@ app.set('trust proxy', 1);
 // ── CORS ──────────────────────────────────────────────────────
 const allowed = [
   process.env.CLIENT_URL,
-  'http://localhost:5173',
-  'http://localhost:3000',
+  'https://abdulmula-fashion-erp.onrender.com/api',
+  'https://abdulmula-fashion-erp.onrender.com/api',
 ].filter(Boolean);
 
 app.use(cors({

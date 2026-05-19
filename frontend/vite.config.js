@@ -64,7 +64,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://localhost:5000', changeOrigin: true }
+      '/api': { target: 'https://abdulmula-fashion-erp.onrender.com/api', changeOrigin: true }
     }
   }
 });
