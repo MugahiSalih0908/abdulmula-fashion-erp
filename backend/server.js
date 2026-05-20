@@ -79,6 +79,32 @@ app.use('/api/customers',       require('./routes/customers'));
 app.use('/api/suppliers',       require('./routes/suppliers'));
 app.use('/api/expenses',        require('./routes/expenses'));
 app.use('/api/staff',           require('./routes/staff'));
+app.get('/api/test-email', async (req, res) => {
+  try {
+
+    const { sendEmail } = require('./utils/sendEmail');
+
+    await sendEmail({
+      to: req.query.to,
+      subject: 'Test Email',
+      html: '<h1>Resend Working ✅</h1>'
+    });
+
+    res.json({
+      success: true,
+      message: 'Test email sent successfully'
+    });
+
+  } catch (err) {
+
+    console.error('TEST EMAIL ERROR:', err);
+
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
+  }
+});
 app.use('/api/purchase-orders', require('./routes/purchaseOrders'));
 app.use('/api/cashbook',        require('./routes/cashbook'));
 app.use('/api/reports',         require('./routes/reports'));
@@ -92,7 +118,7 @@ app.use((req, res) => res.status(404).json({
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`\n🚀  Abdulmula Fashion ERP v5 API → http://localhost:${PORT}`);
+  console.log(`\n🚀  Abdulmula Fashion ERP v5 API → https://abdulmula-fashion-erp.onrender.com/api:${PORT}`);
   console.log(`🔐  No public registration — admin creates accounts via /api/staff`);
   console.log(`🌍  ${process.env.NODE_ENV || 'development'}\n`);
 });
