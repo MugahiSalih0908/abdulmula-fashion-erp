@@ -1,16 +1,8 @@
-// utils/sendEmail.js – Nodemailer email utility with branded HTML templates
+// utils/sendEmail.js – Resend email utility with branded HTML templates
+const { Resend } = require('resend');
 
-const nodemailer = require('nodemailer');
-
-// ── Transporter (Gmail SMTP) ──────────────────────────────────
-const createTransporter = () =>
-  nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+// ── Initialize Resend with API key ───────────────────────────
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // ── Brand constants ───────────────────────────────────────────
 const BRAND = {
@@ -161,40 +153,51 @@ const passwordChangedTemplate = ({ name }) => ({
 });
 
 // ─────────────────────────────────────────────────────────────
-// Main sendEmail function
+// Main sendEmail function using Resend
 // ─────────────────────────────────────────────────────────────
 const sendEmail = async ({ to, subject, html }) => {
   // Skip in test / CI environments
   if (process.env.NODE_ENV === 'test') {
     console.log(`[EMAIL SKIP – test mode] To: ${to} | Subject: ${subject}`);
-    return;
+    return { id: 'test-mode', message: 'Test email skipped' };
   }
 
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('[EMAIL] EMAIL_USER or EMAIL_PASS not configured – skipping email send.');
+  // Check for required environment variables
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[EMAIL] RESEND_API_KEY is missing – cannot send email.');
     console.log(`[EMAIL WOULD SEND] To: ${to} | Subject: ${subject}`);
-    return;
+    throw new Error('Resend API key not configured');
   }
 
-  const transporter = createTransporter();
-  console.log('EMAIL_USER:', process.env.EMAIL_USER);
-console.log('EMAIL_PASS EXISTS:', !!process.env.EMAIL_PASS);
-  const info = await transporter.sendMail({
-    from:    process.env.EMAIL_FROM || `Abdulmula Fashion ERP <${process.env.EMAIL_USER}>`,
-    to,
-    subject,
-    html,
-  });
+  if (!process.env.EMAIL_FROM) {
+    console.error('[EMAIL] EMAIL_FROM is missing – cannot send email.');
+    throw new Error('EMAIL_FROM not configured');
+  }
 
-  console.log(`[EMAIL] Sent to ${to} | MessageId: ${info.messageId}`);
-  return info;
+  try {
+    const data = await resend.emails.send({
+      from: process.env.EMAIL_FROM,
+      to,
+      subject,
+      html,
+    });
+
+    console.log(`[EMAIL] Sent to ${to} | Subject: ${subject} | ID: ${data.id}`);
+    return data;
+  } catch (err) {
+    console.error('[RESEND EMAIL ERROR]', err);
+    throw err;
+  }
 };
 
+// ─────────────────────────────────────────────────────────────
+// Exports
+// ─────────────────────────────────────────────────────────────
 module.exports = {
   sendEmail,
   templates: {
     welcome:         welcomeTemplate,
     reset:           resetTemplate,
     passwordChanged: passwordChangedTemplate,
-  }
+  },
 };
