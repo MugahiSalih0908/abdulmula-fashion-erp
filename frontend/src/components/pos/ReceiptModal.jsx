@@ -1,5 +1,7 @@
 // src/components/pos/ReceiptModal.jsx – thermal receipt + WhatsApp share v3
 
+import { useRef } from 'react';
+import { useReactToPrint } from 'react-to-print';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Printer, Share2, X, MessageCircle } from 'lucide-react';
 import { shareInvoiceWhatsApp } from '../../utils/whatsapp';
@@ -7,7 +9,11 @@ import { shareInvoiceWhatsApp } from '../../utils/whatsapp';
 export default function ReceiptModal({ invoice, onClose, cashReceived, changeAmount }) {
   if (!invoice) return null;
 
-  const handlePrint = () => window.print();
+ const receiptRef = useRef();
+
+const handlePrint = useReactToPrint({
+  content: () => receiptRef.current
+});
   const handleWhatsApp = () => shareInvoiceWhatsApp(invoice, invoice.customerPhone || '');
   const handleShare = async () => {
     const text = buildText(invoice, cashReceived, changeAmount);
@@ -16,6 +22,7 @@ export default function ReceiptModal({ invoice, onClose, cashReceived, changeAmo
   };
 
   return (
+    
     <AnimatePresence>
       <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
                   className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center"
@@ -31,7 +38,11 @@ export default function ReceiptModal({ invoice, onClose, cashReceived, changeAmo
           </div>
 
           <div className="overflow-y-auto" style={{maxHeight:'calc(92vh - 130px)'}}>
-            <div className="p-5 font-mono text-sm" id="receipt-print">
+            <div
+  ref={receiptRef}
+  className="p-5 font-mono text-sm print-area bg-white"
+  id="receipt-print"
+>
               <div className="text-center mb-4">
                 <div className="text-2xl font-black tracking-widest mb-0.5">ABDULMULA</div>
                 <div className="font-bold tracking-wider text-gray-600 text-sm">FASHION ERP</div>
