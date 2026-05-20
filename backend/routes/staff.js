@@ -89,7 +89,7 @@ router.post('/', authorize('admin'), async (req, res, next) => {
 
     // Send welcome email
     try {
-      await sendEmail({ to: member.email, ...tmpl });
+     console.log('EMAIL WOULD SEND TO:', member.email);
     } catch (emailErr) {
       console.error('[EMAIL ERROR] Welcome email failed:', emailErr.message);
       // Don't fail the creation — admin can resend
@@ -100,7 +100,7 @@ router.post('/', authorize('admin'), async (req, res, next) => {
     res.status(201).json({
       success:true,
       data:    member,
-      message: `Account created. Welcome email sent to ${member.email}.`
+     message: `Account created successfully.`
     });
   } catch (err) { next(err); }
 });
@@ -122,7 +122,7 @@ router.post('/:id/resend-activation', authorize('admin'), async (req, res, next)
     const activationUrl = `${process.env.FRONTEND_URL}/activate/${rawToken}`;
     const tmpl          = templates.welcome({ name: member.name, role: member.role, tempPassword, activationUrl });
 
-    await sendEmail({ to: member.email, ...tmpl });
+  console.log('EMAIL WOULD SEND TO:', member.email);
 
     res.json({ success:true, message:`Activation email resent to ${member.email}.` });
   } catch (err) { next(err); }

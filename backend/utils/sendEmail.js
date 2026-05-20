@@ -177,6 +177,8 @@ const sendEmail = async ({ to, subject, html }) => {
   }
 
   const transporter = createTransporter();
+  console.log('EMAIL_USER:', process.env.EMAIL_USER);
+console.log('EMAIL_PASS EXISTS:', !!process.env.EMAIL_PASS);
   const info = await transporter.sendMail({
     from:    process.env.EMAIL_FROM || `Abdulmula Fashion ERP <${process.env.EMAIL_USER}>`,
     to,
