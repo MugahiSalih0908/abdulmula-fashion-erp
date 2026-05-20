@@ -297,58 +297,88 @@ export default function POSPage() {
   );
 }
 
-/* ── Fixed Barcode Scanner using Html5Qrcode (direct camera) ── */
+/* ── Fixed Barcode Scanner with camera selection & fallback ── */
 function BarcodeScanner({ onResult, onClose }) {
+  const [error, setError] = useState(null);
+  const [manualCode, setManualCode] = useState('');
   const scannerRef = useRef(null);
 
   useEffect(() => {
     let html5QrCode = null;
+    let mounted = true;
 
-    async function startScanner() {
+    async function initScanner() {
       try {
         const { Html5Qrcode } = await import('html5-qrcode');
+        
+        // Ensure DOM element exists
+        const element = document.getElementById('qr-reader');
+        if (!element) throw new Error('Scanner container not found');
+        
         html5QrCode = new Html5Qrcode('qr-reader');
-
+        
+        // Get available cameras
         const cameras = await Html5Qrcode.getCameras();
         if (!cameras || cameras.length === 0) {
-          throw new Error('No camera found on this device');
+          toast.error('No camera found on this device');
+          if (mounted) setError('No camera available');
+          return;
         }
-
-        const cameraId = cameras[0].id; // Use first camera (usually back camera on phones)
-
-        await html5QrCode.start(
-          cameraId,
-          {
-            fps: 10,
-            qrbox: { width: 280, height: 180 },
-          },
-          (decodedText) => {
-            // Stop scanner after successful scan
-            html5QrCode.stop().catch(console.error);
-            onResult(decodedText);
-          },
-          (errorMessage) => {
-            // Silent ignore – scanning continues
+        
+        // Prefer rear/back camera on phones
+        const backCamera = cameras.find(c =>
+          c.label.toLowerCase().includes('back') ||
+          c.label.toLowerCase().includes('rear')
+        ) || cameras[0];
+        
+        // Small delay to ensure DOM is ready
+        setTimeout(async () => {
+          if (!mounted) return;
+          try {
+            await html5QrCode.start(
+              backCamera.id,
+              {
+                fps: 10,
+                qrbox: { width: 250, height: 120 },
+                aspectRatio: 1.777,
+              },
+              (decodedText) => {
+                html5QrCode.stop().catch(console.error);
+                if (mounted) onResult(decodedText);
+              },
+              () => {} // ignore scanning errors
+            );
+          } catch (err) {
+            console.error('Start error:', err);
+            if (mounted) setError(err.message || 'Failed to start camera');
           }
-        );
+        }, 300);
+        
       } catch (err) {
-        console.error('Scanner error:', err);
-        toast.error('Could not start camera. Please check permissions.');
-        onClose(); // Close scanner modal on fatal error
+        console.error('Init error:', err);
+        if (mounted) setError(err.message || 'Could not access camera');
       }
     }
-
-    startScanner();
-
+    
+    initScanner();
+    
     return () => {
+      mounted = false;
       if (html5QrCode && typeof html5QrCode.stop === 'function') {
         html5QrCode.stop().catch(console.error);
       }
     };
-  }, [onResult, onClose]);
+  }, [onResult]);
+
+  const handleManualSubmit = (e) => {
+    e.preventDefault();
+    if (manualCode.trim()) {
+      onResult(manualCode.trim());
+    }
+  };
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl p-4 w-full max-w-sm">
         <div className="flex justify-between items-center mb-3">
           <h3 className="font-bold text-gray-900">Scan Barcode / QR</h3>
@@ -356,8 +386,50 @@ function BarcodeScanner({ onResult, onClose }) {
             <X size={16} />
           </button>
         </div>
-        <div id="qr-reader" ref={scannerRef} className="rounded-xl overflow-hidden" />
-        <p className="text-xs text-center text-gray-500 mt-3">Position the barcode inside the frame</p>
+        
+        {error ? (
+          <div className="text-center p-4">
+            <p className="text-red-500 text-sm mb-3">{error}</p>
+            <p className="text-gray-500 text-xs mb-2">You can enter the barcode manually:</p>
+            <form onSubmit={handleManualSubmit} className="flex gap-2">
+              <input
+                type="text"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                placeholder="Enter barcode / SKU"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                autoFocus
+              />
+              <button type="submit" className="bg-gold text-black px-4 py-2 rounded-lg font-semibold text-sm">
+                Add
+              </button>
+            </form>
+          </div>
+        ) : (
+          <>
+            {/* Fixed scanner container with black background and min height */}
+            <div
+              id="qr-reader"
+              className="rounded-xl overflow-hidden bg-black"
+              style={{ width: '100%', minHeight: '300px' }}
+              ref={scannerRef}
+            />
+            <p className="text-xs text-center text-gray-500 mt-3">Position the barcode inside the frame</p>
+            <p className="text-xs text-center text-gray-400 mt-1">Or enter manually:</p>
+            <form onSubmit={handleManualSubmit} className="flex gap-2 mt-2">
+              <input
+                type="text"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                placeholder="Enter barcode / SKU"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              <button type="submit" className="bg-gold text-black px-4 py-2 rounded-lg font-semibold text-sm">
+                Add
+              </button>
+            </form>
+          </>
+        )}
       </div>
     </div>
   );
