@@ -122,9 +122,10 @@ app.use((req, res) => res.status(404).json({
 app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`\n🚀  Abdulmula Fashion ERP v5 API → https://abdulmula-fashion-erp.onrender.com/api:${PORT}`);
-  console.log(`🔐  No public registration — admin creates accounts via /api/staff`);
-  console.log(`🌍  ${process.env.NODE_ENV || 'development'}\n`);
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🚀 Abdulmula Fashion ERP API');
+  console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+  console.log(`📡 Port: ${PORT}`);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });
-
 module.exports = app;
