@@ -9,6 +9,7 @@ import api                                   from '../services/api';
 import useAuthStore                          from '../store/authStore';
 import PageHeader from '../components/ui/PageHeader';
 import Sheet      from '../components/ui/Sheet';
+import InvitationModal from '../components/InvitationModal';
 import {
   Plus, ChevronRight, X, UserCheck, UserX,
   KeyRound, BarChart3, ShieldCheck, Eye, EyeOff,
@@ -33,6 +34,7 @@ const getStrength = (pwd) => {
 
 export default function StaffPage() {
   const [showAdd,  setShowAdd]  = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
   const [selected, setSelected] = useState(null);
   const [resetFor, setResetFor] = useState(null);
   const currentUser = useAuthStore(s => s.user);
@@ -66,11 +68,18 @@ export default function StaffPage() {
         title="Staff Management"
         sub={`${activeCount} active · ${verifiedCnt} activated`}
         action={
-          <button onClick={() => setShowAdd(true)}
-                  className="flex items-center gap-1.5 text-black px-4 py-2.5 rounded-xl font-semibold text-sm"
-                  style={{ background:'#d4a017' }}>
-            <Plus size={16}/> Add Staff
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowInvite(true)}
+                    className="flex items-center gap-1.5 text-black px-4 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition"
+                    style={{ background:'#d4a017' }}>
+              <Mail size={16}/> Send Invite
+            </button>
+            <button onClick={() => setShowAdd(true)}
+                    className="flex items-center gap-1.5 text-black px-4 py-2.5 rounded-xl font-semibold text-sm"
+                    style={{ background:'#d4a017' }}>
+              <Plus size={16}/> Add Staff
+            </button>
+          </div>
         }
       />
 
@@ -184,6 +193,9 @@ export default function StaffPage() {
       <Sheet open={!!selected} title={selected?.name} subtitle={selected?.email} onClose={() => setSelected(null)}>
         {selected && <StaffDetail memberId={selected._id}/>}
       </Sheet>
+
+      {/* Invitation Modal */}
+      <InvitationModal isOpen={showInvite} onClose={() => setShowInvite(false)} />
     </div>
   );
 }

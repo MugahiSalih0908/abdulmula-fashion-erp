@@ -69,10 +69,14 @@ app.get('/api/health', (req, res) => res.json({
   service: 'Abdulmula Fashion ERP'
 }));
 
+// ── Invitation rate limiters ──────────────────────────────────────
+const { createInvitationLimiter, validateTokenLimiter, acceptInvitationLimiter } = require('./middleware/invitationLimiter');
+
 // ── API Routes ────────────────────────────────────────────────
-// NOTE: NO public /api/auth/register — accounts created by admin via /api/staff
+// NOTE: NO public /api/auth/register — accounts created by admin via /api/staff or invitations
 app.use('/api/auth',            require('./routes/auth'));
 app.use('/api/dashboard',       require('./routes/dashboard'));
+app.use('/api/invitations',     createInvitationLimiter, validateTokenLimiter, acceptInvitationLimiter, require('./routes/invitations'));
 app.use('/api/products',        require('./routes/products'));
 app.use('/api/invoices',        require('./routes/invoices'));
 app.use('/api/customers',       require('./routes/customers'));

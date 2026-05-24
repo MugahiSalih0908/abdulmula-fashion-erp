@@ -1,4 +1,4 @@
-// src/App.jsx – v6 with activation, forgot-password, reset-password routes
+// src/App.jsx – v6 with activation, forgot-password, reset-password, and invitation routes
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider }        from '@tanstack/react-query';
@@ -14,6 +14,7 @@ import LoginPage               from './pages/LoginPage';
 import ActivateAccountPage     from './pages/ActivateAccountPage';
 import ForgotPasswordPage      from './pages/ForgotPasswordPage';
 import ResetPasswordPage       from './pages/ResetPasswordPage';
+import InvitePage              from './pages/InvitePage';
 
 // App pages
 import DashboardPage           from './pages/DashboardPage';
@@ -58,6 +59,7 @@ useEffect(() => {
           {/* ── Public auth pages ──────────────────────────── */}
           <Route path="/login"           element={<GuestRoute><LoginPage /></GuestRoute>} />
           <Route path="/activate/:token" element={<ActivateAccountPage />} />
+          <Route path="/invite/:token"   element={<InvitePage />} />
           <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
           <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
 

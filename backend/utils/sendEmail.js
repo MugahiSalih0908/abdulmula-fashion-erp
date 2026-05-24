@@ -153,6 +153,55 @@ const passwordChangedTemplate = ({ name }) => ({
 });
 
 // ─────────────────────────────────────────────────────────────
+// TEMPLATE: Staff Invitation
+// ─────────────────────────────────────────────────────────────
+const invitationTemplate = ({ email, role, inviteUrl, expiresIn = 24 }) => ({
+  subject: `🎉 You're Invited to Abdulmula Fashion ERP`,
+  html: baseLayout(`
+    <h1>Welcome to Abdulmula Fashion! 🎉</h1>
+    <p>Hello <strong>${email}</strong>,</p>
+    <p>You have been invited to join <strong>Abdulmula Fashion ERP</strong> as a <span style="text-transform:capitalize;font-weight:700;color:${BRAND.gold};">${role}</span>.</p>
+
+    <p>Our Enterprise Resource Planning system helps us manage inventory, sales, suppliers, and more. You'll be part of our growing team!</p>
+
+    <div class="info-box">
+      <p><strong>📧 Email:</strong> ${email}</p>
+      <p><strong>👤 Role:</strong> <span style="text-transform:capitalize;">${role}</span></p>
+      <p><strong>🏢 Company:</strong> Abdulmula Fashion · Konyo-Konyo Market, Juba, South Sudan</p>
+    </div>
+
+    <p style="margin-top:28px;margin-bottom:28px;text-align:center;">
+      Click the button below to set up your account and get started:
+    </p>
+
+    <p style="text-align:center;margin:28px 0;">
+      <a class="btn" href="${inviteUrl}" style="display:inline-block;padding:16px 36px;font-size:16px;">
+        ✨ Accept Invitation & Create Account
+      </a>
+    </p>
+
+    <div class="warn">
+      <p>⏰ <strong>Important:</strong> This invitation link expires in <strong>${expiresIn} hours</strong>. 
+      After that, you'll need to ask your administrator to send a new invitation.</p>
+    </div>
+
+    <p style="margin-top:24px;font-size:13px;color:#888;">
+      <strong>What to expect:</strong><br/>
+      1. Click the button above<br/>
+      2. Create a secure password<br/>
+      3. You'll be automatically logged in<br/>
+      4. Access your dashboard immediately
+    </p>
+
+    <hr class="divider"/>
+    <p style="font-size:13px;color:#888;">
+      If you were not expecting this invitation, please ignore this email or contact your system administrator.
+      Do not share this link with anyone else.
+    </p>
+  `)
+});
+
+// ─────────────────────────────────────────────────────────────
 // Main sendEmail function using Resend
 // ─────────────────────────────────────────────────────────────
 const sendEmail = async ({ to, subject, html }) => {
@@ -199,5 +248,6 @@ module.exports = {
     welcome:         welcomeTemplate,
     reset:           resetTemplate,
     passwordChanged: passwordChangedTemplate,
+    invitation:      invitationTemplate,
   },
 };
