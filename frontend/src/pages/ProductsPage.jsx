@@ -9,7 +9,11 @@ import api                                   from '../services/api';
 import { useRole }                           from '../hooks/useRole';
 import PageHeader from '../components/ui/PageHeader';
 import Sheet      from '../components/ui/Sheet';
-import { Plus, Search, Pencil, Trash2, BarChart3, X, AlertTriangle, Package, Eye } from 'lucide-react';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import CardBody from '../components/ui/CardBody';
+import Badge from '../components/ui/Badge';
+import { Plus, Search, Pencil, Trash2, BarChart3, X, AlertTriangle, Package, Eye, TrendingUp } from 'lucide-react';
 
 const CATEGORIES = ['Men','Women','Girls','Boys','Kids','Sudanese Silk Toub Wraps','Accessories','Other'];
 
@@ -47,48 +51,60 @@ export default function ProductsPage() {
   const openAdd  = ()  => { setEditProd(null); setShowForm(true); };
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-5">
       <PageHeader
         title="Products"
-        sub={`${products.length} items`}
+        sub={`${products.length} items in stock`}
         action={
           can.editProducts ? (
-            <button onClick={openAdd}
-                    className="flex items-center gap-1.5 text-black px-4 py-2.5 rounded-xl font-semibold text-sm"
-                    style={{ background:'#d4a017' }}>
-              <Plus size={16}/> Add
-            </button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={openAdd}
+              className="flex items-center gap-1.5"
+            >
+              <Plus size={16} /> Add
+            </Button>
           ) : (
-            <span className="flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-lg bg-gray-100 text-gray-500">
-              <Eye size={14}/> View only
-            </span>
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Eye size={14} /> View only
+            </Badge>
           )
         }
       />
 
       {lowStockCount > 0 && (
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-          <AlertTriangle size={14} className="text-amber-600 shrink-0"/>
-          <span className="text-amber-800 text-sm font-medium">{lowStockCount} item(s) running low on stock</span>
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+          <span className="text-amber-800 text-sm font-medium">
+            {lowStockCount} item(s) running low on stock
+          </span>
         </div>
       )}
 
       {/* Search */}
       <div className="relative">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
-        <input value={search} onChange={e => setSearch(e.target.value)}
-               placeholder="Search name, SKU, barcode…"
-               className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none bg-white"/>
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name, SKU, barcode…"
+          className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition bg-white"
+        />
       </div>
 
       {/* Category pills */}
-      <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-        {['All',...CATEGORIES].map(cat => (
-          <button key={cat} onClick={() => setCategory(cat)}
-                  className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                    category===cat ? 'text-black' : 'bg-white text-gray-500 border border-gray-200'
-                  }`}
-                  style={category===cat ? { background:'#d4a017' } : {}}>
+      <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+        {['All', ...CATEGORIES].map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setCategory(cat)}
+            className={`shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${
+              category === cat
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
             {cat}
           </button>
         ))}
@@ -96,45 +112,99 @@ export default function ProductsPage() {
 
       {/* List */}
       {isLoading ? (
-        <div className="space-y-2">{[...Array(6)].map((_,i)=><div key={i} className="h-20 bg-gray-200 rounded-2xl animate-pulse"/>)}</div>
+        <div className="space-y-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-20 bg-gray-200 rounded-lg animate-pulse" />
+          ))}
+        </div>
       ) : products.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <Package size={48} className="mx-auto mb-3 opacity-25"/><p className="font-semibold">No products found</p>
+        <div className="text-center py-16">
+          <Package size={48} className="mx-auto mb-3 text-gray-300" />
+          <p className="font-semibold text-gray-500">No products found</p>
+          {can.editProducts && <p className="text-xs text-gray-400 mt-1">Add your first product to get started</p>}
         </div>
       ) : (
-        <div className="space-y-2">
-          {products.map(p => (
-            <div key={p._id} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
-              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                p.quantity === 0 ? 'bg-red-500' : p.quantity <= p.lowStockThreshold ? 'bg-amber-400' : 'bg-green-400'
-              }`}/>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-gray-900 truncate">{p.name}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-xs text-gray-400">{p.category}</span>
-                  {p.sku && <span className="text-xs font-mono text-gray-400">{p.sku}</span>}
-                </div>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="font-bold text-sm" style={{ color:'#d4a017' }}>${p.price.toFixed(2)}</p>
-                <p className={`text-xs font-medium ${
-                  p.quantity===0 ? 'text-red-500' : p.quantity<=p.lowStockThreshold ? 'text-amber-500' : 'text-gray-400'
-                }`}>{p.quantity} in stock</p>
-              </div>
-              {can.editProducts && (
-                <div className="flex gap-1 shrink-0">
-                  <button onClick={() => setMovements(p)} className="p-2 text-gray-400 hover:text-blue-500 rounded-lg"><BarChart3 size={15}/></button>
-                  <button onClick={() => openEdit(p)}     className="p-2 text-gray-400 hover:text-gray-700 rounded-lg"><Pencil size={15}/></button>
-                  <button onClick={() => { if(window.confirm(`Remove "${p.name}"?`)) deleteMutation.mutate(p._id); }}
-                          className="p-2 text-gray-400 hover:text-red-500 rounded-lg"><Trash2 size={15}/></button>
-                </div>
-              )}
-            </div>
+        <div className="space-y-3">
+          {products.map((p) => (
+            <motion.div key={p._id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <Card>
+                <CardBody className="p-4">
+                  <div className="flex items-center gap-3">
+                    {/* Stock indicator */}
+                    <div
+                      className={`w-3 h-3 rounded-full shrink-0 ${
+                        p.quantity === 0
+                          ? 'bg-red-500'
+                          : p.quantity <= p.lowStockThreshold
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                      }`}
+                      title={p.quantity === 0 ? 'Out of stock' : p.quantity <= p.lowStockThreshold ? 'Low stock' : 'In stock'}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{p.name}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <Badge variant="secondary" className="text-xs">
+                          {p.category}
+                        </Badge>
+                        {p.sku && (
+                          <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                            {p.sku}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-emerald-600">${p.price.toFixed(2)}</p>
+                      <p
+                        className={`text-xs font-medium ${
+                          p.quantity === 0
+                            ? 'text-red-600'
+                            : p.quantity <= p.lowStockThreshold
+                            ? 'text-amber-600'
+                            : 'text-gray-500'
+                        }`}
+                      >
+                        {p.quantity} in stock
+                      </p>
+                    </div>
+                    {can.editProducts && (
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          onClick={() => setMovements(p)}
+                          className="p-2 text-gray-400 hover:text-emerald-600 rounded-lg transition"
+                          title="View stock history"
+                        >
+                          <BarChart3 size={16} />
+                        </button>
+                        <button
+                          onClick={() => openEdit(p)}
+                          className="p-2 text-gray-400 hover:text-blue-600 rounded-lg transition"
+                          title="Edit product"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Remove "${p.name}"?`)) deleteMutation.mutate(p._id);
+                          }}
+                          className="p-2 text-gray-400 hover:text-red-600 rounded-lg transition disabled:opacity-50"
+                          disabled={deleteMutation.isPending}
+                          title="Delete product"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </CardBody>
+              </Card>
+            </motion.div>
           ))}
         </div>
       )}
 
-      <div className="h-4"/>
+      <div className="h-4" />
 
       {/* Product Form Sheet */}
       {can.editProducts && (
@@ -154,8 +224,8 @@ export default function ProductsPage() {
 
 function ProductForm({ product, onClose, onSaved }) {
   const isEdit = !!product;
-  const { register, handleSubmit, formState:{ errors, isSubmitting } } = useForm({
-    defaultValues: product || { lowStockThreshold:5, quantity:0, costPrice:0 }
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+    defaultValues: product || { lowStockThreshold: 5, quantity: 0, costPrice: 0 }
   });
   const onSubmit = async (data) => {
     try {
@@ -168,65 +238,152 @@ function ProductForm({ product, onClose, onSaved }) {
     <form id="prodForm" onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">Product Name *</label>
-        <input {...register('name',{required:'Name required'})} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none" placeholder="e.g. Men's Polo Shirt"/>
+        <input
+          {...register('name', { required: 'Name required' })}
+          className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+          placeholder="e.g. Men's Polo Shirt"
+        />
         {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div><label className="text-xs font-semibold text-gray-600 block mb-1.5">Selling Price ($)*</label>
-          <input type="number" step="0.01" min="0" {...register('price',{required:true,valueAsNumber:true})} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none" placeholder="0.00"/></div>
-        <div><label className="text-xs font-semibold text-gray-600 block mb-1.5">Cost Price ($)</label>
-          <input type="number" step="0.01" min="0" {...register('costPrice',{valueAsNumber:true})} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none" placeholder="0.00"/></div>
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Selling Price ($)*</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            {...register('price', { required: true, valueAsNumber: true })}
+            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+            placeholder="0.00"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Cost Price ($)</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            {...register('costPrice', { valueAsNumber: true })}
+            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+            placeholder="0.00"
+          />
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div><label className="text-xs font-semibold text-gray-600 block mb-1.5">Quantity *</label>
-          <input type="number" min="0" {...register('quantity',{required:true,valueAsNumber:true})} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none"/></div>
-        <div><label className="text-xs font-semibold text-gray-600 block mb-1.5">Low Stock Alert</label>
-          <input type="number" min="0" {...register('lowStockThreshold',{valueAsNumber:true})} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none" placeholder="5"/></div>
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Quantity *</label>
+          <input
+            type="number"
+            min="0"
+            {...register('quantity', { required: true, valueAsNumber: true })}
+            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Low Stock Alert</label>
+          <input
+            type="number"
+            min="0"
+            {...register('lowStockThreshold', { valueAsNumber: true })}
+            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+            placeholder="5"
+          />
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <div><label className="text-xs font-semibold text-gray-600 block mb-1.5">Category *</label>
-          <select {...register('category',{required:true})} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none">
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Category *</label>
+          <select
+            {...register('category', { required: true })}
+            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+          >
             <option value="">— Select —</option>
-            {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
-          </select></div>
-        <div><label className="text-xs font-semibold text-gray-600 block mb-1.5">SKU</label>
-          <input {...register('sku')} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none font-mono uppercase" placeholder="MEN-001"/></div>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-600 block mb-1.5">SKU</label>
+          <input
+            {...register('sku')}
+            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition font-mono uppercase"
+            placeholder="MEN-001"
+          />
+        </div>
       </div>
-      <div><label className="text-xs font-semibold text-gray-600 block mb-1.5">Barcode</label>
-        <input {...register('barcode')} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none font-mono" placeholder="6001234567890"/></div>
-      <div><label className="text-xs font-semibold text-gray-600 block mb-1.5">Description</label>
-        <textarea {...register('description')} rows={2} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none resize-none" placeholder="Optional…"/></div>
-      <button type="submit" disabled={isSubmitting}
-              className="w-full py-4 rounded-2xl font-bold text-black disabled:opacity-60 flex items-center justify-center gap-2"
-              style={{ background:'#d4a017' }}>
-        {isSubmitting && <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"/>}
+      <div>
+        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Barcode</label>
+        <input
+          {...register('barcode')}
+          className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition font-mono"
+          placeholder="6001234567890"
+        />
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Description</label>
+        <textarea
+          {...register('description')}
+          rows={2}
+          className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition resize-none"
+          placeholder="Optional…"
+        />
+      </div>
+      <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">
+        {isSubmitting && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />}
         {isEdit ? 'Save Changes' : 'Add to Inventory'}
-      </button>
+      </Button>
     </form>
   );
 }
 
 function MovementsView({ productId }) {
-  const { data:movements=[], isLoading } = useQuery({
+  const { data: movements = [], isLoading } = useQuery({
     queryKey: ['movements', productId],
-    queryFn:  async () => { const { data } = await api.get(`/products/${productId}/movements`); return data.data; }
+    queryFn: async () => {
+      const { data } = await api.get(`/products/${productId}/movements`);
+      return data.data;
+    }
   });
-  const TYPE_COLORS = { sale:'text-red-500 bg-red-50', purchase:'text-green-600 bg-green-50', adjustment:'text-blue-600 bg-blue-50', return:'text-purple-600 bg-purple-50', damage:'text-orange-600 bg-orange-50', opening:'text-gray-600 bg-gray-100' };
+  const TYPE_COLORS = {
+    sale: 'bg-red-50 text-red-700',
+    purchase: 'bg-emerald-50 text-emerald-700',
+    adjustment: 'bg-blue-50 text-blue-700',
+    return: 'bg-purple-50 text-purple-700',
+    damage: 'bg-orange-50 text-orange-700',
+    opening: 'bg-gray-100 text-gray-700'
+  };
   return (
-    <div className="px-4 py-3 space-y-2">
-      {isLoading ? [...Array(5)].map((_,i)=><div key={i} className="h-14 bg-gray-200 rounded-xl animate-pulse"/>) :
-       movements.length === 0 ? <p className="text-sm text-gray-400 text-center py-8">No movements recorded yet.</p> :
-       movements.map((m,i) => (
-         <div key={i} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
-           <span className={`text-xs font-bold px-2 py-1 rounded-lg uppercase shrink-0 ${TYPE_COLORS[m.type]||'text-gray-600 bg-gray-100'}`}>{m.type}</span>
-           <div className="flex-1">
-             <p className="text-sm font-semibold">{m.quantity>0?'+':''}{m.quantity} units <span className="text-gray-400 font-normal">{m.before} → {m.after}</span></p>
-             {m.note && <p className="text-xs text-gray-400">{m.note}</p>}
-           </div>
-           <p className="text-xs text-gray-400 shrink-0">{new Date(m.createdAt).toLocaleDateString()}</p>
-         </div>
-       ))
-      }
+    <div className="px-4 py-3 space-y-3">
+      {isLoading ? (
+        [...Array(5)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-lg animate-pulse" />)
+      ) : movements.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-8">No movements recorded yet.</p>
+      ) : (
+        movements.map((m, i) => (
+          <Card key={i}>
+            <CardBody className="p-3 flex items-start gap-3">
+              <Badge variant={m.type === 'sale' ? 'danger' : m.type === 'purchase' ? 'success' : 'info'} className="text-xs font-bold shrink-0 uppercase">
+                {m.type}
+              </Badge>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-gray-900">
+                  {m.quantity > 0 ? '+' : ''}{m.quantity} units{' '}
+                  <span className="text-gray-500 font-normal">
+                    {m.before} → {m.after}
+                  </span>
+                </p>
+                {m.note && <p className="text-xs text-gray-500 mt-1">{m.note}</p>}
+              </div>
+              <p className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
+                {new Date(m.createdAt).toLocaleDateString()}
+              </p>
+            </CardBody>
+          </Card>
+        ))
+      )}
     </div>
   );
 }
