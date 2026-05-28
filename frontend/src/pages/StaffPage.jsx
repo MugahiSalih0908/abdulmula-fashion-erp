@@ -9,17 +9,23 @@ import api                                   from '../services/api';
 import useAuthStore                          from '../store/authStore';
 import PageHeader from '../components/ui/PageHeader';
 import Sheet      from '../components/ui/Sheet';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import CardHeader from '../components/ui/CardHeader';
+import CardBody from '../components/ui/CardBody';
+import Badge from '../components/ui/Badge';
+import Modal from '../components/ui/Modal';
 import InvitationModal from '../components/InvitationModal';
 import {
   Plus, ChevronRight, X, UserCheck, UserX,
   KeyRound, BarChart3, ShieldCheck, Eye, EyeOff,
-  Mail, RefreshCw, Clock, CheckCircle
+  Mail, RefreshCw, Clock, CheckCircle, Users, TrendingUp
 } from 'lucide-react';
 
 const ROLE_COLORS = {
   admin:   'bg-red-100 text-red-700',
   manager: 'bg-blue-100 text-blue-700',
-  staff:   'bg-gray-100 text-gray-600',
+  staff:   'bg-emerald-50 text-emerald-700',
 };
 
 const getStrength = (pwd) => {
@@ -63,113 +69,167 @@ export default function StaffPage() {
   const totalSales  = staff.reduce((s, m) => s + (m.salesTotal||0), 0);
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-5">
       <PageHeader
         title="Staff Management"
-        sub={`${activeCount} active · ${verifiedCnt} activated`}
+        sub={`${activeCount} active · ${verifiedCnt} verified`}
         action={
-          <div className="flex items-center gap-2">
-            <button onClick={() => setShowInvite(true)}
-                    className="flex items-center gap-1.5 text-black px-4 py-2.5 rounded-xl font-semibold text-sm hover:opacity-90 transition"
-                    style={{ background:'#d4a017' }}>
-              <Mail size={16}/> Send Invite
-            </button>
-            <button onClick={() => setShowAdd(true)}
-                    className="flex items-center gap-1.5 text-black px-4 py-2.5 rounded-xl font-semibold text-sm"
-                    style={{ background:'#d4a017' }}>
-              <Plus size={16}/> Add Staff
-            </button>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowInvite(true)}
+              className="flex items-center gap-1.5"
+            >
+              <Mail size={16} /> Send Invite
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-1.5"
+            >
+              <Plus size={16} /> Add Staff
+            </Button>
           </div>
         }
       />
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-2">
-        <div className="bg-white rounded-2xl p-3 text-center shadow-sm">
-          <p className="font-black text-xl text-gray-900">{staff.length}</p>
-          <p className="text-xs text-gray-400">Total</p>
-        </div>
-        <div className="bg-white rounded-2xl p-3 text-center shadow-sm">
-          <p className="font-black text-xl text-green-600">{verifiedCnt}</p>
-          <p className="text-xs text-gray-400">Activated</p>
-        </div>
-        <div className="bg-white rounded-2xl p-3 text-center shadow-sm">
-          <p className="font-black text-lg" style={{ color:'#d4a017' }}>${totalSales.toFixed(0)}</p>
-          <p className="text-xs text-gray-400">Team Sales</p>
-        </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card>
+          <CardBody className="p-4 text-center">
+            <div className="text-2xl font-bold text-gray-900">{staff.length}</div>
+            <div className="text-xs text-gray-500 mt-1">Total Staff</div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardBody className="p-4 text-center">
+            <div className="text-2xl font-bold text-emerald-600">{verifiedCnt}</div>
+            <div className="text-xs text-gray-500 mt-1">Verified</div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardBody className="p-4 text-center">
+            <div className="text-2xl font-bold text-emerald-700">${totalSales.toFixed(0)}</div>
+            <div className="text-xs text-gray-500 mt-1">Team Sales</div>
+          </CardBody>
+        </Card>
       </div>
 
       {/* Staff list */}
       {isLoading ? (
-        <div className="space-y-2">{[...Array(4)].map((_,i)=><div key={i} className="h-24 bg-gray-200 rounded-2xl animate-pulse"/>)}</div>
+        <div className="space-y-3">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-24 bg-gray-200 rounded-xl animate-pulse" />
+          ))}
+        </div>
       ) : staff.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
-          <p className="text-3xl mb-2">👥</p><p className="font-semibold">No staff accounts yet</p>
+        <div className="text-center py-16">
+          <Users size={48} className="mx-auto text-gray-300 mb-3" />
+          <p className="text-gray-500 font-semibold">No staff accounts yet</p>
+          <p className="text-xs text-gray-400 mt-1">Add your first staff member to get started</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {staff.map(member => (
-            <div key={member._id}
-                 className={`bg-white rounded-2xl p-4 shadow-sm ${!member.isActive ? 'opacity-60' : ''}`}>
-              <div className="flex items-center gap-3">
-                {/* Avatar */}
-                <div className="w-11 h-11 rounded-full flex items-center justify-center font-black text-base shrink-0 text-black relative"
-                     style={{ background: member.isActive ? '#d4a017' : '#e5e7eb' }}>
-                  {member.name?.charAt(0).toUpperCase()}
-                  {/* Verification dot */}
-                  <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${
-                    member.isVerified ? 'bg-green-500' : 'bg-amber-400'
-                  }`} title={member.isVerified ? 'Activated' : 'Pending activation'}/>
-                </div>
+            <motion.div
+              key={member._id}
+              layout
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              <Card className={!member.isActive ? 'opacity-60' : ''}>
+                <CardBody className="p-4">
+                  <div className="flex items-center gap-3">
+                    {/* Avatar */}
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-base shrink-0 text-white relative"
+                      style={{ background: member.isActive ? '#16a34a' : '#9ca3af' }}
+                    >
+                      {member.name?.charAt(0).toUpperCase()}
+                      {/* Verification dot */}
+                      <span
+                        className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${
+                          member.isVerified ? 'bg-emerald-500' : 'bg-amber-400'
+                        }`}
+                        title={member.isVerified ? 'Activated' : 'Pending activation'}
+                      />
+                    </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-bold text-sm text-gray-900">{member.name}</p>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${ROLE_COLORS[member.role]}`}>
-                      {member.role}
-                    </span>
-                    {!member.isActive && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600">Disabled</span>}
-                    {!member.isVerified && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 flex items-center gap-0.5"><Clock size={10}/> Pending</span>}
-                    {member._id === currentUser?._id && <span className="text-xs text-gray-400">(You)</span>}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{member.email}</p>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    <span className="text-xs text-gray-500">{member.salesCount||0} sales · ${(member.salesTotal||0).toFixed(0)}</span>
-                    {member.salary > 0 && <span className="text-xs text-gray-500">Salary: ${member.salary}/mo</span>}
-                  </div>
-                </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-gray-900">{member.name}</p>
+                        <Badge variant={member.role === 'admin' ? 'danger' : member.role === 'manager' ? 'info' : 'secondary'}>
+                          {member.role}
+                        </Badge>
+                        {!member.isActive && <Badge variant="danger">Disabled</Badge>}
+                        {!member.isVerified && (
+                          <Badge variant="warning" className="flex items-center gap-1">
+                            <Clock size={10} /> Pending
+                          </Badge>
+                        )}
+                        {member._id === currentUser?._id && <span className="text-xs text-gray-400">(You)</span>}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{member.email}</p>
+                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-600">
+                        <span className="flex items-center gap-1">
+                          <TrendingUp size={14} />
+                          {member.salesCount || 0} sales
+                        </span>
+                        <span>${(member.salesTotal || 0).toFixed(0)}</span>
+                        {member.salary > 0 && <span>${member.salary}/mo</span>}
+                      </div>
+                    </div>
 
-                {/* Actions (not for self) */}
-                {member._id !== currentUser?._id && (
-                  <div className="flex gap-1 shrink-0">
-                    {/* Resend activation for unverified */}
-                    {!member.isVerified && (
-                      <button onClick={() => resendMutation.mutate(member._id)}
-                              disabled={resendMutation.isPending}
-                              className="p-2 text-amber-500 hover:bg-amber-50 rounded-lg" title="Resend activation email">
-                        <RefreshCw size={15} className={resendMutation.isPending ? 'animate-spin' : ''}/>
-                      </button>
+                    {/* Actions (not for self) */}
+                    {member._id !== currentUser?._id && (
+                      <div className="flex gap-1 shrink-0">
+                        {/* Resend activation for unverified */}
+                        {!member.isVerified && (
+                          <button
+                            onClick={() => resendMutation.mutate(member._id)}
+                            disabled={resendMutation.isPending}
+                            className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition disabled:opacity-50"
+                            title="Resend activation email"
+                          >
+                            <RefreshCw size={16} className={resendMutation.isPending ? 'animate-spin' : ''} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setResetFor(member)}
+                          className="p-2 text-gray-400 hover:text-emerald-600 rounded-lg transition"
+                          title="Reset password"
+                        >
+                          <KeyRound size={16} />
+                        </button>
+                        <button
+                          onClick={() => toggleMutation.mutate(member._id)}
+                          disabled={toggleMutation.isPending}
+                          className={`p-2 rounded-lg transition disabled:opacity-50 ${
+                            member.isActive ? 'text-gray-400 hover:text-red-500' : 'text-gray-400 hover:text-emerald-600'
+                          }`}
+                          title={member.isActive ? 'Disable account' : 'Enable account'}
+                        >
+                          {member.isActive ? <UserX size={16} /> : <UserCheck size={16} />}
+                        </button>
+                        <button
+                          onClick={() => setSelected(member)}
+                          className="p-2 text-gray-400 hover:text-gray-700 rounded-lg transition"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
                     )}
-                    <button onClick={() => setResetFor(member)} className="p-2 text-gray-400 hover:text-blue-500 rounded-lg" title="Reset password">
-                      <KeyRound size={15}/>
-                    </button>
-                    <button onClick={() => toggleMutation.mutate(member._id)} disabled={toggleMutation.isPending}
-                            className={`p-2 rounded-lg ${member.isActive?'text-gray-400 hover:text-red-500':'text-gray-400 hover:text-green-600'}`}
-                            title={member.isActive?'Disable account':'Enable account'}>
-                      {member.isActive ? <UserX size={15}/> : <UserCheck size={15}/>}
-                    </button>
-                    <button onClick={() => setSelected(member)} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg">
-                      <ChevronRight size={15}/>
-                    </button>
                   </div>
-                )}
-              </div>
-            </div>
+                </CardBody>
+              </Card>
+            </motion.div>
           ))}
         </div>
       )}
 
-      <div className="h-4"/>
+      <div className="h-4" />
 
       {/* Add Staff Sheet */}
       <Sheet open={showAdd} title="Add Staff Member" subtitle="System will send activation email automatically"
@@ -216,9 +276,9 @@ function AddStaffForm({ onClose, onSaved }) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
-        <Mail size={15} className="text-amber-600 shrink-0 mt-0.5"/>
-        <p className="text-xs text-amber-700">
+      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
+        <Mail size={15} className="text-emerald-600 shrink-0 mt-0.5"/>
+        <p className="text-xs text-emerald-700">
           A welcome email with activation link will be sent automatically to the staff member.
         </p>
       </div>
@@ -226,21 +286,21 @@ function AddStaffForm({ onClose, onSaved }) {
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">Full Name *</label>
         <input {...register('name',{ required:'Name is required' })}
-               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none" placeholder="e.g. Hassan Ahmed"/>
+               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="e.g. Hassan Ahmed"/>
         {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
       </div>
 
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">Email Address * <span className="text-gray-400 font-normal">(activation email sent here)</span></label>
         <input type="email" {...register('email',{ required:'Email is required', pattern:{ value:/^\S+@\S+\.\S+$/, message:'Enter a valid email' } })}
-               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none" placeholder="staff@example.com"/>
+               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="staff@example.com"/>
         {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-xs font-semibold text-gray-600 block mb-1.5">Role</label>
-          <select {...register('role')} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none">
+          <select {...register('role')} className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition">
             <option value="staff">Staff</option>
             <option value="manager">Manager</option>
             <option value="admin">Admin</option>
@@ -249,16 +309,19 @@ function AddStaffForm({ onClose, onSaved }) {
         <div>
           <label className="text-xs font-semibold text-gray-600 block mb-1.5">Monthly Salary ($)</label>
           <input type="number" min="0" {...register('salary',{ valueAsNumber:true })}
-                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none" placeholder="0"/>
+                 className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="0"/>
         </div>
       </div>
 
-      <button type="submit" disabled={isSubmitting}
-              className="w-full py-4 rounded-2xl font-bold text-black disabled:opacity-60 flex items-center justify-center gap-2"
-              style={{ background:'#d4a017' }}>
-        {isSubmitting && <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"/>}
+      <Button
+        type="submit"
+        variant="primary"
+        disabled={isSubmitting}
+        className="w-full"
+      >
+        {isSubmitting && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"/>}
         Create & Send Invitation
-      </button>
+      </Button>
     </form>
   );
 }
@@ -282,8 +345,8 @@ function ResetPwdForm({ member, onClose, onSaved }) {
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">New Password * (min 8 chars)</label>
         <div className="relative">
           <input type={show?'text':'password'} {...register('newPassword',{required:true,minLength:{value:8,message:'Min 8 chars'}})}
-                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none pr-10" placeholder="Min. 8 characters"/>
-          <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
+                 className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition pr-10" placeholder="Min. 8 characters"/>
+          <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
             {show ? <EyeOff size={16}/> : <Eye size={16}/>}
           </button>
         </div>
@@ -292,20 +355,25 @@ function ResetPwdForm({ member, onClose, onSaved }) {
           <div className="flex gap-1 h-1.5 mt-2">
             {[1,2,3,4,5].map(i => {
               const s = getStrength(pwd);
-              const colors = ['','bg-red-400','bg-orange-400','bg-yellow-400','bg-green-400','bg-emerald-500'];
+              const colors = ['','bg-red-400','bg-orange-400','bg-yellow-400','bg-emerald-400','bg-emerald-600'];
               return <div key={i} className={`flex-1 rounded-full ${i<=s ? colors[Math.min(s,5)] : 'bg-gray-200'}`}/>;
             })}
           </div>
         )}
       </div>
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-700">
-        ⚠ This will log the staff member out of all devices immediately.
+      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700 flex items-start gap-2">
+        <Clock size={14} className="shrink-0 mt-0.5"/>
+        <p>This will log the staff member out of all devices immediately.</p>
       </div>
-      <button type="submit" disabled={isSubmitting}
-              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold disabled:opacity-60 flex items-center justify-center gap-2">
-        {isSubmitting && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/>}
+      <Button
+        type="submit"
+        variant="primary"
+        disabled={isSubmitting}
+        className="w-full"
+      >
+        {isSubmitting && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"/>}
         Reset Password
-      </button>
+      </Button>
     </form>
   );
 }
@@ -319,30 +387,47 @@ function StaffDetail({ memberId }) {
   const m = data?.member; const sales = data?.recentSales||[]; const ms = data?.monthStats;
   return (
     <div className="px-5 py-4 space-y-4">
-      {isLoading ? [...Array(4)].map((_,i)=><div key={i} className="h-14 bg-gray-200 rounded-xl animate-pulse"/>) : (
+      {isLoading ? [...Array(4)].map((_,i)=><div key={i} className="h-12 bg-gray-200 rounded-lg animate-pulse"/>) : (
         <>
           {m && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {m.isVerified
-                ? <span className="flex items-center gap-1 text-xs font-semibold bg-green-100 text-green-700 px-2 py-0.5 rounded-full"><CheckCircle size={12}/> Activated</span>
-                : <span className="flex items-center gap-1 text-xs font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full"><Clock size={12}/> Pending Activation</span>
+                ? <Badge variant="success" className="flex items-center gap-1"><CheckCircle size={12}/> Activated</Badge>
+                : <Badge variant="warning" className="flex items-center gap-1"><Clock size={12}/> Pending Activation</Badge>
               }
-              {m.lastLogin && <span className="text-xs text-gray-400">Last login: {new Date(m.lastLogin).toLocaleDateString()}</span>}
+              {m.lastLogin && <span className="text-xs text-gray-500">Last login: {new Date(m.lastLogin).toLocaleDateString()}</span>}
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-green-50 rounded-2xl p-3 text-center"><p className="font-black text-lg text-green-600">${(ms?.total||0).toFixed(0)}</p><p className="text-xs text-gray-500">This Month</p></div>
-            <div className="bg-blue-50 rounded-2xl p-3 text-center"><p className="font-black text-lg text-blue-600">{ms?.count||0}</p><p className="text-xs text-gray-500">Sales This Month</p></div>
+            <Card>
+              <CardBody className="p-4 text-center">
+                <div className="text-2xl font-bold text-emerald-600">${(ms?.total||0).toFixed(0)}</div>
+                <div className="text-xs text-gray-500 mt-1">This Month</div>
+              </CardBody>
+            </Card>
+            <Card>
+              <CardBody className="p-4 text-center">
+                <div className="text-2xl font-bold text-emerald-700">{ms?.count||0}</div>
+                <div className="text-xs text-gray-500 mt-1">Sales</div>
+              </CardBody>
+            </Card>
           </div>
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Recent Sales</p>
-            {sales.length===0 ? <p className="text-sm text-gray-400 text-center py-4">No sales yet.</p> : (
+            <p className="text-xs font-semibold text-gray-600 uppercase mb-3 tracking-wide">Recent Sales</p>
+            {sales.length===0 ? (
+              <p className="text-sm text-gray-400 text-center py-6">No sales yet.</p>
+            ) : (
               <div className="space-y-2">
                 {sales.map(inv => (
-                  <div key={inv._id} className="flex justify-between bg-gray-50 rounded-xl px-3 py-2.5">
-                    <div><p className="text-xs font-semibold">{inv.invoiceNumber}</p><p className="text-xs text-gray-400">{new Date(inv.date).toLocaleDateString()}</p></div>
-                    <p className="font-bold text-sm text-green-600">${inv.grandTotal.toFixed(2)}</p>
-                  </div>
+                  <Card key={inv._id}>
+                    <CardBody className="p-3 flex justify-between items-center">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-900">{inv.invoiceNumber}</p>
+                        <p className="text-xs text-gray-400">{new Date(inv.date).toLocaleDateString()}</p>
+                      </div>
+                      <p className="font-bold text-sm text-emerald-600">${inv.grandTotal.toFixed(2)}</p>
+                    </CardBody>
+                  </Card>
                 ))}
               </div>
             )}

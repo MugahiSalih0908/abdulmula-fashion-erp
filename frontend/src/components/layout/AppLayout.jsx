@@ -51,14 +51,12 @@ export default function AppLayout() {
     <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
 
       {/* ── Header ─────────────────────────────────────────── */}
-      <header className="shrink-0 z-20 shadow-md px-4 py-3 flex items-center justify-between"
-              style={{ background:'#111', borderBottom:'2px solid #d4a017' }}>
+      <header className="shrink-0 z-20 shadow-md px-4 py-3 flex items-center justify-between bg-white border-b border-gray-200">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm"
-               style={{ background:'#d4a017', color:'#111' }}>AF</div>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm bg-green-600 text-white">AF</div>
           <div>
-            <p className="text-white font-bold text-sm leading-tight">Abdulmula Fashion</p>
-            <p className="text-xs leading-tight capitalize" style={{ color:'#d4a017' }}>
+            <p className="text-gray-900 font-bold text-sm leading-tight">Abdulmula Fashion</p>
+            <p className="text-xs leading-tight capitalize text-green-600 font-medium">
               {user?.role} · ERP v6
             </p>
           </div>
@@ -71,15 +69,13 @@ export default function AppLayout() {
             </span>
           )}
           {pendingCount > 0 && (
-            <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full font-bold"
-                  style={{ background:'#d4a017', color:'#111' }}>
+            <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full font-bold bg-green-100 text-green-700">
               {isSyncing && <RefreshCw size={11} className="animate-spin"/>}
               {pendingCount} pending
             </span>
           )}
           <button onClick={() => setMoreOpen(true)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm"
-                  style={{ background:'#d4a017', color:'#111' }}>
+                  className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm bg-green-600 text-white hover:bg-green-700 transition-colors">
             {user?.name?.charAt(0).toUpperCase()}
           </button>
         </div>
@@ -96,17 +92,15 @@ export default function AppLayout() {
             isMore ? (
               <button key="more" onClick={() => setMoreOpen(true)}
                       className={`flex flex-col items-center py-2 px-3 flex-1 transition-colors ${
-                        moreOpen ? 'border-t-2 -mt-px' : 'text-gray-400'
-                      }`}
-                      style={moreOpen ? { color:'#d4a017', borderColor:'#d4a017' } : {}}>
+                        moreOpen ? 'text-green-600 border-t-2 -mt-px' : 'text-gray-400'
+                      }`}>
                 <Icon size={22}/><span className="text-xs mt-0.5 font-medium">More</span>
               </button>
             ) : (
               <NavLink key={to} to={to} onClick={() => setMoreOpen(false)}
                        className={({ isActive }) =>
-                         `flex flex-col items-center py-2 px-3 flex-1 transition-colors ${isActive?'border-t-2 -mt-px':'text-gray-400'}`
-                       }
-                       style={({ isActive }) => isActive ? { color:'#d4a017', borderColor:'#d4a017' } : {}}>
+                         `flex flex-col items-center py-2 px-3 flex-1 transition-colors ${isActive?'text-green-600 border-t-2 -mt-px':'text-gray-400'}`
+                       }>
                 <Icon size={22}/><span className="text-xs mt-0.5 font-medium">{label}</span>
               </NavLink>
             )
@@ -131,8 +125,7 @@ export default function AppLayout() {
 
               {/* User info */}
               <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100">
-                <div className="w-11 h-11 rounded-full flex items-center justify-center font-black text-base shrink-0 text-black"
-                     style={{ background:'#d4a017' }}>
+                <div className="w-11 h-11 rounded-full flex items-center justify-center font-black text-base shrink-0 text-white bg-green-600">
                   {user?.name?.charAt(0).toUpperCase()}
                 </div>
                 <div>

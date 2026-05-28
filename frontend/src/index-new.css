@@ -51,19 +51,34 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background-color: var(--color-bg);
   color: var(--color-text);
   overscroll-behavior: none;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Improve default heading hierarchy */
+/* Typography hierarchy */
 h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   letter-spacing: -0.02em;
+  color: var(--color-text);
+}
+
+h1 { font-size: 2rem; line-height: 1.2; }
+h2 { font-size: 1.5rem; line-height: 1.3; }
+h3 { font-size: 1.25rem; line-height: 1.4; }
+h4 { font-size: 1.125rem; line-height: 1.5; }
+h5 { font-size: 1rem; line-height: 1.5; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -139,10 +154,6 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-glass);
 }
-
-/* Legacy card names for compatibility */
-.card-premium { @apply card; }
-.dashboard-card { @apply card; }
 
 /* ─────────────────────────────────────────────────────────────
    KPI / STAT CARDS
@@ -267,10 +278,6 @@ h1, h2, h3, h4, h5, h6 {
   min-height: 48px;
 }
 
-/* Legacy button classes for compatibility */
-.btn-gold { @apply btn-primary; }
-.btn-outline-gold { @apply btn-ghost; }
-
 /* ─────────────────────────────────────────────────────────────
    FORM INPUTS
    ───────────────────────────────────────────────────────────── */
@@ -352,10 +359,6 @@ h1, h2, h3, h4, h5, h6 {
   margin-top: 0.25rem;
   font-weight: 500;
 }
-
-/* Legacy input classes for compatibility */
-.input-premium { @apply input; }
-.form-input { @apply input; }
 
 /* ─────────────────────────────────────────────────────────────
    BADGES & STATUS PILLS
@@ -466,10 +469,6 @@ h1, h2, h3, h4, h5, h6 {
   transform: translateY(0);
 }
 
-/* Compatibility */
-.hover-scale { @apply hover-lift; }
-.hover-scale:hover { @apply hover-lift:hover; }
-
 /* ─────────────────────────────────────────────────────────────
    SKELETON LOADER
    ───────────────────────────────────────────────────────────── */
@@ -530,7 +529,6 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   color: var(--color-text);
   margin-bottom: 1rem;
-  letter-spacing: -0.02em;
 }
 
 .section-subtitle {
@@ -580,14 +578,6 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: var(--shadow-sm);
 }
 
-.nav-glass {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-
 .bottom-nav {
   position: fixed;
   bottom: 0;
@@ -624,7 +614,6 @@ h1, h2, h3, h4, h5, h6 {
   transition: all var(--transition-fast);
   font-size: 0.75rem;
   font-weight: 500;
-  cursor: pointer;
 }
 
 .bottom-nav-item:active,
@@ -768,14 +757,3 @@ h1, h2, h3, h4, h5, h6 {
     margin: 0 0 4px 0;
   }
 }
-
-/* Accessibility */
-button:focus-visible,
-a:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-/* Shadow utilities */
-.shadow-soft { box-shadow: var(--shadow-md); }
-.shadow-glass { box-shadow: var(--shadow-glass); }

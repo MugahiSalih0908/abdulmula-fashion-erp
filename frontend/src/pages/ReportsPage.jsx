@@ -1,4 +1,4 @@
-// src/pages/ReportsPage.jsx – complete analytics dashboard v3
+// src/pages/ReportsPage.jsx – Refactored with Green Premium Mobile-First Design
 
 import { useState }   from 'react';
 import { useQuery }   from '@tanstack/react-query';
@@ -9,13 +9,13 @@ import {
 import api             from '../services/api';
 import useSettingsStore from '../store/settingsStore';
 import PageHeader      from '../components/ui/PageHeader';
-import KpiCard         from '../components/ui/KpiCard';
+import { StatCard, Card, CardHeader, CardBody, Badge } from '@/components/ui';
 import {
   TrendingUp, TrendingDown, DollarSign, Package,
-  ShoppingCart, Star, BarChart3
+  ShoppingCart, Star, BarChart3, AlertTriangle
 } from 'lucide-react';
 
-const COLORS = ['#d4a017','#111111','#ef4444','#22c55e','#3b82f6','#8b5cf6','#f97316','#06b6d4'];
+const COLORS = ['#16a34a','#111111','#ef4444','#22c55e','#3b82f6','#8b5cf6','#f97316','#06b6d4'];
 const MONTHS  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const TABS    = ['Overview','Daily','Monthly','Inventory','Staff','Categories'];
 

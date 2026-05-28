@@ -1,4 +1,4 @@
-// src/pages/DashboardPage.jsx – v6 (Mobile Native + iOS/Android Optimized)
+// src/pages/DashboardPage.jsx – Refactored with Green Premium Mobile-First Design
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,6 +9,10 @@ import { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import useAuthStore from '../store/authStore';
 import useSettingsStore from '../store/settingsStore';
+import {
+  StatCard, Card, CardHeader, CardBody, Badge, Button, Modal,
+  Skeleton
+} from '@/components/ui';
 import {
   TrendingUp, TrendingDown, Package, ShoppingCart,
   AlertTriangle, Users, ArrowRight, BookOpen, DollarSign,
@@ -76,7 +80,7 @@ const PullToRefresh = ({ onRefresh, children }) => {
     <div ref={containerRef} className="h-full overflow-y-auto">
       {refreshing && (
         <div className="flex justify-center py-2">
-          <RefreshCw size={20} className="animate-spin text-gold" />
+          <RefreshCw size={20} className="animate-spin text-green-600" />
         </div>
       )}
       {children}
@@ -150,7 +154,7 @@ const ChartSkeleton = () => (
 const FloatingActions = () => {
   const [open, setOpen] = useState(false);
   const actions = [
-    { to: '/pos', icon: ShoppingCart, label: 'New Sale', color: '#d4a017', haptic: 'light' },
+    { to: '/pos', icon: ShoppingCart, label: 'New Sale', color: '#16a34a', haptic: 'light' },
     { to: '/products/add', icon: Box, label: 'Add Product', color: '#111', haptic: 'light' },
     { to: '/purchase-orders', icon: Truck, label: 'PO', color: '#f97316', haptic: 'light' },
     { to: '/expenses', icon: Coffee, label: 'Expense', color: '#dc2626', haptic: 'light' },
@@ -179,7 +183,7 @@ const FloatingActions = () => {
                   triggerHaptic('light');
                   setOpen(false);
                 }}
-                className="flex items-center gap-3 bg-white shadow-xl rounded-full px-5 py-2.5 text-sm font-semibold border border-gray-100"
+                className="flex items-center gap-3 bg-white shadow-xl rounded-full px-5 py-2.5 text-sm font-semibold border border-gray-100 hover:shadow-2xl transition-shadow"
                 style={{ borderLeft: `3px solid ${color}` }}
               >
                 <Icon size={18} style={{ color }} />
@@ -192,8 +196,7 @@ const FloatingActions = () => {
       <motion.button
         whileTap={{ scale: 0.92 }}
         onClick={handleToggle}
-        className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-transform"
-        style={{ background: '#d4a017', color: '#111' }}
+        className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center active:scale-95 transition-transform bg-green-600 hover:bg-green-700 text-white"
       >
         <motion.div animate={{ rotate: open ? 45 : 0 }}>
           <Plus size={24} />
@@ -261,10 +264,10 @@ export default function DashboardPage() {
   const formatCurrency = (value) => fmt(value);
 
   return (
-    <div className="min-h-screen bg-gray-50" style={{ paddingTop: 'env(safe-area-inset-top, 0)' }}>
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-white" style={{ paddingTop: 'env(safe-area-inset-top, 0)' }}>
       <PullToRefresh onRefresh={handleRefresh}>
         <div className="px-4 py-4 space-y-5 pb-32">
-          {/* Header with iOS-style blur? Keep it simple for performance */}
+          {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -272,108 +275,109 @@ export default function DashboardPage() {
             className="flex justify-between items-start"
           >
             <div>
-              <p className="text-gray-500 text-sm">{greeting},</p>
-              <h1 className="font-black text-2xl tracking-tight text-gray-900">
+              <p className="text-gray-600 text-sm font-medium">{greeting},</p>
+              <h1 className="font-black text-3xl tracking-tight text-charcoal-900">
                 {user?.name?.split(' ')[0] || 'Manager'}
               </h1>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize" style={{ background: '#d4a01720', color: '#b8860b' }}>
-                  {user?.role}
-                </span>
-                <span className="text-xs text-gray-400">Abdulmula ERP</span>
+              <div className="flex items-center gap-2 mt-2">
+                <Badge variant="success">
+                  <span className="capitalize">{user?.role}</span>
+                </Badge>
+                <span className="text-xs text-gray-500">Abdulmula ERP</span>
               </div>
             </div>
-            <button
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={RefreshCw}
               onClick={handleRefresh}
-              className="p-2 rounded-full bg-white shadow-sm active:scale-95 transition-transform"
-            >
-              <RefreshCw size={18} className="text-gray-500" />
-            </button>
+            />
           </motion.div>
 
-          {/* KPI Cards – Primary Highlighted Today Revenue */}
+          {/* KPI Cards – Using StatCard */}
           {isLoading ? (
-            <KPISkeleton />
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map(i => (
+                <Skeleton key={i} variant="card" className="h-24" />
+              ))}
+            </div>
           ) : (
             <div className="space-y-3">
-              {/* Primary Card – Today Revenue (full width, gold) */}
+              {/* Primary Card – Today Revenue */}
               <motion.div
                 initial={{ scale: 0.96, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => openMetricSheet('today')}
-                className="bg-gradient-to-br from-amber-50 to-white rounded-2xl p-5 shadow-md border-l-4 border-gold active:bg-gray-50 transition-colors cursor-pointer"
-                style={{ borderLeftColor: '#d4a017' }}
               >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Today's Revenue</p>
-                    <p className="text-4xl font-black mt-1 text-gray-900">{formatCurrency(stats.todayRevenue || 0)}</p>
-                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                      <Clock size={12} /> {stats.todayCount || 0} sales today
-                    </p>
-                  </div>
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: '#d4a01720' }}>
-                    <TrendingUp size={24} style={{ color: '#d4a017' }} />
-                  </div>
-                </div>
-                <div className="mt-3 text-xs text-green-600 flex items-center gap-1">
-                  <Zap size={12} /> {((stats.todayRevenue / (stats.monthRevenue || 1)) * 100).toFixed(0)}% of monthly goal
-                </div>
+                <Card
+                  onClick={() => openMetricSheet('today')}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                >
+                  <CardBody>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-600">Today's Revenue</p>
+                        <p className="text-4xl font-black mt-2 text-green-600">{formatCurrency(stats.todayRevenue || 0)}</p>
+                        <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+                          <Clock size={12} /> {stats.todayCount || 0} sales today
+                        </p>
+                        <div className="mt-3 text-xs text-green-600 flex items-center gap-1 font-semibold">
+                          <Zap size={12} /> {((stats.todayRevenue / (stats.monthRevenue || 1)) * 100).toFixed(0)}% of monthly goal
+                        </div>
+                      </div>
+                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-green-100">
+                        <TrendingUp size={24} className="text-green-600" />
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
               </motion.div>
 
-              {/* 2-column grid for other stats */}
+              {/* 2-column KPI grid */}
               <div className="grid grid-cols-2 gap-3">
-                <motion.div
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => openMetricSheet('month')}
-                  className="bg-white rounded-2xl p-4 shadow-sm active:bg-gray-50 cursor-pointer"
-                >
-                  <div className="flex justify-between items-start">
-                    <ShoppingCart size={18} className="text-blue-500" />
-                    <span className="text-xs text-gray-400">Month</span>
-                  </div>
-                  <p className="font-bold text-xl mt-2">{formatCurrency(stats.monthRevenue || 0)}</p>
-                  <p className="text-xs text-gray-500">Monthly Revenue</p>
+                <motion.div whileTap={{ scale: 0.97 }} onClick={() => openMetricSheet('month')}>
+                  <StatCard
+                    label="Monthly Revenue"
+                    value={formatCurrency(stats.monthRevenue || 0)}
+                    icon={<ShoppingCart size={20} />}
+                    change={+12.5}
+                    positive
+                  />
                 </motion.div>
 
-                <motion.div
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => openMetricSheet('profit')}
-                  className="bg-white rounded-2xl p-4 shadow-sm active:bg-gray-50 cursor-pointer"
-                >
-                  <div className="flex justify-between items-start">
-                    <DollarSign size={18} className={`${stats.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`} />
-                  </div>
-                  <p className={`font-bold text-xl mt-2 ${stats.profit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                    {formatCurrency(stats.profit || 0)}
-                  </p>
-                  <p className="text-xs text-gray-500">Net Profit</p>
+                <motion.div whileTap={{ scale: 0.97 }} onClick={() => openMetricSheet('profit')}>
+                  <StatCard
+                    label="Net Profit"
+                    value={formatCurrency(stats.profit || 0)}
+                    icon={<DollarSign size={20} />}
+                    change={stats.profit >= 0 ? +8.2 : -5.1}
+                    positive={stats.profit >= 0}
+                  />
                 </motion.div>
 
-                <motion.div
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => openMetricSheet('expenses')}
-                  className="bg-white rounded-2xl p-4 shadow-sm active:bg-gray-50 cursor-pointer"
-                >
-                  <div className="flex justify-between items-start">
-                    <TrendingDown size={18} className="text-red-400" />
-                  </div>
-                  <p className="font-bold text-xl mt-2">{formatCurrency(stats.totalExpenses || 0)}</p>
-                  <p className="text-xs text-gray-500">Total Expenses</p>
+                <motion.div whileTap={{ scale: 0.97 }} onClick={() => openMetricSheet('expenses')}>
+                  <StatCard
+                    label="Total Expenses"
+                    value={formatCurrency(stats.totalExpenses || 0)}
+                    icon={<TrendingDown size={20} />}
+                    change={-3.2}
+                    positive={false}
+                  />
                 </motion.div>
 
-                <motion.div
-                  whileTap={{ scale: 0.97 }}
-                  onClick={() => openMetricSheet('credit')}
-                  className="bg-white rounded-2xl p-4 shadow-sm active:bg-gray-50 cursor-pointer"
-                >
-                  <div className="flex justify-between items-start">
-                    <Users size={18} className="text-purple-500" />
-                  </div>
-                  <p className="font-bold text-xl mt-2">{stats.creditCustomers || 0}</p>
-                  <p className="text-xs text-gray-500">Credit Customers</p>
+                <motion.div whileTap={{ scale: 0.97 }} onClick={() => openMetricSheet('credit')}>
+                  <Card className="cursor-pointer">
+                    <CardBody>
+                      <div className="text-center">
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-100 mx-auto mb-2">
+                          <Users size={20} className="text-purple-600" />
+                        </div>
+                        <p className="text-lg font-bold text-charcoal-900">{stats.creditCustomers || 0}</p>
+                        <p className="text-xs text-gray-600">Credit Customers</p>
+                      </div>
+                    </CardBody>
+                  </Card>
                 </motion.div>
               </div>
             </div>
@@ -386,61 +390,58 @@ export default function DashboardPage() {
               animate={{ opacity: 1, x: 0 }}
               whileTap={{ scale: 0.99 }}
             >
-              <Link to="/cashbook" className="block bg-white rounded-2xl p-4 shadow-sm border border-gray-100 active:bg-gray-50 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <BookOpen size={18} className="text-teal-600" />
-                    <p className="font-bold text-sm text-gray-800">Today's Cashbook</p>
-                  </div>
-                  <ArrowRight size={16} className="text-gray-400" />
-                </div>
-                <div className="grid grid-cols-3 gap-2 mt-3">
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">Opening</p>
-                    <p className="font-bold text-sm">{formatCurrency(cashbook.openingCash || 0)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">Cash Sales</p>
-                    <p className="font-bold text-sm text-green-600">{formatCurrency(cashbook.livesCashSales || 0)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-gray-400">Status</p>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${cashbook.isClosed ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {cashbook.isClosed ? 'Closed' : 'Open'}
-                    </span>
-                  </div>
-                </div>
+              <Link to="/cashbook" className="block">
+                <Card className="hover:shadow-md transition-shadow">
+                  <CardHeader title="Today's Cashbook" subtitle="Quick overview" />
+                  <CardBody>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="text-center p-3 rounded-lg bg-green-50">
+                        <p className="text-xs text-gray-600 font-medium">Opening</p>
+                        <p className="font-bold text-sm mt-1">{formatCurrency(cashbook.openingCash || 0)}</p>
+                      </div>
+                      <div className="text-center p-3 rounded-lg bg-green-50">
+                        <p className="text-xs text-gray-600 font-medium">Cash Sales</p>
+                        <p className="font-bold text-sm mt-1 text-green-600">{formatCurrency(cashbook.livesCashSales || 0)}</p>
+                      </div>
+                      <div className="text-center p-3 rounded-lg bg-green-50">
+                        <p className="text-xs text-gray-600 font-medium">Status</p>
+                        <Badge variant={cashbook.isClosed ? 'success' : 'warning'} className="mt-1">
+                          {cashbook.isClosed ? 'Closed' : 'Open'}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardBody>
+                </Card>
               </Link>
             </motion.div>
           )}
 
-          {/* Revenue Chart - interactive */}
+          {/* Revenue Chart */}
           {!isLoading && charts.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="bg-white rounded-2xl p-4 shadow-sm"
             >
-              <div className="flex justify-between items-center mb-3">
-                <p className="font-bold text-sm text-gray-700 flex items-center gap-1">
-                  <BarChart3 size={14} className="text-gold" /> 6-Month Revenue
-                </p>
-              </div>
-              <ResponsiveContainer width="100%" height={160}>
-                <AreaChart data={charts} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
-                  <defs>
-                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#d4a017" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#d4a017" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ borderRadius: 12, border: 'none', fontSize: 11 }} />
-                  <Area type="monotone" dataKey="revenue" stroke="#d4a017" strokeWidth={2} fill="url(#revGrad)" isAnimationActive={true} animationDuration={800} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <Card>
+                <CardHeader title="6-Month Revenue" subtitle="Growth trend" icon={<BarChart3 size={18} />} />
+                <CardBody className="pt-0">
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={charts} margin={{ top: 5, right: 5, bottom: 5, left: -20 }}>
+                      <defs>
+                        <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#16a34a" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#16a34a" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <Tooltip formatter={(v) => formatCurrency(v)} contentStyle={{ borderRadius: 12, border: 'none', fontSize: 11 }} />
+                      <Area type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={2} fill="url(#revGrad)" isAnimationActive={true} animationDuration={800} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardBody>
+              </Card>
             </motion.div>
           )}
 
@@ -449,90 +450,92 @@ export default function DashboardPage() {
             <motion.div
               initial={{ scale: 0.98, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-2xl p-4"
             >
-              <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle size={18} className="text-red-500" />
-                <span className="font-bold text-red-700 text-sm">Low Stock Alert</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {lowStock.slice(0, 4).map(p => (
-                  <Link
-                    key={p._id}
-                    to={`/products?search=${encodeURIComponent(p.name)}`}
-                    className="text-xs bg-white/80 text-red-600 px-3 py-1.5 rounded-full font-medium shadow-sm active:scale-95 transition-transform"
-                    onClick={() => triggerHaptic('light')}
-                  >
-                    {p.name} · {p.quantity} left
-                  </Link>
-                ))}
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle size={18} className="text-red-600" />
+                  <span className="font-bold text-red-700 text-sm">Low Stock Alert</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {lowStock.slice(0, 4).map(p => (
+                    <Link
+                      key={p._id}
+                      to={`/products?search=${encodeURIComponent(p.name)}`}
+                      className="text-xs bg-white text-red-600 px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-md transition-all"
+                      onClick={() => triggerHaptic('light')}
+                    >
+                      {p.name} · {p.quantity} left
+                    </Link>
+                  ))}
+                </div>
               </div>
             </motion.div>
           )}
 
-          {/* Recent Activity Feed */}
+          {/* Recent Sales Activity */}
           {!isLoading && recentSales.length > 0 ? (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
-              className="bg-white rounded-2xl shadow-sm overflow-hidden"
             >
-              <div className="flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-100">
-                <div className="flex items-center gap-2">
-                  <Activity size={16} style={{ color: '#d4a017' }} />
-                  <p className="font-bold text-sm text-gray-800">Recent Sales</p>
+              <Card>
+                <div className="flex items-center justify-between px-4 pt-4 pb-2 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <Activity size={18} className="text-green-600" />
+                    <p className="font-bold text-gray-900">Recent Sales</p>
+                  </div>
+                  <Link to="/reports" className="text-xs font-semibold text-green-600 hover:text-green-700">View all →</Link>
                 </div>
-                <Link to="/reports" className="text-xs font-semibold" style={{ color: '#d4a017' }}>View all</Link>
-              </div>
-              <div className="divide-y divide-gray-50">
-                {recentSales.slice(0, 5).map((inv, idx) => (
-                  <motion.div
-                    key={inv._id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: idx * 0.03 }}
-                    className="flex items-center justify-between px-4 py-3 active:bg-gray-50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-                        <Receipt size={16} className="text-gray-500" />
+                <CardBody className="divide-y divide-gray-100">
+                  {recentSales.slice(0, 5).map((inv, idx) => (
+                    <motion.div
+                      key={inv._id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: idx * 0.03 }}
+                      className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-100 flex-shrink-0">
+                          <Receipt size={16} className="text-green-600" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-sm text-gray-900">{inv.invoiceNumber}</p>
+                          <p className="text-xs text-gray-500">{new Date(inv.date).toLocaleDateString()} · {inv.paymentMethod}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-semibold text-sm">{inv.invoiceNumber}</p>
-                        <p className="text-xs text-gray-400">{new Date(inv.date).toLocaleDateString()} · {inv.paymentMethod}</p>
-                      </div>
-                    </div>
-                    <span className="font-bold text-green-600 text-sm">{formatCurrency(inv.grandTotal)}</span>
-                  </motion.div>
-                ))}
-              </div>
+                      <span className="font-bold text-green-600 text-sm ml-2">{formatCurrency(inv.grandTotal)}</span>
+                    </motion.div>
+                  ))}
+                </CardBody>
+              </Card>
             </motion.div>
           ) : !isLoading && (
-            <div className="bg-white rounded-2xl p-8 text-center">
-              <Package size={40} className="mx-auto text-gray-300 mb-2" />
-              <p className="text-gray-400 text-sm">No recent sales yet</p>
-              <Link to="/pos" className="inline-block mt-3 text-sm font-semibold" style={{ color: '#d4a017' }}>Start selling →</Link>
-            </div>
+            <Card>
+              <CardBody className="text-center py-8">
+                <Package size={40} className="mx-auto text-gray-300 mb-3" />
+                <p className="text-gray-500 text-sm font-medium">No sales yet</p>
+                <Link to="/pos">
+                  <Button variant="primary" className="mt-4">
+                    <ShoppingCart size={16} /> Start selling
+                  </Button>
+                </Link>
+              </CardBody>
+            </Card>
           )}
 
-          {/* Quick action buttons (extra) */}
-          <div className="grid grid-cols-2 gap-3 mt-2">
-            <Link
-              to="/pos"
-              className="py-3 rounded-xl font-bold text-sm text-center shadow-sm active:scale-95 transition-transform"
-              style={{ background: '#111', color: 'white' }}
-              onClick={() => triggerHaptic('light')}
-            >
-              <ShoppingCart size={16} className="inline mr-1" /> New Sale
+          {/* Quick Action Buttons */}
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            <Link to="/pos" onClick={() => triggerHaptic('light')}>
+              <Button variant="primary" icon={ShoppingCart} className="w-full">
+                New Sale
+              </Button>
             </Link>
-            <Link
-              to="/products/add"
-              className="py-3 rounded-xl font-bold text-sm text-center shadow-sm active:scale-95 transition-transform"
-              style={{ background: '#d4a017', color: '#111' }}
-              onClick={() => triggerHaptic('light')}
-            >
-              <Box size={16} className="inline mr-1" /> Add Product
+            <Link to="/products/add" onClick={() => triggerHaptic('light')}>
+              <Button variant="secondary" icon={Box} className="w-full">
+                Add Product
+              </Button>
             </Link>
           </div>
         </div>
@@ -541,32 +544,36 @@ export default function DashboardPage() {
       {/* Floating Action Button */}
       <FloatingActions />
 
-      {/* Bottom Sheet for Detailed Stats */}
-      <BottomSheet isOpen={sheetOpen} onClose={() => setSheetOpen(false)} title="Details">
+      {/* Metric Details Modal */}
+      <Modal
+        isOpen={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        title="Details"
+      >
         <div className="space-y-3">
           {selectedMetric === 'today' && (
             <>
-              <div className="flex justify-between py-2 border-b">
+              <div className="flex justify-between py-3 border-b border-gray-200">
                 <span className="text-gray-600">Total Sales (today)</span>
-                <span className="font-bold">{stats.todayCount || 0}</span>
+                <span className="font-bold text-gray-900">{stats.todayCount || 0}</span>
               </div>
-              <div className="flex justify-between py-2 border-b">
+              <div className="flex justify-between py-3 border-b border-gray-200">
                 <span className="text-gray-600">Average Ticket</span>
-                <span className="font-bold">{formatCurrency((stats.todayRevenue || 0) / (stats.todayCount || 1))}</span>
+                <span className="font-bold text-gray-900">{formatCurrency((stats.todayRevenue || 0) / (stats.todayCount || 1))}</span>
               </div>
-              <div className="flex justify-between py-2">
+              <div className="flex justify-between py-3">
                 <span className="text-gray-600">Peak Hour</span>
-                <span className="font-bold">--</span>
+                <span className="font-bold text-gray-900">--</span>
               </div>
             </>
           )}
           {selectedMetric === 'month' && (
             <>
-              <div className="flex justify-between py-2 border-b">
+              <div className="flex justify-between py-3 border-b border-gray-200">
                 <span className="text-gray-600">Best Day</span>
-                <span className="font-bold">{formatCurrency(Math.max(...(stats.dailyRevenue || [0])))}</span>
+                <span className="font-bold text-gray-900">{formatCurrency(Math.max(...(stats.dailyRevenue || [0])))}</span>
               </div>
-              <div className="flex justify-between py-2">
+              <div className="flex justify-between py-3">
                 <span className="text-gray-600">Growth vs last month</span>
                 <span className="font-bold text-green-600">+12%</span>
               </div>
@@ -574,23 +581,23 @@ export default function DashboardPage() {
           )}
           {selectedMetric === 'profit' && (
             <>
-              <div className="flex justify-between py-2 border-b">
+              <div className="flex justify-between py-3 border-b border-gray-200">
                 <span className="text-gray-600">Profit Margin</span>
-                <span className="font-bold">{((stats.profit / (stats.monthRevenue || 1)) * 100).toFixed(1)}%</span>
+                <span className="font-bold text-gray-900">{((stats.profit / (stats.monthRevenue || 1)) * 100).toFixed(1)}%</span>
               </div>
-              <div className="flex justify-between py-2">
+              <div className="flex justify-between py-3">
                 <span className="text-gray-600">Gross Profit</span>
-                <span className="font-bold">{formatCurrency(stats.grossProfit || 0)}</span>
+                <span className="font-bold text-gray-900">{formatCurrency(stats.grossProfit || 0)}</span>
               </div>
             </>
           )}
           {selectedMetric === 'expenses' && (
             <>
-              <div className="flex justify-between py-2 border-b">
+              <div className="flex justify-between py-3 border-b border-gray-200">
                 <span className="text-gray-600">Largest Expense</span>
-                <span className="font-bold">--</span>
+                <span className="font-bold text-gray-900">--</span>
               </div>
-              <div className="flex justify-between py-2">
+              <div className="flex justify-between py-3">
                 <span className="text-gray-600">vs last month</span>
                 <span className="font-bold text-red-500">+5%</span>
               </div>
@@ -598,18 +605,18 @@ export default function DashboardPage() {
           )}
           {selectedMetric === 'credit' && (
             <>
-              <div className="flex justify-between py-2 border-b">
+              <div className="flex justify-between py-3 border-b border-gray-200">
                 <span className="text-gray-600">Outstanding Credit</span>
-                <span className="font-bold">{formatCurrency(stats.outstandingCredit || 0)}</span>
+                <span className="font-bold text-gray-900">{formatCurrency(stats.outstandingCredit || 0)}</span>
               </div>
-              <div className="flex justify-between py-2">
+              <div className="flex justify-between py-3">
                 <span className="text-gray-600">Overdue Payments</span>
                 <span className="font-bold text-red-500">{stats.overdueCount || 0}</span>
               </div>
             </>
           )}
         </div>
-      </BottomSheet>
+      </Modal>
     </div>
   );
 }
