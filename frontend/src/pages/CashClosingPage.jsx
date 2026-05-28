@@ -8,6 +8,10 @@ import api                             from '../services/api';
 import { useRole }                     from '../hooks/useRole';
 import useSettingsStore                from '../store/settingsStore';
 import PageHeader  from '../components/ui/PageHeader';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import CardBody from '../components/ui/CardBody';
+import Badge from '../components/ui/Badge';
 import Sheet       from '../components/ui/Sheet';
 import KpiCard     from '../components/ui/KpiCard';
 import {
@@ -16,9 +20,9 @@ import {
 } from 'lucide-react';
 
 const STATUS_STYLES = {
-  pending_approval: 'bg-amber-100 text-amber-700',
-  approved:         'bg-green-100 text-green-700',
-  disputed:         'bg-red-100 text-red-700',
+  pending_approval: { badge: 'warning', label: 'Pending Approval' },
+  approved:         { badge: 'success', label: 'Approved' },
+  disputed:         { badge: 'danger', label: 'Disputed' },
 };
 
 export default function CashClosingPage() {
@@ -77,10 +81,10 @@ export default function CashClosingPage() {
       />
 
       {/* Currency toggle */}
-      <div className="flex bg-gray-100 rounded-xl p-1">
+      <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
         {['USD','SSP'].map(c => (
           <button key={c} onClick={() => setCurrency(c)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-bold ${currency===c?'bg-white text-gray-900 shadow-sm':'text-gray-500'}`}>
+                  className={`flex-1 py-2 rounded-md text-sm font-semibold transition-all ${currency===c?'bg-white text-emerald-600 shadow-md':'text-gray-600'}`}>
             {c}
           </button>
         ))}
@@ -96,87 +100,97 @@ export default function CashClosingPage() {
 
       {/* Today's closing status */}
       {todayClosing && (
-        <div className={`rounded-2xl p-4 border ${
-          todayClosing.status==='approved' ? 'bg-green-50 border-green-200' :
-          todayClosing.status==='disputed' ? 'bg-red-50 border-red-200' :
-                                             'bg-amber-50 border-amber-200'
+        <Card className={`border-l-4 ${
+          todayClosing.status==='approved' ? 'border-l-emerald-500 bg-emerald-50' :
+          todayClosing.status==='disputed' ? 'border-l-red-500 bg-red-50' :
+                                              'border-l-amber-500 bg-amber-50'
         }`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {todayClosing.status==='approved'         ? <CheckCircle size={18} className="text-green-600"/> :
-               todayClosing.status==='pending_approval' ? <Clock size={18} className="text-amber-600"/> :
-                                                          <AlertTriangle size={18} className="text-red-600"/>}
-              <p className="font-bold text-sm">
-                {todayClosing.status==='approved' ? 'Day Closed & Approved' :
-                 todayClosing.status==='pending_approval' ? 'Pending Admin Approval' : 'Disputed'}
-              </p>
+          <CardBody className="p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                {todayClosing.status==='approved'         ? <CheckCircle size={18} className="text-emerald-600"/> :
+                 todayClosing.status==='pending_approval' ? <Clock size={18} className="text-amber-600"/> :
+                                                            <AlertTriangle size={18} className="text-red-600"/>}
+                <p className="font-bold text-sm text-gray-900">
+                  {todayClosing.status==='approved' ? 'Day Closed & Approved' :
+                   todayClosing.status==='pending_approval' ? 'Pending Admin Approval' : 'Disputed'}
+                </p>
+              </div>
+              {isAdmin && todayClosing.status==='pending_approval' && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => approveMutation.mutate(todayClosing._id)}
+                  disabled={approveMutation.isPending}
+                >
+                  Approve
+                </Button>
+              )}
             </div>
-            {isAdmin && todayClosing.status==='pending_approval' && (
-              <button onClick={() => approveMutation.mutate(todayClosing._id)}
-                      disabled={approveMutation.isPending}
-                      className="px-3 py-1.5 bg-green-600 text-white rounded-xl text-xs font-bold disabled:opacity-50">
-                Approve
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-3 gap-2 mt-3">
-            <div className="text-center">
-              <p className="text-xs text-gray-500">Expected</p>
-              <p className="font-bold text-sm">{fmt(todayClosing.expectedCash)}</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center">
+                <p className="text-xs text-gray-600 mb-1">Expected</p>
+                <p className="font-bold text-sm text-gray-900">{fmt(todayClosing.expectedCash)}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-600 mb-1">Actual</p>
+                <p className="font-bold text-sm text-gray-900">{fmt(todayClosing.actualCash)}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xs text-gray-600 mb-1">{todayClosing.shortage>0?'Shortage':'Excess'}</p>
+                <p className={`font-bold text-sm ${todayClosing.shortage>0?'text-red-600':'text-emerald-600'}`}>
+                  {todayClosing.shortage>0 ? `-${fmt(todayClosing.shortage)}` : `+${fmt(todayClosing.excess)}`}
+                </p>
+              </div>
             </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500">Actual</p>
-              <p className="font-bold text-sm">{fmt(todayClosing.actualCash)}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500">{todayClosing.shortage>0?'Shortage':'Excess'}</p>
-              <p className={`font-bold text-sm ${todayClosing.shortage>0?'text-red-600':'text-green-600'}`}>
-                {todayClosing.shortage>0 ? `-${fmt(todayClosing.shortage)}` : `+${fmt(todayClosing.excess)}`}
-              </p>
-            </div>
-          </div>
-          {todayClosing.notes && <p className="text-xs text-gray-500 mt-2 italic">{todayClosing.notes}</p>}
-        </div>
+            {todayClosing.notes && <p className="text-xs text-gray-600 mt-3 italic">{todayClosing.notes}</p>}
+          </CardBody>
+        </Card>
       )}
 
       {/* Pending approvals (admin only) */}
       {isAdmin && (
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-4 pt-4 pb-2 border-b flex items-center gap-2">
-            <Clock size={15} className="text-amber-600"/>
-            <p className="font-bold text-sm">All Closing Records</p>
-          </div>
-          {closings.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">No closing records yet</div>
-          ) : (
-            <div className="divide-y divide-gray-50">
-              {closings.map(c => (
-                <div key={c._id} className="px-4 py-3 flex items-center justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-sm">{c.date}</p>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLES[c.status]||'bg-gray-100 text-gray-600'}`}>
-                        {c.status.replace('_',' ')}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400">
-                      By: {c.closedByName}
-                      {c.shortage>0 && <span className="text-red-500 ml-2">Shortage: {fmt(c.shortage)}</span>}
-                      {c.excess>0   && <span className="text-green-600 ml-2">Excess: {fmt(c.excess)}</span>}
-                    </p>
-                  </div>
-                  {isAdmin && c.status === 'pending_approval' && (
-                    <button onClick={() => approveMutation.mutate(c._id)}
-                            disabled={approveMutation.isPending}
-                            className="px-3 py-1.5 bg-green-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 shrink-0">
-                      Approve
-                    </button>
-                  )}
-                </div>
-              ))}
+        <Card>
+          <CardBody className="p-0">
+            <div className="px-4 pt-4 pb-2 border-b border-gray-100 flex items-center gap-2">
+              <Clock size={16} className="text-amber-600"/>
+              <p className="font-semibold text-sm text-gray-900">All Closing Records</p>
             </div>
-          )}
-        </div>
+            {closings.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">No closing records yet</div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {closings.map(c => (
+                  <div key={c._id} className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-gray-50 transition">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm text-gray-900">{c.date}</p>
+                        <Badge variant={STATUS_STYLES[c.status]?.badge || 'secondary'}>
+                          {STATUS_STYLES[c.status]?.label || c.status.replace('_',' ')}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-1">
+                        By: {c.closedByName}
+                        {c.shortage>0 && <span className="text-red-600 ml-2">Shortage: {fmt(c.shortage)}</span>}
+                        {c.excess>0   && <span className="text-emerald-700 ml-2">Excess: {fmt(c.excess)}</span>}
+                      </p>
+                    </div>
+                    {isAdmin && c.status === 'pending_approval' && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => approveMutation.mutate(c._id)}
+                        disabled={approveMutation.isPending}
+                      >
+                        Approve
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardBody>
+        </Card>
       )}
 
       <div className="h-4"/>
@@ -212,48 +226,52 @@ function CloseDayForm({ netCash, fmt, openingCash, onClose, onSaved }) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <div className="bg-gray-50 rounded-xl p-3 space-y-1">
-        <div className="flex justify-between text-sm"><span className="text-gray-500">Opening Cash</span><span className="font-semibold">{fmt(openingCash||0)}</span></div>
-        <div className="flex justify-between text-sm"><span className="text-gray-500">Expected Closing</span><span className="font-bold">{fmt(netCash||0)}</span></div>
-      </div>
+      <Card className="bg-gray-50">
+        <CardBody className="p-3 space-y-1">
+          <div className="flex justify-between text-sm"><span className="text-gray-600">Opening Cash</span><span className="font-semibold text-gray-900">{fmt(openingCash||0)}</span></div>
+          <div className="flex justify-between text-sm"><span className="text-gray-600">Expected Closing</span><span className="font-bold text-emerald-700">{fmt(netCash||0)}</span></div>
+        </CardBody>
+      </Card>
 
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">Actual Cash Count ($) *</label>
         <input type="number" step="0.01" min="0"
                {...register('actualCash',{required:'Required',valueAsNumber:true})}
-               className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg font-bold focus:outline-none"
-               style={{ borderColor: Math.abs(diff) < 1 ? '#d4a017' : diff < 0 ? '#ef4444' : '#22c55e' }}
+               className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-lg font-bold focus:outline-none transition"
+               style={{ borderColor: Math.abs(diff) < 1 ? '#06b6d4' : diff < 0 ? '#ef4444' : '#22c55e' }}
                placeholder={netCash?.toFixed(2)}/>
       </div>
 
       {!isNaN(diff) && (
-        <div className={`rounded-xl p-3 flex justify-between items-center ${
-          Math.abs(diff) < 0.01 ? 'bg-green-50' : diff < 0 ? 'bg-red-50' : 'bg-amber-50'
+        <Card className={`${
+          Math.abs(diff) < 0.01 ? 'bg-emerald-50' : diff < 0 ? 'bg-red-50' : 'bg-amber-50'
         }`}>
-          <span className="text-sm font-semibold">{diff < 0 ? '⚠ Shortage' : diff > 0 ? '✓ Excess' : '✓ Balanced'}</span>
-          <span className={`font-black text-lg ${diff<0?'text-red-600':diff>0?'text-green-600':'text-green-600'}`}>
-            {diff >= 0 ? '+' : ''}{fmt(diff)}
-          </span>
-        </div>
+          <CardBody className="p-3 flex justify-between items-center">
+            <span className="text-sm font-semibold text-gray-900">{diff < 0 ? '⚠ Shortage' : diff > 0 ? '✓ Excess' : '✓ Balanced'}</span>
+            <span className={`font-bold text-lg ${diff<0?'text-red-600':diff>0?'text-emerald-600':'text-emerald-600'}`}>
+              {diff >= 0 ? '+' : ''}{fmt(diff)}
+            </span>
+          </CardBody>
+        </Card>
       )}
 
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">Notes</label>
         <textarea {...register('notes')} rows={2}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none resize-none"
+                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition resize-none"
                   placeholder="Any notes for the admin…"/>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-700">
-        ⚠ Submission requires admin approval before the day is officially closed.
-      </div>
+      <Card className="bg-amber-50">
+        <CardBody className="p-2.5">
+          <p className="text-xs text-amber-700 font-medium">⚠ Submission requires admin approval before the day is officially closed.</p>
+        </CardBody>
+      </Card>
 
-      <button type="submit" disabled={isSubmitting}
-              className="w-full py-4 rounded-2xl font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
-              style={{ background:'#111' }}>
-        {isSubmitting && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/>}
+      <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">
+        {isSubmitting && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"/>}
         Submit for Approval
-      </button>
+      </Button>
     </form>
   );
 }
@@ -269,19 +287,19 @@ function RateForm({ currentRate, onClose, onSaved }) {
   };
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <div className="bg-amber-50 rounded-xl p-3 text-sm text-amber-700">
-        Current: 1 USD = {currentRate?.toLocaleString()} SSP
-      </div>
+      <Card className="bg-amber-50">
+        <CardBody className="p-3 text-sm text-amber-700 font-medium">
+          Current: 1 USD = {currentRate?.toLocaleString()} SSP
+        </CardBody>
+      </Card>
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">New Rate: 1 USD = ? SSP</label>
         <input type="number" step="1" min="1" {...register('usdToSsp',{required:true,valueAsNumber:true})}
-               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none" placeholder="e.g. 1300"/>
+               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="e.g. 1300"/>
       </div>
-      <button type="submit" disabled={isSubmitting}
-              className="w-full py-4 rounded-2xl font-bold text-black disabled:opacity-60"
-              style={{ background:'#d4a017' }}>
+      <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">
         Set Rate
-      </button>
+      </Button>
     </form>
   );
 }

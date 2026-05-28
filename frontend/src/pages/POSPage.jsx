@@ -9,7 +9,9 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { saveSaleOffline, getOfflineProducts, cacheProducts } from '../offline/syncManager';
 import CartDrawer from '../components/pos/CartDrawer';
 import ReceiptModal from '../components/pos/ReceiptModal';
-import { Search, ScanLine, ShoppingCart, X } from 'lucide-react';
+import Button from '../components/ui/Button';
+import Badge from '../components/ui/Badge';
+import { Search, ScanLine, ShoppingCart, X, Wifi, WifiOff } from 'lucide-react';
 
 const CATEGORIES = ['All', 'Men', 'Women', 'Girls', 'Boys', 'Kids', 'Sudanese Silk Toub Wraps', 'Accessories', 'Other'];
 
@@ -139,42 +141,62 @@ export default function POSPage() {
   const grandTotal = cart.grandTotal();
 
   return (
-    <div className="flex flex-col h-full bg-gray-100 overflow-hidden">
+    <div className="flex flex-col h-full bg-gray-50 overflow-hidden">
       {/* ── Search + scan ────────────────────────────────────── */}
-      <div className="bg-white px-3 pt-3 pb-2 shadow-sm z-10">
-        <div className="flex gap-2">
+      <div className="bg-white px-4 pt-3 pb-2 shadow-sm z-10 border-b border-gray-100">
+        <div className="flex gap-2 items-center mb-3">
           <div className="relative flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
             <input
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Search product, SKU or barcode…"
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none bg-gray-50"
-              style={{ '--tw-ring-color': '#d4a017' }}
+              className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition bg-gray-50"
             />
             {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                <X size={15} />
+              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
+                <X size={16} />
               </button>
             )}
           </div>
           <button
             onClick={() => setScanning(true)}
-            className="p-2.5 rounded-xl text-white flex items-center justify-center"
-            style={{ background: '#111' }}
+            className="p-3 rounded-lg text-white flex items-center justify-center hover:opacity-90 transition flex-shrink-0"
+            style={{ background: '#16a34a' }}
+            title="Scan barcode"
           >
             <ScanLine size={20} />
           </button>
         </div>
 
+        {/* Status indicator */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full ${isOnline ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+            {isOnline ? (
+              <>
+                <Wifi size={12} />
+                Online
+              </>
+            ) : (
+              <>
+                <WifiOff size={12} />
+                Offline Mode
+              </>
+            )}
+          </div>
+        </div>
+
         {/* Category pills */}
-        <div className="flex gap-1.5 overflow-x-auto py-2 no-scrollbar">
-          {CATEGORIES.map(cat => (
+        <div className="flex gap-2 overflow-x-auto py-2 no-scrollbar">
+          {CATEGORIES.map((cat) => (
             <button
               key={cat}
               onClick={() => setCategory(cat)}
-              className="shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-colors"
-              style={category === cat ? { background: '#111', color: '#fff' } : { background: '#f3f4f6', color: '#6b7280' }}
+              className={`shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${
+                category === cat
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
             >
               {cat}
             </button>
@@ -183,23 +205,23 @@ export default function POSPage() {
       </div>
 
       {/* ── Product grid ─────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="flex-1 overflow-y-auto p-4">
         {isLoading ? (
           <div className="grid grid-cols-2 gap-3">
             {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-28 bg-gray-200 rounded-2xl animate-pulse" />
+              <div key={i} className="h-28 bg-gray-200 rounded-lg animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
-            <p className="text-3xl mb-2">📦</p>
-            <p className="font-semibold">No products found</p>
-            {search && <p className="text-sm mt-1">Try a different search term</p>}
+            <p className="text-4xl mb-3">📦</p>
+            <p className="font-semibold text-gray-500">No products found</p>
+            {search && <p className="text-sm mt-2 text-gray-400">Try a different search term</p>}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {filtered.map(product => {
-              const inCart = cart.items.find(i => i?.product?._id === product?._id);
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            {filtered.map((product) => {
+              const inCart = cart.items.find((i) => i?.product?._id === product?._id);
               return (
                 <motion.button
                   key={product._id}
@@ -212,32 +234,36 @@ export default function POSPage() {
                       style: { fontSize: '13px' }
                     });
                   }}
-                  className="bg-white rounded-2xl p-3 text-left shadow-sm transition-all relative overflow-hidden"
-                  style={inCart ? { border: '2px solid #d4a017' } : { border: '2px solid transparent' }}
+                  className={`bg-white rounded-lg p-3 text-left shadow-sm transition-all relative overflow-hidden border-2 ${
+                    inCart ? 'border-emerald-500 ring-1 ring-emerald-200' : 'border-transparent hover:shadow-md'
+                  }`}
                 >
                   {/* In-cart badge */}
                   {inCart && (
-                    <div className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-black text-black"
-                         style={{ background: '#d4a017' }}>
+                    <div className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white bg-emerald-600">
                       {inCart.quantity}
                     </div>
                   )}
 
-                  <div className="mb-1.5">
-                    <span className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                  <div className="mb-2">
+                    <Badge variant="secondary" className="text-xs">
                       {product.category || 'Other'}
-                    </span>
+                    </Badge>
                   </div>
 
-                  <p className="font-semibold text-sm text-gray-900 leading-tight mb-1 pr-6">{product.name}</p>
+                  <p className="font-semibold text-sm text-gray-900 leading-tight mb-1 pr-6 line-clamp-2">
+                    {product.name}
+                  </p>
 
-                  {product.sku && <p className="text-xs text-gray-400 font-mono mb-1">{product.sku}</p>}
+                  {product.sku && <p className="text-xs text-gray-500 font-mono mb-2">{product.sku}</p>}
 
-                  <div className="flex items-end justify-between mt-1">
-                    <p className="font-black text-base" style={{ color: '#d4a017' }}>
-                      ${(product.price || 0).toFixed(2)}
-                    </p>
-                    <p className={`text-xs font-medium ${product.quantity <= product.lowStockThreshold ? 'text-red-500' : 'text-gray-400'}`}>
+                  <div className="flex items-end justify-between mt-2 pt-2 border-t border-gray-100">
+                    <p className="font-bold text-base text-emerald-600">${(product.price || 0).toFixed(2)}</p>
+                    <p
+                      className={`text-xs font-medium ${
+                        product.quantity <= product.lowStockThreshold ? 'text-red-600' : 'text-gray-500'
+                      }`}
+                    >
                       {product.quantity} left
                     </p>
                   </div>
@@ -248,26 +274,25 @@ export default function POSPage() {
         )}
 
         {/* Bottom spacer for the sticky cart button */}
-        <div className="h-20" />
+        <div className="h-24" />
       </div>
 
       {/* ── Sticky cart button ─────────────────────────────────── */}
       {itemCount > 0 && (
-        <div className="sticky bottom-0 px-3 pb-3 bg-transparent">
+        <div className="sticky bottom-0 px-4 pb-4 bg-gradient-to-t from-white via-white to-transparent">
           <button
             onClick={() => setCartOpen(true)}
-            className="w-full text-white py-4 rounded-2xl flex items-center justify-between px-5 font-bold text-base shadow-xl"
-            style={{ background: '#111' }}
+            className="w-full text-white py-4 rounded-lg flex items-center justify-between px-5 font-bold text-base shadow-lg hover:shadow-xl transition-shadow"
+            style={{ background: '#16a34a' }}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <ShoppingCart size={20} />
-              <span className="w-6 h-6 rounded-full flex items-center justify-center text-sm font-black text-black"
-                    style={{ background: '#d4a017' }}>
+              <Badge variant="secondary" className="bg-white text-emerald-700 font-bold">
                 {itemCount}
-              </span>
+              </Badge>
             </div>
             <span>View Cart</span>
-            <span style={{ color: '#d4a017' }}>${(grandTotal || 0).toFixed(2)}</span>
+            <span className="text-emerald-100 font-mono">${(grandTotal || 0).toFixed(2)}</span>
           </button>
         </div>
       )}
@@ -310,13 +335,13 @@ function BarcodeScanner({ onResult, onClose }) {
     async function initScanner() {
       try {
         const { Html5Qrcode } = await import('html5-qrcode');
-        
+
         // Ensure DOM element exists
         const element = document.getElementById('qr-reader');
         if (!element) throw new Error('Scanner container not found');
-        
+
         html5QrCode = new Html5Qrcode('qr-reader');
-        
+
         // Get available cameras
         const cameras = await Html5Qrcode.getCameras();
         if (!cameras || cameras.length === 0) {
@@ -324,13 +349,14 @@ function BarcodeScanner({ onResult, onClose }) {
           if (mounted) setError('No camera available');
           return;
         }
-        
+
         // Prefer rear/back camera on phones
-        const backCamera = cameras.find(c =>
-          c.label.toLowerCase().includes('back') ||
-          c.label.toLowerCase().includes('rear')
+        const backCamera = cameras.find(
+          (c) =>
+            c.label.toLowerCase().includes('back') ||
+            c.label.toLowerCase().includes('rear')
         ) || cameras[0];
-        
+
         // Small delay to ensure DOM is ready
         setTimeout(async () => {
           if (!mounted) return;
@@ -340,7 +366,7 @@ function BarcodeScanner({ onResult, onClose }) {
               {
                 fps: 10,
                 qrbox: { width: 250, height: 120 },
-                aspectRatio: 1.777,
+                aspectRatio: 1.777
               },
               (decodedText) => {
                 html5QrCode.stop().catch(console.error);
@@ -353,15 +379,14 @@ function BarcodeScanner({ onResult, onClose }) {
             if (mounted) setError(err.message || 'Failed to start camera');
           }
         }, 300);
-        
       } catch (err) {
         console.error('Init error:', err);
         if (mounted) setError(err.message || 'Could not access camera');
       }
     }
-    
+
     initScanner();
-    
+
     return () => {
       mounted = false;
       if (html5QrCode && typeof html5QrCode.stop === 'function') {
@@ -379,30 +404,37 @@ function BarcodeScanner({ onResult, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl p-4 w-full max-w-sm">
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="font-bold text-gray-900">Scan Barcode / QR</h3>
-          <button onClick={onClose} className="p-1.5 bg-gray-100 rounded-full hover:bg-gray-200 transition">
-            <X size={16} />
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-xl p-4 w-full max-w-sm shadow-2xl"
+      >
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-bold text-lg text-gray-900">Scan Barcode / QR</h3>
+          <button
+            onClick={onClose}
+            className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition flex items-center justify-center"
+          >
+            <X size={18} />
           </button>
         </div>
-        
+
         {error ? (
-          <div className="text-center p-4">
-            <p className="text-red-500 text-sm mb-3">{error}</p>
-            <p className="text-gray-500 text-xs mb-2">You can enter the barcode manually:</p>
+          <div className="text-center p-6">
+            <p className="text-red-600 text-sm mb-4 font-medium">{error}</p>
+            <p className="text-gray-600 text-xs mb-3">Enter the barcode manually:</p>
             <form onSubmit={handleManualSubmit} className="flex gap-2">
               <input
                 type="text"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
                 placeholder="Enter barcode / SKU"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
                 autoFocus
               />
-              <button type="submit" className="bg-gold text-black px-4 py-2 rounded-lg font-semibold text-sm">
+              <Button type="submit" variant="primary" size="sm">
                 Add
-              </button>
+              </Button>
             </form>
           </div>
         ) : (
@@ -410,27 +442,29 @@ function BarcodeScanner({ onResult, onClose }) {
             {/* Fixed scanner container with black background and min height */}
             <div
               id="qr-reader"
-              className="rounded-xl overflow-hidden bg-black"
+              className="rounded-lg overflow-hidden bg-black"
               style={{ width: '100%', minHeight: '300px' }}
               ref={scannerRef}
             />
-            <p className="text-xs text-center text-gray-500 mt-3">Position the barcode inside the frame</p>
-            <p className="text-xs text-center text-gray-400 mt-1">Or enter manually:</p>
-            <form onSubmit={handleManualSubmit} className="flex gap-2 mt-2">
+            <p className="text-xs text-center text-gray-600 mt-3 font-medium">
+              Position the barcode inside the frame
+            </p>
+            <p className="text-xs text-center text-gray-500 mt-2">Or enter manually:</p>
+            <form onSubmit={handleManualSubmit} className="flex gap-2 mt-3">
               <input
                 type="text"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
                 placeholder="Enter barcode / SKU"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
               />
-              <button type="submit" className="bg-gold text-black px-4 py-2 rounded-lg font-semibold text-sm">
+              <Button type="submit" variant="primary" size="sm">
                 Add
-              </button>
+              </Button>
             </form>
           </>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

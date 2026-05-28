@@ -320,27 +320,52 @@ function CustomerDetail({ customer, fmt }) {
   return (
     <div className="px-5 py-4 space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-blue-50 rounded-2xl p-3 text-center">
-          <p className="font-black text-lg text-blue-600">{fmt(customer.totalPurchases||0)}</p>
-          <p className="text-xs text-gray-500">Total Purchases</p>
-        </div>
-        <div className={`rounded-2xl p-3 text-center ${customer.creditBalance>0?'bg-red-50':'bg-green-50'}`}>
-          <p className={`font-black text-lg ${customer.creditBalance>0?'text-red-500':'text-green-600'}`}>
-            {fmt(customer.creditBalance||0)}
-          </p>
-          <p className="text-xs text-gray-500">Credit Balance</p>
-        </div>
+        <Card>
+          <CardBody className="p-4 text-center">
+            <p className="font-bold text-emerald-600 text-2xl">{fmt(customer.totalPurchases || 0)}</p>
+            <p className="text-xs text-gray-500 mt-1">Total Purchases</p>
+          </CardBody>
+        </Card>
+        <Card className={customer.creditBalance > 0 ? 'border-l-4 border-l-red-500' : 'border-l-4 border-l-emerald-500'}>
+          <CardBody className="p-4 text-center">
+            <p className={`font-bold text-2xl ${customer.creditBalance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+              {fmt(customer.creditBalance || 0)}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Credit Balance</p>
+          </CardBody>
+        </Card>
       </div>
-      <div className="bg-gray-50 rounded-2xl p-4 space-y-2">
-        {customer.phone   && <div className="flex items-center gap-2 text-sm"><Phone size={14} className="text-gray-400"/><span>{customer.phone}</span></div>}
-        {customer.email   && <div className="flex items-center gap-2 text-sm"><span className="text-gray-400 text-xs">Email:</span><span>{customer.email}</span></div>}
-        {customer.address && <div className="flex items-center gap-2 text-sm"><MapPin size={14} className="text-gray-400"/><span>{customer.address}</span></div>}
-        {customer.notes   && <div className="text-sm text-gray-500 italic">{customer.notes}</div>}
-      </div>
+      <Card>
+        <CardBody className="p-4 space-y-3">
+          {customer.phone && (
+            <div className="flex items-center gap-3 text-sm">
+              <Phone size={16} className="text-gray-400 shrink-0" />
+              <span className="text-gray-700">{customer.phone}</span>
+            </div>
+          )}
+          {customer.email && (
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-gray-400 text-xs font-semibold">Email:</span>
+              <span className="text-gray-700">{customer.email}</span>
+            </div>
+          )}
+          {customer.address && (
+            <div className="flex items-center gap-3 text-sm">
+              <MapPin size={16} className="text-gray-400 shrink-0" />
+              <span className="text-gray-700">{customer.address}</span>
+            </div>
+          )}
+          {customer.notes && (
+            <div className="text-sm text-gray-600 italic border-t border-gray-100 pt-3 mt-3">
+              {customer.notes}
+            </div>
+          )}
+        </CardBody>
+      </Card>
       {customer.totalPurchases > 500 && (
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-          <Star size={16} style={{color:'#d4a017'}}/>
-          <span className="text-sm font-semibold text-amber-700">VIP Customer — high value shopper</span>
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+          <Star size={18} className="text-amber-500 fill-amber-500 shrink-0" />
+          <span className="text-sm font-semibold text-amber-800">VIP Customer — high value shopper</span>
         </div>
       )}
     </div>

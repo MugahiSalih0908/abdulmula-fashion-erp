@@ -4,25 +4,29 @@ import { useState }   from 'react';
 import { useQuery }   from '@tanstack/react-query';
 import api            from '../services/api';
 import PageHeader     from '../components/ui/PageHeader';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import CardBody from '../components/ui/CardBody';
+import Badge from '../components/ui/Badge';
 import { ShieldCheck, Search } from 'lucide-react';
 
-const ACTION_COLORS = {
-  LOGIN:           'bg-green-100 text-green-700',
-  LOGOUT:          'bg-gray-100 text-gray-600',
-  LOGIN_FAILED:    'bg-red-100 text-red-700',
-  PRODUCT_CREATE:  'bg-blue-100 text-blue-700',
-  PRODUCT_UPDATE:  'bg-amber-100 text-amber-700',
-  PRODUCT_DELETE:  'bg-red-100 text-red-700',
-  INVOICE_CREATE:  'bg-green-100 text-green-700',
-  INVOICE_DELETE:  'bg-red-100 text-red-700',
-  EXPENSE_CREATE:  'bg-orange-100 text-orange-700',
-  EXPENSE_DELETE:  'bg-red-100 text-red-700',
-  USER_CREATE:     'bg-purple-100 text-purple-700',
-  USER_UPDATE:     'bg-purple-100 text-purple-700',
-  STOCK_ADJUST:    'bg-teal-100 text-teal-700',
-  SUPPLIER_CREATE: 'bg-amber-100 text-amber-700',
-  SUPPLIER_UPDATE: 'bg-amber-100 text-amber-700',
-  SUPPLIER_DELETE: 'bg-red-100 text-red-700',
+const ACTION_BADGES = {
+  LOGIN:           'success',
+  LOGOUT:          'secondary',
+  LOGIN_FAILED:    'danger',
+  PRODUCT_CREATE:  'info',
+  PRODUCT_UPDATE:  'warning',
+  PRODUCT_DELETE:  'danger',
+  INVOICE_CREATE:  'success',
+  INVOICE_DELETE:  'danger',
+  EXPENSE_CREATE:  'warning',
+  EXPENSE_DELETE:  'danger',
+  USER_CREATE:     'info',
+  USER_UPDATE:     'info',
+  STOCK_ADJUST:    'info',
+  SUPPLIER_CREATE: 'warning',
+  SUPPLIER_UPDATE: 'warning',
+  SUPPLIER_DELETE: 'danger',
 };
 
 const ALL_ACTIONS = [
@@ -55,14 +59,14 @@ export default function AuditLogsPage() {
   const pages = Math.ceil(total / 50);
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-5">
       <PageHeader
         title="Audit Logs"
         sub={`${total} total records`}
         action={
-          <div className="flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-lg bg-red-100 text-red-700">
+          <Badge variant="danger" className="flex items-center gap-1.5">
             <ShieldCheck size={14}/> Admin Only
-          </div>
+          </Badge>
         }
       />
 
@@ -71,10 +75,9 @@ export default function AuditLogsPage() {
         <div className="flex gap-2">
           {ALL_ACTIONS.map(a => (
             <button key={a} onClick={() => { setAction(a); setPage(1); }}
-                    className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                      action===a ? 'text-black' : 'bg-white text-gray-500 border border-gray-200'
-                    }`}
-                    style={action===a ? { background:'#d4a017' } : {}}>
+                    className={`shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                      action===a ? 'text-white bg-emerald-600 shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300'
+                    }`}>
               {a === 'all' ? 'All' : a.replace(/_/g,' ')}
             </button>
           ))}
@@ -82,59 +85,69 @@ export default function AuditLogsPage() {
       </div>
 
       {isLoading ? (
-        <div className="space-y-2">{[...Array(8)].map((_,i)=><div key={i} className="h-16 bg-gray-200 rounded-xl animate-pulse"/>)}</div>
+        <div className="space-y-3">{[...Array(8)].map((_,i)=><div key={i} className="h-16 bg-gray-200 rounded-lg animate-pulse"/>)}</div>
       ) : logs.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <ShieldCheck size={48} className="mx-auto mb-3 opacity-25"/>
-          <p className="font-semibold">No audit logs found</p>
+        <div className="text-center py-16">
+          <ShieldCheck size={48} className="mx-auto mb-3 text-gray-300" />
+          <p className="font-semibold text-gray-500">No audit logs found</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {logs.map(log => (
-            <div key={log._id} className="bg-white rounded-2xl px-4 py-3 shadow-sm">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ACTION_COLORS[log.action]||'bg-gray-100 text-gray-600'}`}>
-                      {log.action}
-                    </span>
-                    {log.entity && (
-                      <span className="text-xs text-gray-500">{log.entity}</span>
+            <Card key={log._id}>
+              <CardBody className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                      <Badge variant={ACTION_BADGES[log.action] || 'secondary'}>
+                        {log.action.replace(/_/g,' ')}
+                      </Badge>
+                      {log.entity && (
+                        <span className="text-xs text-gray-500">{log.entity}</span>
+                      )}
+                    </div>
+                    <p className="font-semibold text-sm text-gray-900">
+                      {log.user?.name || log.userName || 'Unknown user'}
+                      <span className="text-gray-500 font-normal text-xs ml-2">{log.user?.role}</span>
+                    </p>
+                    {log.details && (
+                      <p className="text-xs text-gray-600 mt-1 truncate">
+                        {JSON.stringify(log.details).slice(0, 120)}
+                      </p>
                     )}
                   </div>
-                  <p className="font-semibold text-sm mt-1">
-                    {log.user?.name || log.userName || 'Unknown user'}
-                    <span className="text-gray-400 font-normal text-xs ml-2">{log.user?.role}</span>
-                  </p>
-                  {log.details && (
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">
-                      {JSON.stringify(log.details).slice(0, 120)}
-                    </p>
-                  )}
+                  <div className="text-right shrink-0">
+                    <p className="text-xs text-gray-600">{new Date(log.createdAt).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-500">{new Date(log.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
+                    {log.ip && <p className="text-xs text-gray-400 font-mono">{log.ip}</p>}
+                  </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-xs text-gray-400">{new Date(log.createdAt).toLocaleDateString()}</p>
-                  <p className="text-xs text-gray-400">{new Date(log.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
-                  {log.ip && <p className="text-xs text-gray-300 font-mono">{log.ip}</p>}
-                </div>
-              </div>
-            </div>
+              </CardBody>
+            </Card>
           ))}
         </div>
       )}
 
       {/* Pagination */}
       {pages > 1 && (
-        <div className="flex items-center justify-between pt-2">
-          <button onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}
-                  className="px-4 py-2 rounded-xl bg-white border border-gray-200 text-sm font-semibold disabled:opacity-40">
+        <div className="flex items-center justify-between pt-4">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setPage(p => Math.max(1, p-1))}
+            disabled={page===1}
+          >
             ← Previous
-          </button>
-          <span className="text-sm text-gray-500">Page {page} of {pages}</span>
-          <button onClick={() => setPage(p => Math.min(pages, p+1))} disabled={page===pages}
-                  className="px-4 py-2 rounded-xl bg-white border border-gray-200 text-sm font-semibold disabled:opacity-40">
+          </Button>
+          <span className="text-sm text-gray-600">Page {page} of {pages}</span>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setPage(p => Math.min(pages, p+1))}
+            disabled={page===pages}
+          >
             Next →
-          </button>
+          </Button>
         </div>
       )}
 

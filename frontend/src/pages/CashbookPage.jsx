@@ -7,6 +7,9 @@ import toast                           from 'react-hot-toast';
 import api                             from '../services/api';
 import useSettingsStore                from '../store/settingsStore';
 import PageHeader from '../components/ui/PageHeader';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import CardBody from '../components/ui/CardBody';
 import Sheet      from '../components/ui/Sheet';
 import KpiCard    from '../components/ui/KpiCard';
 import {
@@ -68,11 +71,11 @@ export default function CashbookPage() {
       />
 
       {/* Currency toggle */}
-      <div className="flex bg-gray-100 rounded-xl p-1">
+      <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
         {['USD','SSP'].map(c => (
           <button key={c} onClick={() => setCurrency(c)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${
-                    currency === c ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                  className={`flex-1 py-2 rounded-md text-sm font-semibold transition-all ${
+                    currency === c ? 'bg-white text-emerald-600 shadow-md' : 'text-gray-600'
                   }`}>
             {c}
           </button>
@@ -80,12 +83,14 @@ export default function CashbookPage() {
       </div>
 
       {currency === 'SSP' && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex justify-between items-center">
-          <span className="text-xs text-amber-700">Rate: 1 USD = {usdToSsp.toLocaleString()} SSP</span>
-          <button onClick={() => setShowRate(true)} className="text-xs font-bold text-amber-700 underline">
-            Change
-          </button>
-        </div>
+        <Card className="border-l-4 border-l-amber-500 bg-amber-50">
+          <CardBody className="p-3 flex justify-between items-center">
+            <span className="text-xs text-amber-700 font-medium">Rate: 1 USD = {usdToSsp.toLocaleString()} SSP</span>
+            <button onClick={() => setShowRate(true)} className="text-xs font-bold text-amber-700 hover:underline">
+              Change
+            </button>
+          </CardBody>
+        </Card>
       )}
 
       {/* Today's KPIs */}
@@ -102,43 +107,47 @@ export default function CashbookPage() {
 
       {/* Status */}
       {today?.isClosed && (
-        <div className="bg-green-50 border border-green-200 rounded-2xl p-3 flex items-center gap-2">
-          <Lock size={16} className="text-green-600"/>
-          <div>
-            <p className="font-semibold text-green-800 text-sm">Day closed</p>
-            <p className="text-xs text-green-600">Closing cash: {fmt(today.closingCash)}</p>
-          </div>
-        </div>
+        <Card className="border-l-4 border-l-emerald-500 bg-emerald-50">
+          <CardBody className="p-4 flex items-center gap-3">
+            <Lock size={18} className="text-emerald-600" />
+            <div>
+              <p className="font-semibold text-emerald-900 text-sm">Day closed</p>
+              <p className="text-xs text-emerald-700">Closing cash: {fmt(today.closingCash)}</p>
+            </div>
+          </CardBody>
+        </Card>
       )}
 
       {/* History */}
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <div className="px-4 pt-4 pb-2 border-b">
-          <p className="font-bold text-sm text-gray-700">Cashbook History</p>
-        </div>
-        {history.length === 0 ? (
-          <div className="text-center py-8 text-gray-400 text-sm">No history yet</div>
-        ) : (
-          <div className="divide-y divide-gray-50">
-            {history.map(entry => (
-              <div key={entry._id} className="px-4 py-3 flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-sm">{entry.date}</p>
-                  <p className="text-xs text-gray-400">
-                    Open: {fmt(entry.openingCash)}
-                    {entry.isClosed && ` → Close: ${fmt(entry.closingCash)}`}
-                  </p>
-                </div>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  entry.isClosed ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                }`}>
-                  {entry.isClosed ? 'Closed' : 'Open'}
-                </span>
-              </div>
-            ))}
+      <Card>
+        <CardBody className="p-0">
+          <div className="px-4 pt-4 pb-2 border-b border-gray-100">
+            <p className="font-semibold text-sm text-gray-900">Cashbook History</p>
           </div>
-        )}
-      </div>
+          {history.length === 0 ? (
+            <div className="text-center py-8 text-gray-400 text-sm">No history yet</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {history.map(entry => (
+                <div key={entry._id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition">
+                  <div>
+                    <p className="font-semibold text-sm text-gray-900">{entry.date}</p>
+                    <p className="text-xs text-gray-500">
+                      Open: {fmt(entry.openingCash)}
+                      {entry.isClosed && ` → Close: ${fmt(entry.closingCash)}`}
+                    </p>
+                  </div>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                    entry.isClosed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {entry.isClosed ? 'Closed' : 'Open'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
       <div className="h-4"/>
 
@@ -159,25 +168,25 @@ function CloseDayForm({ onClose, onSaved, isPending, openingCash, netCash, fmt }
   const { register, handleSubmit } = useForm({ defaultValues: { closingCash: netCash?.toFixed(2) || '' } });
   return (
     <form onSubmit={handleSubmit(onSaved)} className="px-5 py-4 space-y-4">
-      <div className="bg-gray-50 rounded-xl p-3 space-y-1">
-        <div className="flex justify-between text-sm"><span className="text-gray-500">Opening Cash</span><span className="font-semibold">{fmt(openingCash || 0)}</span></div>
-        <div className="flex justify-between text-sm"><span className="text-gray-500">Expected Closing</span><span className="font-bold">{fmt(netCash || 0)}</span></div>
-      </div>
+      <Card className="bg-gray-50">
+        <CardBody className="p-3 space-y-2">
+          <div className="flex justify-between text-sm"><span className="text-gray-600">Opening Cash</span><span className="font-semibold text-gray-900">{fmt(openingCash || 0)}</span></div>
+          <div className="flex justify-between text-sm"><span className="text-gray-600">Expected Closing</span><span className="font-bold text-emerald-700">{fmt(netCash || 0)}</span></div>
+        </CardBody>
+      </Card>
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">Actual Closing Cash ($)</label>
         <input type="number" step="0.01" min="0" {...register('closingCash', { required:true, valueAsNumber:true })}
-               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none" placeholder="0.00"/>
+               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="0.00"/>
       </div>
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">Note</label>
-        <textarea {...register('note')} rows={2} className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none resize-none" placeholder="Any notes for today…"/>
+        <textarea {...register('note')} rows={2} className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition resize-none" placeholder="Any notes for today…"/>
       </div>
-      <button type="submit" disabled={isPending}
-              className="w-full py-4 rounded-2xl font-bold text-white disabled:opacity-60 flex items-center justify-center gap-2"
-              style={{ background: '#111' }}>
-        {isPending && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"/>}
+      <Button type="submit" variant="primary" disabled={isPending} className="w-full">
+        {isPending && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"/>}
         Close Day
-      </button>
+      </Button>
     </form>
   );
 }
@@ -197,20 +206,20 @@ function ExchangeRateForm({ currentRate, onClose, onSaved }) {
   };
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <div className="bg-amber-50 rounded-xl p-3 text-sm text-amber-700">
-        <p className="font-semibold">Current rate</p>
-        <p>1 USD = {currentRate?.toLocaleString()} SSP</p>
-      </div>
+      <Card className="bg-amber-50">
+        <CardBody className="p-3 text-sm text-amber-700">
+          <p className="font-semibold">Current rate</p>
+          <p>1 USD = {currentRate?.toLocaleString()} SSP</p>
+        </CardBody>
+      </Card>
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">New Rate: 1 USD = ? SSP</label>
         <input type="number" step="1" min="1" {...register('usdToSsp', { required:true, valueAsNumber:true })}
-               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none" placeholder="e.g. 1300"/>
+               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="e.g. 1300"/>
       </div>
-      <button type="submit" disabled={isSubmitting}
-              className="w-full py-4 rounded-2xl font-bold text-black disabled:opacity-60"
-              style={{ background: '#d4a017' }}>
+      <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">
         Set Rate
-      </button>
+      </Button>
     </form>
   );
 }
