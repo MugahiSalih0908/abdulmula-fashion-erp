@@ -467,8 +467,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Compatibility */
-.hover-scale { @apply hover-lift; }
-.hover-scale:hover { @apply hover-lift:hover; }
+.hover-scale:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
 
 /* ─────────────────────────────────────────────────────────────
    SKELETON LOADER
