@@ -9,7 +9,7 @@ import {
 import api             from '../services/api';
 import useSettingsStore from '../store/settingsStore';
 import PageHeader      from '../components/ui/PageHeader';
-import { StatCard, Card, CardHeader, CardBody, Badge } from '@/components/ui';
+import KpiCard from '../components/ui/KpiCard';
 import {
   TrendingUp, TrendingDown, DollarSign, Package,
   ShoppingCart, Star, BarChart3, AlertTriangle
