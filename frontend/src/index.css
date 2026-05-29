@@ -453,17 +453,12 @@ h1, h2, h3, h4, h5, h6 {
   transition: all var(--transition-normal);
 }
 
-.hover-lift {
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+.card-hover {
+  transition: transform 0.2s ease;
 }
 
-.hover-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
-}
-
-.hover-lift:active {
-  transform: translateY(0);
+.card-hover:hover {
+  transform: translateY(-4px);
 }
 
 /* Compatibility */
