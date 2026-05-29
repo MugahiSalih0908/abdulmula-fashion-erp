@@ -33,3 +33,19 @@ export default function KpiCard({ icon, label, value, sub, loading, color = 'gol
     </div>
   );
 }
+export default function KpiCard({
+  icon,
+  label,
+  value,
+  sub,
+  loading,
+  color = 'gold'
+}) {
+  // code...
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm">
+      {/* content */}
+    </div>
+  );
+}
