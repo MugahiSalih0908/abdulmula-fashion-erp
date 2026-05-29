@@ -1,7 +1,7 @@
 {
   "name": "Abdulmula Fashion ERP",
   "short_name": "AF ERP",
-  "description": "Premium POS & ERP for Abdulmula Fashion, Juba, South Sudan",
+  "description": "ERP & POS System for Abdulmula Fashion",
 
   "start_url": "/",
   "scope": "/",
@@ -9,33 +9,39 @@
   "display": "standalone",
   "orientation": "portrait-primary",
 
-  "theme_color": "#111111",
-  "background_color": "#111111",
+  "theme_color": "#EAB308",
+  "background_color": "#FFFFFF",
 
-  "categories": ["business", "finance", "productivity"],
   "lang": "en",
+  "dir": "ltr",
+
+  "categories": [
+    "business",
+    "finance",
+    "productivity"
+  ],
 
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable any"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable any"
     }
   ],
 
   "shortcuts": [
     {
-      "name": "Open POS",
-      "short_name": "POS",
-      "description": "Open the Point of Sale",
-      "url": "/pos",
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open Dashboard",
+      "url": "/dashboard",
       "icons": [
         {
           "src": "/icons/icon-192.png",
@@ -44,9 +50,10 @@
       ]
     },
     {
-      "name": "Dashboard",
-      "short_name": "Dashboard",
-      "url": "/dashboard",
+      "name": "Point of Sale",
+      "short_name": "POS",
+      "description": "Open POS",
+      "url": "/pos",
       "icons": [
         {
           "src": "/icons/icon-192.png",

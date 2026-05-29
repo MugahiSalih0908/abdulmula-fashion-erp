@@ -69,6 +69,7 @@ useEffect(() => {
             <Route path="/dashboard"       element={<DashboardPage />} />
             <Route path="/pos"             element={<POSPage />} />
             <Route path="/products"        element={<ProductsPage />} />
+          <Route path="/products/add" element={<AddProductPage />} />
             <Route path="/customers"       element={<CustomersPage />} />
             <Route path="/settings"        element={<SettingsPage />} />
 
