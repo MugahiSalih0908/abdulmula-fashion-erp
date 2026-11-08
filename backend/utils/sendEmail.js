@@ -1,8 +1,18 @@
-// utils/sendEmail.js – Resend email utility with branded HTML templates
-const { Resend } = require('resend');
+// utils/sendEmail.js – Gmail SMTP email utility with branded HTML templates
+const nodemailer = require('nodemailer');
 
-// ── Initialize Resend with API key ───────────────────────────
-const resend = new Resend(process.env.RESEND_API_KEY);
+const isPlaceholderValue = (value) => !value || /replace_with|your_|example\./i.test(String(value));
+
+const smtpTransport = process.env.EMAIL_USER && process.env.EMAIL_PASS && !isPlaceholderValue(process.env.EMAIL_PASS)
+  ? nodemailer.createTransport({
+      service: 'gmail',
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    })
+  : null;
 
 // ── Brand constants ───────────────────────────────────────────
 const BRAND = {
@@ -211,11 +221,13 @@ const sendEmail = async ({ to, subject, html }) => {
     return { id: 'test-mode', message: 'Test email skipped' };
   }
 
-  // Check for required environment variables
-  if (!process.env.RESEND_API_KEY) {
-    console.error('[EMAIL] RESEND_API_KEY is missing – cannot send email.');
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS || isPlaceholderValue(process.env.EMAIL_PASS)) {
+    console.warn('[EMAIL] Gmail SMTP credentials are missing or still set to a placeholder. Email delivery is skipped safely.');
     console.log(`[EMAIL WOULD SEND] To: ${to} | Subject: ${subject}`);
-    throw new Error('Resend API key not configured');
+    return {
+      id: 'smtp-disabled',
+      message: 'Email delivery skipped because Gmail SMTP credentials are not configured.'
+    };
   }
 
   if (!process.env.EMAIL_FROM) {
@@ -224,17 +236,17 @@ const sendEmail = async ({ to, subject, html }) => {
   }
 
   try {
-    const data = await resend.emails.send({
+    const info = await smtpTransport.sendMail({
       from: process.env.EMAIL_FROM,
       to,
       subject,
       html,
     });
 
-    console.log(`[EMAIL] Sent to ${to} | Subject: ${subject} | ID: ${data.id}`);
-    return data;
+    console.log(`[EMAIL] Sent via Gmail SMTP to ${to} | Subject: ${subject} | ID: ${info.messageId}`);
+    return info;
   } catch (err) {
-    console.error('[RESEND EMAIL ERROR]', err);
+    console.error('[SMTP EMAIL ERROR]', err.message);
     throw err;
   }
 };

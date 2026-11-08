@@ -1,11 +1,5 @@
-// src/services/invitationService.js – Invitation API calls
+﻿import api from './api';
 
-import axios from 'axios';
-
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  'http://localhost:5000/api';
-// ── Validate invitation token ──────────────────────────────────────
 export const validateInvitation = async (token) => {
   try {
     const response = await api.post(`/invitations/validate/${token}`);
@@ -15,13 +9,12 @@ export const validateInvitation = async (token) => {
   }
 };
 
-// ── Accept invitation and create account ────────────────────────────
 export const acceptInvitation = async (token, { name, password, confirmPassword }) => {
   try {
     const response = await api.post(`/invitations/accept/${token}`, {
       name,
       password,
-      confirmPassword
+      confirmPassword,
     });
     return response.data;
   } catch (error) {
@@ -29,7 +22,6 @@ export const acceptInvitation = async (token, { name, password, confirmPassword 
   }
 };
 
-// ── Create invitation (admin only) ────────────────────────────────
 export const createInvitation = async (email, role, accessToken) => {
   try {
     const response = await api.post(
@@ -43,24 +35,19 @@ export const createInvitation = async (email, role, accessToken) => {
   }
 };
 
-// ── List invitations (admin only) ──────────────────────────────────
 export const listInvitations = async (status, accessToken) => {
   try {
     const params = status ? { status } : {};
-    const response = await api.get(
-      `/invitations`,
-      {
-        params,
-        headers: { Authorization: `Bearer ${accessToken}` }
-      }
-    );
+    const response = await api.get(`/invitations`, {
+      params,
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     return response.data;
   } catch (error) {
     throw error.response?.data || { success: false, message: 'Failed to list invitations' };
   }
 };
 
-// ── Resend invitation (admin only) ────────────────────────────────
 export const resendInvitation = async (invitationId, accessToken) => {
   try {
     const response = await api.post(
@@ -74,13 +61,11 @@ export const resendInvitation = async (invitationId, accessToken) => {
   }
 };
 
-// ── Delete invitation (admin only) ────────────────────────────────
 export const deleteInvitation = async (invitationId, accessToken) => {
   try {
-    const response = await api.delete(
-      `/invitations/${invitationId}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
+    const response = await api.delete(`/invitations/${invitationId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     return response.data;
   } catch (error) {
     throw error.response?.data || { success: false, message: 'Failed to delete invitation' };
