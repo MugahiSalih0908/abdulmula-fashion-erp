@@ -27,10 +27,9 @@ const ADMIN = {
 
     const admin = await User.create(ADMIN);
     console.log('\n✅  First admin created!');
-    console.log(`   Name:     ${admin.name}`);
-    console.log(`   Email:    ${admin.email}`);
-    console.log(`   Password: ${ADMIN.password}`);
-    console.log('\n⚠️   CHANGE THIS PASSWORD immediately after first login!\n');
+    console.log(`   Name:  ${admin.name}`);
+    console.log(`   Email: ${admin.email}`);
+    console.log('\n⚠️   Change the admin password immediately after first login.\n');
     process.exit(0);
   } catch (err) {
     console.error('❌  Error:', err.message);

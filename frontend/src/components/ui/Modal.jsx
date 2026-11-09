@@ -1,5 +1,5 @@
-import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useId, useState } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { X } from 'lucide-react';
 
 /**
@@ -20,8 +20,33 @@ export default function Modal({
   footer,
   fullWidth = false,
 }) {
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+  );
+  const titleId = useId();
+  const reduceMotion = useReducedMotion();
   const bottomSheet = isMobile && !fullWidth;
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 767px)');
+    const updateViewport = () => setIsMobile(mediaQuery.matches);
+    updateViewport();
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', updateViewport);
+      return () => mediaQuery.removeEventListener('change', updateViewport);
+    }
+    mediaQuery.addListener(updateViewport);
+    return () => mediaQuery.removeListener(updateViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose?.();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   return (
     <AnimatePresence>
@@ -30,35 +55,32 @@ export default function Modal({
           {/* Backdrop */}
           <motion.div
             className="modal-backdrop"
-            initial={{ opacity: 0 }}
+            aria-hidden="true"
+            initial={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
+            exit={reduceMotion ? { opacity: 1 } : { opacity: 0 }}
+            onClick={() => onClose?.()}
           />
 
           {/* Modal */}
           <motion.div
             className={`fixed z-50 modal-content ${
               bottomSheet
-                ? 'bottom-0 left-0 right-0 rounded-t-2xl rounded-b-none'
-                : 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md m-4'
+                ? 'bottom-0 left-0 right-0 rounded-t-2xl rounded-b-none max-h-[92dvh] flex flex-col'
+                : 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md max-h-[90vh]'
             }`}
-            initial={
-              bottomSheet
-                ? { y: '100%', opacity: 0 }
-                : { scale: 0.9, opacity: 0, y: -50 }
-            }
-            animate={
-              bottomSheet
-                ? { y: 0, opacity: 1 }
-                : { scale: 1, opacity: 1, y: 0 }
-            }
-            exit={
-              bottomSheet
-                ? { y: '100%', opacity: 0 }
-                : { scale: 0.9, opacity: 0, y: -50 }
-            }
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={title ? titleId : undefined}
+            aria-label={title ? undefined : 'Dialog'}
+            initial={reduceMotion ? false : bottomSheet
+              ? { y: '100%', opacity: 0 }
+              : { scale: 0.96, opacity: 0, y: -12 }}
+            animate={bottomSheet ? { y: 0, opacity: 1 } : { scale: 1, opacity: 1, y: 0 }}
+            exit={reduceMotion ? { opacity: 0 } : bottomSheet
+              ? { y: '100%', opacity: 0 }
+              : { scale: 0.96, opacity: 0, y: -12 }}
+            transition={reduceMotion ? { duration: 0.01 } : { type: 'spring', damping: 25, stiffness: 300 }}
           >
             {/* Handle bar for bottom sheet */}
             {bottomSheet && <div className="sheet-handle" />}
@@ -66,18 +88,20 @@ export default function Modal({
             {/* Header */}
             {title && (
               <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100">
-                <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+                <h2 id={titleId} className="text-xl font-semibold text-gray-900">{title}</h2>
                 <button
-                  onClick={onClose}
-                  className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-lg"
+                  type="button"
+                  onClick={() => onClose?.()}
+                  aria-label="Close dialog"
+                  className="min-w-11 min-h-11 flex items-center justify-center text-gray-500 hover:text-gray-900 transition-colors hover:bg-gray-100 rounded-lg"
                 >
-                  <X size={24} />
+                  <X size={20} strokeWidth={1.75} aria-hidden="true" />
                 </button>
               </div>
             )}
 
             {/* Content */}
-            <div className="p-4 sm:p-6 overflow-y-auto max-h-[80vh] sm:max-h-none">
+            <div className={`p-4 sm:p-6 overflow-y-auto overscroll-contain ${bottomSheet ? 'flex-1' : 'max-h-[80vh]'}`}>
               {children}
             </div>
 

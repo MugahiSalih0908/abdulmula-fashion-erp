@@ -6,38 +6,25 @@ export default function KpiCard({
   value,
   sub,
   loading,
-  color = 'gold'
+  color = 'gold',
+  className = '',
 }) {
-  const bg = {
-    gold: 'bg-amber-50',
-    green: 'bg-green-50',
-    red: 'bg-red-50',
-    blue: 'bg-blue-50',
-    purple: 'bg-purple-50',
-    gray: 'bg-gray-100',
-  }[color];
-
-  const text = {
-    gold: 'text-amber-600',
-    green: 'text-green-600',
-    red: 'text-red-600',
-    blue: 'text-blue-600',
-    purple: 'text-purple-600',
-    gray: 'text-gray-600',
-  }[color];
+  const supportedColors = ['gold', 'green', 'red', 'blue', 'purple', 'gray'];
+  const colorToken = supportedColors.includes(color) ? color : 'gray';
 
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm">
+    <div className={`kpi-card min-w-0 ${className}`}>
       <div
-        className={`w-10 h-10 ${bg} ${text} rounded-xl flex items-center justify-center mb-3`}
+        className={`kpi-icon kpi-icon-${colorToken}`}
+        aria-hidden="true"
       >
         {icon}
       </div>
 
       {loading ? (
-        <div className="h-7 bg-gray-200 rounded animate-pulse mb-1" />
+        <div className="skeleton h-7 w-3/4 mb-1" aria-hidden="true" />
       ) : (
-        <p className={`font-black text-xl ${text} leading-tight`}>
+        <p className="font-bold text-xl text-gray-900 leading-tight break-words">
           {value}
         </p>
       )}

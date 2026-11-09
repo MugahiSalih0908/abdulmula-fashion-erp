@@ -1,96 +1,67 @@
-// src/store/authStore.js
+﻿import { create } from 'zustand';
 
-import { create } from 'zustand';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
 const storedAccessToken = localStorage.getItem('accessToken');
 const storedRefreshToken = localStorage.getItem('refreshToken');
 
-if (
-  storedAccessToken === 'undefined' ||
-  storedAccessToken === 'null'
-) {
+if (storedAccessToken === 'undefined' || storedAccessToken === 'null') {
   localStorage.removeItem('accessToken');
 }
 
-if (
-  storedRefreshToken === 'undefined' ||
-  storedRefreshToken === 'null'
-) {
+if (storedRefreshToken === 'undefined' || storedRefreshToken === 'null') {
   localStorage.removeItem('refreshToken');
 }
 
-
 const useAuthStore = create((set, get) => ({
-
-  // ─────────────────────────────
-  // STATE
-  // ─────────────────────────────
-
   user: null,
 
-  accessToken: (
-  localStorage.getItem('accessToken') &&
-  localStorage.getItem('accessToken') !== 'undefined'
-)
-  ? localStorage.getItem('accessToken')
-  : null,
+  accessToken:
+    localStorage.getItem('accessToken') && localStorage.getItem('accessToken') !== 'undefined'
+      ? localStorage.getItem('accessToken')
+      : null,
 
-  refreshToken: (
-  localStorage.getItem('refreshToken') &&
-  localStorage.getItem('refreshToken') !== 'undefined' &&
-  localStorage.getItem('refreshToken') !== 'null'
-)
-  ? localStorage.getItem('refreshToken')
-  : null,
+  refreshToken:
+    localStorage.getItem('refreshToken') &&
+    localStorage.getItem('refreshToken') !== 'undefined' &&
+    localStorage.getItem('refreshToken') !== 'null'
+      ? localStorage.getItem('refreshToken')
+      : null,
 
   isLoading: false,
-  // ─────────────────────────────
-// FETCH CURRENT USER
-// ─────────────────────────────
 
-fetchMe: async () => {
+  fetchMe: async () => {
+    const token = get().accessToken;
 
-  const token = get().accessToken;
+    if (!token) return;
 
-  if (!token) return;
-
-  try {
-
-    const response = await fetch(
-      'https://abdulmula-fashion-erp.onrender.com/api',
-      {
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+      });
+
+      if (!response.ok) {
+        get().logout();
+        return;
       }
-    );
 
-    if (!response.ok) {
-      get().logout();
-      return;
+      const data = await response.json();
+
+      set({
+        user: data.data || null,
+      });
+    } catch (error) {
+      console.error('Fetch me failed:', error);
     }
-
-    const data = await response.json();
-
-    set({
-      user: data.data,
-    });
-
-  } catch (error) {
-    console.error('Fetch me failed:', error);
-  }
-},
-
-  // ─────────────────────────────
-  // LOGIN
-  // ─────────────────────────────
+  },
 
   login: async (email, password) => {
-
     set({ isLoading: true });
 
     try {
-
-      const response = await fetch('https://abdulmula-fashion-erp.onrender.com/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -104,7 +75,6 @@ fetchMe: async () => {
       const data = await response.json();
 
       if (!response.ok) {
-
         set({ isLoading: false });
 
         return {
@@ -129,9 +99,7 @@ fetchMe: async () => {
       return {
         success: true,
       };
-
     } catch (error) {
-
       set({ isLoading: false });
 
       return {
@@ -141,14 +109,10 @@ fetchMe: async () => {
     }
   },
 
-  // ─────────────────────────────
-  // LOGOUT
-  // ─────────────────────────────
-
   logout: () => {
-
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
 
     set({
       user: null,
@@ -157,12 +121,7 @@ fetchMe: async () => {
     });
   },
 
-  // ─────────────────────────────
-  // SET TOKENS
-  // ─────────────────────────────
-
   setTokens: (accessToken, refreshToken) => {
-
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
 
@@ -172,10 +131,6 @@ fetchMe: async () => {
     });
   },
 
-  // ─────────────────────────────
-  // ROLE HELPERS
-  // ─────────────────────────────
-
   isAdmin: () => {
     return get().user?.role === 'admin';
   },
@@ -183,7 +138,6 @@ fetchMe: async () => {
   isManager: () => {
     return ['admin', 'manager'].includes(get().user?.role);
   },
-
 }));
 
 export default useAuthStore;

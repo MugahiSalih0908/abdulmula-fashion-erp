@@ -19,7 +19,7 @@ export default function FormField({
   const inputProps = register ? register(name) : {};
 
   return (
-    <div className={`mb-4 ${className}`}>
+    <div className={`mb-4 min-w-0 ${className}`}>
       <Input
         type={type}
         label={label}
@@ -38,9 +38,9 @@ export default function FormField({
  */
 export function FormFieldGroup({ children, title, subtitle }) {
   return (
-    <fieldset className="mb-6">
+    <fieldset className="mb-6 min-w-0">
       {title && (
-        <legend className="text-sm font-semibold text-gray-900 mb-3 block">
+        <legend className="text-sm font-semibold text-gray-900 mb-3">
           {title}
         </legend>
       )}

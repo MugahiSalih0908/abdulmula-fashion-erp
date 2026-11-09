@@ -84,23 +84,26 @@ router.post('/', authorize('admin'), async (req, res, next) => {
 
     // Build activation URL
     const activationUrl = `${process.env.FRONTEND_URL}/activate/${rawToken}`;
-    console.log('ACTIVATION URL:', activationUrl);
     const tmpl          = templates.welcome({ name: member.name, role: member.role, tempPassword, activationUrl });
 
     // Send welcome email
+    let emailDeliveryStatus = 'skipped';
     try {
-     console.log('EMAIL WOULD SEND TO:', member.email);
+     const mailResult = await sendEmail({ to: member.email, ...tmpl });
+     emailDeliveryStatus = mailResult && mailResult.messageId ? 'sent' : 'skipped';
     } catch (emailErr) {
-      console.error('[EMAIL ERROR] Welcome email failed:', emailErr.message);
-      // Don't fail the creation — admin can resend
+     console.error('[EMAIL ERROR] Welcome email failed:', emailErr.message);
+     emailDeliveryStatus = 'failed';
     }
 
-    await log({ user: req.user, action:'USER_CREATE', entity:'User', entityId: member._id, details:{ name: member.name, role: member.role, email: member.email }, req });
+    await log({ user: req.user, action:'USER_CREATE', entity:'User', entityId: member._id, details:{ name: member.name, role: member.role, email: member.email, emailStatus: emailDeliveryStatus }, req });
 
     res.status(201).json({
-      success:true,
-      data:    member,
-     message: `Account created successfully.`
+     success:true,
+     data:    member,
+     message: emailDeliveryStatus === 'failed'
+       ? 'Account created successfully. Activation email could not be sent; use resend activation to retry.'
+       : 'Account created successfully.'
     });
   } catch (err) { next(err); }
 });
@@ -122,9 +125,16 @@ router.post('/:id/resend-activation', authorize('admin'), async (req, res, next)
     const activationUrl = `${process.env.FRONTEND_URL}/activate/${rawToken}`;
     const tmpl          = templates.welcome({ name: member.name, role: member.role, tempPassword, activationUrl });
 
-  console.log('EMAIL WOULD SEND TO:', member.email);
-
-    res.json({ success:true, message:`Activation email resent to ${member.email}.` });
+    try {
+      await sendEmail({ to: member.email, ...tmpl });
+      res.json({ success:true, message:`Activation email resent to ${member.email}.` });
+    } catch (emailErr) {
+      console.error('[EMAIL ERROR] Resend activation failed:', emailErr.message);
+      return res.status(500).json({
+        success:false,
+        message: 'Activation email could not be sent. Please check Gmail SMTP settings and retry.'
+      });
+    }
   } catch (err) { next(err); }
 });
 

@@ -1,18 +1,15 @@
-// src/services/api.js
+﻿import axios from 'axios';
 
-import axios from 'axios';
+const getApiBaseUrl = () => import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
-  baseURL:
-    import.meta.env.VITE_API_URL ||
-    'https://abdulmula-fashion-erp.onrender.com/api',
+  baseURL: getApiBaseUrl(),
   timeout: 15000,
   headers: {
-    'Content-Type': 'application/json'
-  }
+    'Content-Type': 'application/json',
+  },
 });
 
-// ── Attach JWT token ─────────────────────────────
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
 
@@ -23,7 +20,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// ── Token refresh handling ───────────────────────
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -69,36 +65,19 @@ api.interceptors.response.use(
           throw new Error('No refresh token');
         }
 
-        const { data } = await axios.post(
-          `${
-            import.meta.env.VITE_API_URL ||
-            'https://abdulmula-fashion-erp.onrender.com/api'
-          }/auth/refresh`,
-          { refreshToken }
-        );
+        const { data } = await axios.post(`${getApiBaseUrl()}/auth/refresh`, { refreshToken });
 
-        localStorage.setItem(
-          'accessToken',
-          data.data.accessToken
-        );
+        localStorage.setItem('accessToken', data.data.accessToken);
+        localStorage.setItem('refreshToken', data.data.refreshToken);
 
-        localStorage.setItem(
-          'refreshToken',
-          data.data.refreshToken
-        );
-
-        api.defaults.headers.Authorization =
-          `Bearer ${data.data.accessToken}`;
+        api.defaults.headers.Authorization = `Bearer ${data.data.accessToken}`;
 
         processQueue(null, data.data.accessToken);
 
-        original.headers.Authorization =
-          `Bearer ${data.data.accessToken}`;
+        original.headers.Authorization = `Bearer ${data.data.accessToken}`;
 
         return api(original);
-
       } catch (refreshErr) {
-
         processQueue(refreshErr, null);
 
         localStorage.removeItem('accessToken');
@@ -108,7 +87,6 @@ api.interceptors.response.use(
         window.location.href = '/login';
 
         return Promise.reject(refreshErr);
-
       } finally {
         isRefreshing = false;
       }

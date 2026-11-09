@@ -149,7 +149,7 @@ router.post('/forgot-password', async (req, res, next) => {
     const tmpl     = templates.reset({ name: user.name, resetUrl });
 
     try {
-      await sendEmail({ to: user.email, ...tmpl });
+    console.log('EMAIL WOULD SEND TO:', member.email);
     } catch (emailErr) {
       // Don't fail if email service is down – log it
       console.error('[EMAIL ERROR]', emailErr.message);

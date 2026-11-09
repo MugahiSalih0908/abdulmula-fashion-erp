@@ -1,0 +1,77 @@
+warning: in the working copy of 'frontend/public/manifest.json', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/frontend/public/manifest.json b/frontend/public/manifest.json[m
+[1mindex f731b96..63b3aa0 100644[m
+[1m--- a/frontend/public/manifest.json[m
+[1m+++ b/frontend/public/manifest.json[m
+[36m@@ -1,7 +1,7 @@[m
+ {[m
+   "name": "Abdulmula Fashion ERP",[m
+   "short_name": "AF ERP",[m
+[31m-  "description": "Premium POS & ERP for Abdulmula Fashion, Juba, South Sudan",[m
+[32m+[m[32m  "description": "ERP & POS System for Abdulmula Fashion",[m
+ [m
+   "start_url": "/",[m
+   "scope": "/",[m
+[36m@@ -9,33 +9,39 @@[m
+   "display": "standalone",[m
+   "orientation": "portrait-primary",[m
+ [m
+[31m-  "theme_color": "#111111",[m
+[31m-  "background_color": "#111111",[m
+[32m+[m[32m  "theme_color": "#EAB308",[m
+[32m+[m[32m  "background_color": "#FFFFFF",[m
+ [m
+[31m-  "categories": ["business", "finance", "productivity"],[m
+   "lang": "en",[m
+[32m+[m[32m  "dir": "ltr",[m
+[32m+[m
+[32m+[m[32m  "categories": [[m
+[32m+[m[32m    "business",[m
+[32m+[m[32m    "finance",[m
+[32m+[m[32m    "productivity"[m
+[32m+[m[32m  ],[m
+ [m
+   "icons": [[m
+     {[m
+       "src": "/icons/icon-192.png",[m
+       "sizes": "192x192",[m
+       "type": "image/png",[m
+[31m-      "purpose": "any maskable"[m
+[32m+[m[32m      "purpose": "maskable any"[m
+     },[m
+     {[m
+       "src": "/icons/icon-512.png",[m
+       "sizes": "512x512",[m
+       "type": "image/png",[m
+[31m-      "purpose": "any maskable"[m
+[32m+[m[32m      "purpose": "maskable any"[m
+     }[m
+   ],[m
+ [m
+   "shortcuts": [[m
+     {[m
+[31m-      "name": "Open POS",[m
+[31m-      "short_name": "POS",[m
+[31m-      "description": "Open the Point of Sale",[m
+[31m-      "url": "/pos",[m
+[32m+[m[32m      "name": "Dashboard",[m
+[32m+[m[32m      "short_name": "Dashboard",[m
+[32m+[m[32m      "description": "Open Dashboard",[m
+[32m+[m[32m      "url": "/dashboard",[m
+       "icons": [[m
+         {[m
+           "src": "/icons/icon-192.png",[m
+[36m@@ -44,9 +50,10 @@[m
+       ][m
+     },[m
+     {[m
+[31m-      "name": "Dashboard",[m
+[31m-      "short_name": "Dashboard",[m
+[31m-      "url": "/dashboard",[m
+[32m+[m[32m      "name": "Point of Sale",[m
+[32m+[m[32m      "short_name": "POS",[m
+[32m+[m[32m      "description": "Open POS",[m
+[32m+[m[32m      "url": "/pos",[m
+       "icons": [[m
+         {[m
+           "src": "/icons/icon-192.png",[m
