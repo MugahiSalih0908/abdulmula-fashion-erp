@@ -15,22 +15,76 @@ const todayStr = () => new Date().toISOString().split('T')[0];
 // All cashbook routes: admin + manager only
 router.use(protect, authorize('admin','manager'));
 
+const getCashbookSnapshot = async (date, entry) => {
+  const start = new Date(date); start.setHours(0,0,0,0);
+  const end   = new Date(date); end.setHours(23,59,59,999);
+  const [salesAgg, expAgg] = await Promise.all([
+    Invoice.aggregate([{ $match:{ date:{ $gte:start, $lte:end }, paymentMethod:'Cash' } }, { $group:{ _id:null, total:{ $sum:'$grandTotal' } } }]),
+    Expense.aggregate([{ $match:{ date:{ $gte:start, $lte:end } } }, { $group:{ _id:null, total:{ $sum:'$amount' } } }])
+  ]);
+  return {
+    ...entry.toObject(),
+    livesCashSales: salesAgg[0]?.total||0,
+    liveExpenses: expAgg[0]?.total||0
+  };
+};
+
 /* ── GET today ───────────────────────────────────────────────── */
 router.get('/today', async (req, res, next) => {
   try {
-    const date  = todayStr();
-    let entry   = await CashBook.findOne({ date });
+    const date = todayStr();
+    const entry = await CashBook.findOne({ date });
+    if (!entry) {
+      return res.json({
+        success: true,
+        data: null,
+        code: 'CASHBOOK_NOT_OPEN',
+        message: 'No cashbook entry is open for today.'
+      });
+    }
+    res.json({ success:true, data: await getCashbookSnapshot(date, entry) });
+  } catch (err) { next(err); }
+});
+
+/* ── POST open today ─────────────────────────────────────────── */
+router.post('/open', async (req, res, next) => {
+  try {
+    const date = todayStr();
+    let entry = await CashBook.findOne({ date });
+    let created = false;
+
     if (!entry) {
       const prev = await CashBook.findOne({ date: { $lt: date } }).sort({ date: -1 });
-      entry = await CashBook.create({ date, openingCash: prev?.closingCash||0, openedBy: req.user._id });
+      try {
+        entry = await CashBook.create({
+          date,
+          openingCash: prev?.closingCash || 0,
+          openedBy: req.user._id
+        });
+        created = true;
+      } catch (err) {
+        if (err.code !== 11000) throw err;
+        entry = await CashBook.findOne({ date });
+        if (!entry) throw err;
+      }
     }
-    const start = new Date(date); start.setHours(0,0,0,0);
-    const end   = new Date(date); end.setHours(23,59,59,999);
-    const [salesAgg, expAgg] = await Promise.all([
-      Invoice.aggregate([{ $match:{ date:{ $gte:start, $lte:end }, paymentMethod:'Cash' } }, { $group:{ _id:null, total:{ $sum:'$grandTotal' } } }]),
-      Expense.aggregate([{ $match:{ date:{ $gte:start, $lte:end } } }, { $group:{ _id:null, total:{ $sum:'$amount' } } }])
-    ]);
-    res.json({ success:true, data:{ ...entry.toObject(), livesCashSales: salesAgg[0]?.total||0, liveExpenses: expAgg[0]?.total||0 } });
+
+    if (created) {
+      await log({
+        user: req.user,
+        action: 'CASHBOOK_CREATE',
+        entity: 'CashBook',
+        entityId: entry._id,
+        details: { date, openingCash: entry.openingCash },
+        req
+      });
+    }
+
+    res.status(created ? 201 : 200).json({
+      success: true,
+      data: await getCashbookSnapshot(date, entry),
+      message: created ? "Today's cashbook opened." : "Today's cashbook is already open."
+    });
   } catch (err) { next(err); }
 });
 
