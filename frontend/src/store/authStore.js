@@ -1,6 +1,7 @@
 // src/store/authStore.js
 
 import { create } from 'zustand';
+import api from '../services/api';
 const storedAccessToken = localStorage.getItem('accessToken');
 const storedRefreshToken = localStorage.getItem('refreshToken');
 
@@ -55,28 +56,21 @@ fetchMe: async () => {
 
   try {
 
-    const response = await fetch(
-      'https://abdulmula-fashion-erp.onrender.com/api',
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    if (!response.ok) {
-      get().logout();
-      return;
-    }
-
-    const data = await response.json();
+    const { data } = await api.get('/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
     set({
       user: data.data,
     });
 
   } catch (error) {
-    console.error('Fetch me failed:', error);
+    if (error.response?.status === 401) {
+      get().logout();
+      return;
+    }
+
+    console.error('Fetch me failed:', error.message);
   }
 },
 
@@ -90,29 +84,7 @@ fetchMe: async () => {
 
     try {
 
-      const response = await fetch('https://abdulmula-fashion-erp.onrender.com/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-
-        set({ isLoading: false });
-
-        return {
-          success: false,
-          message: data.message || 'Login failed',
-          code: data.code || null,
-        };
-      }
+      const { data } = await api.post('/auth/login', { email, password });
 
       const { user, accessToken, refreshToken } = data.data;
 
@@ -136,7 +108,14 @@ fetchMe: async () => {
 
       return {
         success: false,
-        message: 'Server connection failed',
+        message:
+          error.response?.data?.message ||
+          (error.code === 'ECONNABORTED'
+            ? 'The server took too long to respond. Please try again.'
+            : error.code === 'ERR_NETWORK'
+              ? 'Unable to reach the server. Check your connection and try again.'
+              : 'Unable to sign in. Please try again.'),
+        code: error.response?.data?.code || null,
       };
     }
   },

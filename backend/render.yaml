@@ -21,3 +21,5 @@ services:
         value: 7d
       - key: CLIENT_URL
         sync: false
+      - key: CLIENT_PREVIEW_URL
+        sync: false

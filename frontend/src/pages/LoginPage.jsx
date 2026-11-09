@@ -93,7 +93,7 @@ export default function LoginPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-sm font-semibold text-gray-700">Password</label>
+                <label htmlFor="login-password" className="text-sm font-semibold text-gray-700">Password</label>
                 <Link to="/forgot-password"
                       className="text-xs font-semibold text-green-600 hover:text-green-700">
                   Forgot password?
@@ -101,6 +101,7 @@ export default function LoginPage() {
               </div>
               <div className="relative">
                 <input
+                  id="login-password"
                   type={showPwd ? 'text' : 'password'}
                   {...register('password', { required: 'Password is required' })}
                   className="input"
@@ -108,8 +109,10 @@ export default function LoginPage() {
                   autoComplete="current-password"
                 />
                 <button type="button" onClick={() => setShowPwd(!showPwd)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
-                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                        aria-label={showPwd ? 'Hide password' : 'Show password'}
+                        aria-pressed={showPwd}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 min-w-10 min-h-10 flex items-center justify-center text-gray-500 hover:text-gray-900 transition-colors rounded-lg">
+                  {showPwd ? <EyeOff size={16} strokeWidth={1.75} aria-hidden="true" /> : <Eye size={16} strokeWidth={1.75} aria-hidden="true" />}
                 </button>
               </div>
               {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}

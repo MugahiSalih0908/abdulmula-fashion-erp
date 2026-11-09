@@ -18,29 +18,34 @@ export default function StatCard({
   change,
   positive,
   unit = '',
+  loading = false,
   className = '',
 }) {
   return (
-    <Card className={`p-4 sm:p-6 ${className}`}>
+    <Card className={`stat-card p-4 sm:p-5 ${className}`}>
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
           <p className="text-xs sm:text-sm font-medium text-gray-500 uppercase tracking-wide">
             {label}
           </p>
-          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
-            {value}
-            {unit && <span className="text-sm text-gray-500">{unit}</span>}
-          </h3>
+          {loading ? (
+            <div className="skeleton h-7 w-3/4 mt-2" aria-hidden="true" />
+          ) : (
+            <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mt-1 break-words">
+              {value}
+              {unit && <span className="text-sm text-gray-500">{unit}</span>}
+            </h3>
+          )}
         </div>
 
         {icon && (
-          <div className="flex-shrink-0 p-2 sm:p-3 bg-green-50 rounded-lg text-green-600">
+          <div className="stat-card-icon flex-shrink-0 p-2.5 rounded-lg text-gray-900" aria-hidden="true">
             {icon}
           </div>
         )}
       </div>
 
-      {change !== undefined && (
+      {!loading && change !== undefined && (
         <div className="flex items-center gap-1 text-xs">
           <span className={`font-semibold ${positive ? 'text-green-600' : 'text-red-600'}`}>
             {positive ? '+' : '-'}{Math.abs(change)}%
