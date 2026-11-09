@@ -11,7 +11,7 @@ import CartDrawer from '../components/pos/CartDrawer';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
-import { Search, ScanLine, ShoppingCart, X, Wifi, WifiOff } from 'lucide-react';
+import { Search, ScanLine, ShoppingCart, Package, X, Wifi, WifiOff } from 'lucide-react';
 
 const CATEGORIES = ['All', 'Men', 'Women', 'Girls', 'Boys', 'Kids', 'Sudanese Silk Toub Wraps', 'Accessories', 'Other'];
 
@@ -214,7 +214,7 @@ export default function POSPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
-            <p className="text-4xl mb-3">📦</p>
+            <Package size={32} strokeWidth={1.75} className="mx-auto mb-3 text-gray-400" aria-hidden="true" />
             <p className="font-semibold text-gray-500">No products found</p>
             {search && <p className="text-sm mt-2 text-gray-400">Try a different search term</p>}
           </div>

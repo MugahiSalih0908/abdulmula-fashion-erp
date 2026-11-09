@@ -19,7 +19,7 @@ export default function Badge({ variant = 'primary', icon, children, className =
 
   return (
     <span className={`${baseClasses} ${variantClasses[variant]} ${className}`}>
-      {icon && <span className="flex-shrink-0">{icon}</span>}
+      {icon && <span className="badge-icon" aria-hidden="true">{icon}</span>}
       {children}
     </span>
   );

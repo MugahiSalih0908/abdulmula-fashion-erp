@@ -456,16 +456,14 @@ h5 { font-size: 1rem; line-height: 1.5; }
   transition: all var(--transition-normal);
 }
 
-.hover-lift {
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+.card-hover {
+  transition: transform 0.2s ease;
 }
 
-.hover-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
+.card-hover:hover {
+  transform: translateY(-4px);
 }
-
-.hover-lift:active {
+.card-hover:active {
   transform: translateY(0);
 }
 

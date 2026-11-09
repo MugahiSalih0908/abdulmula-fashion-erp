@@ -15,6 +15,8 @@ export default function Button({
   size = 'md',
   loading = false,
   disabled = false,
+  icon,
+  iconPosition = 'start',
   className = '',
   children,
   ...props
@@ -26,17 +28,26 @@ export default function Button({
     danger: 'btn btn-danger',
     success: 'btn btn-success',
   };
+  const Icon = typeof icon === 'function' ? icon : null;
+  const iconElement = React.isValidElement(icon)
+    ? icon
+    : Icon
+      ? <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
+      : null;
 
   return (
     <button
       disabled={disabled || loading}
-      className={`${variantClasses[variant]} btn-${size} transition-smooth hover:scale-105 active:scale-95 ${className}`}
+      aria-busy={loading || undefined}
+      className={`${variantClasses[variant] || variantClasses.primary} btn-${size} ${className}`}
       {...props}
     >
       {loading && (
-        <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        <span aria-hidden="true" className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
       )}
+      {!loading && iconPosition === 'start' && iconElement}
       {children}
+      {!loading && iconPosition === 'end' && iconElement}
     </button>
   );
 }

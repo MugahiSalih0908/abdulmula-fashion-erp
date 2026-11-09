@@ -14,7 +14,7 @@ export default function Skeleton({ variant = 'text', className = '' }) {
     line: 'h-3 w-3/4 rounded',
   };
 
-  return <div className={`skeleton ${variants[variant]} ${className}`} />;
+  return <div aria-hidden="true" className={`skeleton ${variants[variant] || variants.text} ${className}`} />;
 }
 
 /**

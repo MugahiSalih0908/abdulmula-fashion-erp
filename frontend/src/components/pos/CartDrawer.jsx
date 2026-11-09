@@ -7,7 +7,7 @@ import toast              from 'react-hot-toast';
 import useCartStore       from '../../store/cartStore';
 import {
   X, Plus, Minus, Trash2, User, ChevronRight,
-  Banknote, CreditCard, Smartphone, Tag, Percent
+  Banknote, CreditCard, Smartphone, Tag, Percent, ShoppingCart
 } from 'lucide-react';
 
 const PAYMENT_METHODS = [
@@ -105,7 +105,7 @@ export default function CartDrawer({ open, onClose, customers, onCheckout, isChe
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
                 {items.length === 0 ? (
                   <div className="text-center py-20 text-gray-400">
-                    <p className="text-4xl mb-3">🛒</p>
+                    <ShoppingCart size={32} strokeWidth={1.75} className="mx-auto mb-3 text-gray-400" aria-hidden="true" />
                     <p className="font-semibold">Cart is empty</p>
                     <p className="text-sm mt-1">Tap products to add them</p>
                   </div>

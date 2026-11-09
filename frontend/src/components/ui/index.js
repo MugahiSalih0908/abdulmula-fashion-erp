@@ -8,3 +8,4 @@ export { default as Skeleton, SkeletonCard, SkeletonGrid } from './Skeleton';
 export { default as EmptyState } from './EmptyState';
 export { default as FormField, FormFieldGroup } from './FormField';
 export { default as StatCard } from './StatCard';
+export { default as KpiCard } from './KpiCard';

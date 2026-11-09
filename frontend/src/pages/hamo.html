@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مكتبة آفاق الإلكترونية - 100 كتاب</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        :root {
+            --primary-color: #1c3d5a;
+            --secondary-color: #d97706;
+            --bg-color: #f3f4f6;
+            --text-color: #333;
+            --card-bg: #ffffff;
+            --header-bg: #1c3d5a;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --shadow: 0 5px 15px rgba(0,0,0,0.08);
+            --border-color: #e5e7eb;
+        }
+        [data-theme="dark"] {
+            --primary-color: #60a5fa;
+            --secondary-color: #f59e0b;
+            --bg-color: #0f172a;
+            --text-color: #e2e8f0;
+            --card-bg: #1e293b;
+            --header-bg: #0f172a;
+            --border-color: #334155;
+            --shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Cairo', sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); transition: background 0.3s, color 0.3s; }
+
+        header {
+            background-color: var(--header-bg);
+            color: white; padding: 15px 5%;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: sticky; top: 0; z-index: 100;
+            flex-wrap: wrap; gap: 15px;
+            transition: background 0.3s;
+        }
+        .logo { font-size: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+        nav ul { list-style: none; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+        nav a { color: white; text-decoration: none; font-weight: 600; transition: color 0.3s; }
+        nav a:hover { color: var(--secondary-color); }
+
+        .header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .icon-btn {
+            background: rgba(255,255,255,0.15); border: none; color: white;
+            width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+            font-size: 1.1rem; position: relative; transition: all 0.3s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .icon-btn:hover { background: rgba(255,255,255,0.3); transform: scale(1.1); }
+        .icon-btn .badge {
+            position: absolute; top: -5px; left: -5px;
+            background: var(--danger-color); color: white; font-size: 0.7rem;
+            width: 20px; height: 20px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700;
+        }
+
+        .user-area { display: flex; align-items: center; gap: 10px; }
+        .user-info {
+            display: none; align-items: center; gap: 10px;
+            background: rgba(255,255,255,0.15); padding: 5px 15px; border-radius: 30px;
+        }
+        .user-info img { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--secondary-color); }
+        .user-info span { font-size: 0.85rem; font-weight: 600; }
+        .logout-btn {
+            background: var(--danger-color); color: white; border: none;
+            padding: 5px 12px; border-radius: 20px; cursor: pointer;
+            font-size: 0.75rem; font-weight: 600;
+        }
+
+        .hero {
+            background: linear-gradient(rgba(28, 61, 90, 0.88), rgba(28, 61, 90, 0.88)),
+                        url('https://images.unsplash.com/photo-1507842217343-583bb7270b66?ixlib=rb-4.0.3&auto=format&fit=crop&w=1600&q=80') center/cover;
+            color: white; text-align: center; padding: 80px 20px;
+        }
+        .hero h1 { font-size: 2.3rem; margin-bottom: 12px; }
+        .hero p { font-size: 1.05rem; opacity: 0.9; }
+
+        .search-section {
+            max-width: 650px; margin: -25px auto 35px; padding: 0 20px;
+            position: relative; z-index: 10;
+        }
+        .search-box {
+            display: flex; align-items: center; background: var(--card-bg);
+            border-radius: 50px; box-shadow: var(--shadow);
+            padding: 4px 4px 4px 20px; border: 2px solid var(--border-color);
+            transition: all 0.3s;
+        }
+        .search-box:focus-within { border-color: var(--secondary-color); }
+        .search-box input {
+            flex: 1; border: none; background: transparent; padding: 12px;
+            font-size: 1rem; color: var(--text-color); outline: none;
+        }
+        .search-box button {
+            background: var(--secondary-color); color: white; border: none;
+            width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
+            font-size: 1.1rem; transition: background 0.3s;
+        }
+        .search-box button:hover { background: #b46204; }
+        .search-results-count {
+            text-align: center; margin-top: 10px;
+            color: var(--text-color); font-size: 0.9rem; opacity: 0.8;
+        }
+
+        .categories {
+            display: flex; justify-content: center; flex-wrap: wrap;
+            gap: 10px; margin: 25px 15px;
+        }
+        .category-btn {
+            background-color: var(--card-bg); border: 2px solid var(--primary-color);
+            color: var(--primary-color); padding: 7px 18px; border-radius: 30px;
+            cursor: pointer; font-size: 0.9rem; font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .category-btn:hover, .category-btn.active {
+            background-color: var(--primary-color); color: white;
+        }
+
+        .books-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 25px; padding: 0 4%; margin-bottom: 50px;
+        }
+        .book-card {
+            background: var(--card-bg); border-radius: 12px; overflow: hidden;
+            box-shadow: var(--shadow); transition: transform 0.3s ease, box-shadow 0.3s ease;
+            text-align: center; padding-bottom: 18px; position: relative;
+        }
+        .book-card:hover { transform: translateY(-8px); box-shadow: 0 12px 25px rgba(0,0,0,0.18); }
+        .book-card.hidden { display: none !important; }
+
+        .book-badge {
+            position: absolute; top: 12px; left: 12px;
+            padding: 4px 10px; border-radius: 20px;
+            font-size: 0.72rem; font-weight: 700; z-index: 10;
+        }
+        .badge-free { background: var(--success-color); color: white; }
+        .badge-paid { background: var(--secondary-color); color: white; }
+
+        .fav-btn {
+            position: absolute; top: 12px; right: 12px;
+            background: rgba(255,255,255,0.92); border: none;
+            width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+            font-size: 0.95rem; color: #9ca3af; transition: all 0.3s;
+            z-index: 10; display: flex; align-items: center; justify-content: center;
+        }
+        .fav-btn:hover { transform: scale(1.15); }
+        .fav-btn.active { color: var(--danger-color); background: white; }
+        .fav-btn.active i { font-weight: 900; }
+
+        .book-cover { width: 100%; height: 320px; object-fit: cover; border-bottom: 3px solid var(--secondary-color); }
+        .book-title { font-size: 1.1rem; margin: 12px 10px 4px; color: var(--primary-color); font-weight: 700; }
+        .book-author { color: #888; font-size: 0.85rem; margin-bottom: 8px; }
+        .book-price { font-size: 1.2rem; font-weight: 700; color: var(--secondary-color); margin-bottom: 12px; }
+        .book-price .old-price { text-decoration: line-through; color: #999; font-size: 0.85rem; margin-right: 6px; }
+
+        .btn-group { display: flex; flex-direction: column; gap: 7px; padding: 0 18px; }
+        .download-btn, .buy-btn, .cart-add-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            gap: 7px; text-decoration: none; padding: 9px 18px;
+            border-radius: 8px; font-weight: 600; transition: all 0.3s;
+            border: none; cursor: pointer; font-size: 0.95rem;
+        }
+        .download-btn { background-color: var(--success-color); color: white; }
+        .download-btn:hover { background-color: #059669; }
+        .buy-btn { background-color: var(--secondary-color); color: white; }
+        .buy-btn:hover { background-color: #b46204; }
+        .cart-add-btn { background-color: #3b82f6; color: white; }
+        .cart-add-btn:hover { background-color: #2563eb; }
+
+        .payment-modal-overlay, .cart-modal-overlay, .fav-modal-overlay {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; background: rgba(0,0,0,0.6);
+            z-index: 1000; justify-content: center; align-items: center;
+            padding: 20px;
+        }
+        .payment-modal, .cart-modal, .fav-modal {
+            background: var(--card-bg); border-radius: 16px; max-width: 520px;
+            width: 100%; max-height: 85vh; overflow-y: auto;
+            padding: 25px; position: relative; animation: slideUp 0.3s ease;
+            color: var(--text-color);
+        }
+        @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .payment-modal h2, .cart-modal h2, .fav-modal h2 {
+            color: var(--primary-color); margin-bottom: 18px; text-align: center; font-size: 1.3rem;
+        }
+        .close-modal {
+            position: absolute; top: 12px; left: 12px; background: none; border: none;
+            font-size: 1.6rem; cursor: pointer; color: var(--text-color); opacity: 0.6;
+        }
+        .close-modal:hover { opacity: 1; }
+
+        .cart-item, .fav-item {
+            display: flex; gap: 12px; padding: 12px;
+            background: var(--bg-color); border-radius: 10px;
+            margin-bottom: 10px; align-items: center;
+        }
+        .cart-item img { width: 55px; height: 75px; object-fit: cover; border-radius: 6px; }
+        .fav-item img { width: 45px; height: 65px; object-fit: cover; border-radius: 6px; }
+        .cart-item-info, .fav-item-info { flex: 1; text-align: right; }
+        .cart-item-info h4, .fav-item-info h4 { color: var(--primary-color); margin-bottom: 3px; font-size: 0.95rem; }
+        .cart-item-info p, .fav-item-info p { color: #888; font-size: 0.8rem; }
+        .cart-item-price { color: var(--secondary-color); font-weight: 700; font-size: 1rem; }
+        .cart-item-remove {
+            background: var(--danger-color); color: white; border: none;
+            width: 30px; height: 30px; border-radius: 50%; cursor: pointer;
+        }
+        .cart-total {
+            border-top: 2px solid var(--border-color); padding-top: 12px; margin-top: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 1.1rem; font-weight: 700;
+        }
+        .cart-total span:last-child { color: var(--secondary-color); }
+        .cart-empty, .fav-empty { text-align: center; padding: 35px 15px; color: #9ca3af; }
+        .cart-empty i, .fav-empty i { font-size: 2.5rem; margin-bottom: 12px; display: block; }
+        .checkout-btn {
+            width: 100%; padding: 12px; background: var(--secondary-color); color: white;
+            border: none; border-radius: 10px; font-size: 1.05rem; font-weight: 700;
+            cursor: pointer; margin-top: 12px; transition: background 0.3s;
+        }
+        .checkout-btn:hover { background: #b46204; }
+        .checkout-btn:disabled { background: #9ca3af; cursor: not-allowed; }
+
+        .payment-book-info {
+            display: flex; gap: 12px; margin-bottom: 18px;
+            padding: 12px; background: var(--bg-color); border-radius: 10px;
+        }
+        .payment-book-info img { width: 70px; height: 90px; object-fit: cover; border-radius: 8px; }
+        .payment-book-info div { text-align: right; }
+        .payment-book-info h4 { color: var(--primary-color); margin-bottom: 4px; font-size: 1rem; }
+        .payment-book-info p { color: #888; font-size: 0.85rem; }
+        .payment-methods { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+        .payment-method {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px; border: 2px solid var(--border-color);
+            border-radius: 10px; cursor: pointer; transition: all 0.3s;
+        }
+        .payment-method:hover, .payment-method.selected { border-color: var(--secondary-color); background: rgba(217,119,6,0.08); }
+        .payment-method i { font-size: 1.4rem; color: var(--secondary-color); }
+        .payment-method span { font-weight: 600; font-size: 0.95rem; }
+        .card-form { display: none; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+        .card-form input {
+            padding: 11px; border: 2px solid var(--border-color); border-radius: 8px;
+            font-size: 0.95rem; background: var(--card-bg); color: var(--text-color);
+        }
+        .card-form input:focus { outline: none; border-color: var(--secondary-color); }
+        .card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .confirm-payment-btn {
+            width: 100%; padding: 13px; background: var(--secondary-color); color: white;
+            border: none; border-radius: 10px; font-size: 1.05rem; font-weight: 700; cursor: pointer;
+        }
+        .confirm-payment-btn:hover { background: #b46204; }
+
+        .archive-section {
+            background-color: var(--bg-color); padding: 45px 5%; text-align: center;
+            border-top: 1px solid var(--border-color);
+        }
+        .archive-title { font-size: 1.8rem; color: var(--primary-color); margin-bottom: 25px; }
+        .archive-grid { display: flex; justify-content: center; flex-wrap: wrap; gap: 18px; }
+        .archive-card {
+            background: var(--card-bg); padding: 18px; border-radius: 10px;
+            min-width: 180px; box-shadow: var(--shadow); text-decoration: none;
+            color: var(--text-color); font-weight: 600; transition: 0.3s;
+            border: 1px solid var(--border-color);
+        }
+        .archive-card i { font-size: 1.8rem; color: var(--secondary-color); display: block; margin-bottom: 8px; }
+        .archive-card:hover { background: var(--primary-color); color: white; transform: translateY(-4px); }
+
+        footer {
+            background-color: var(--header-bg); color: white;
+            text-align: center; padding: 22px; transition: background 0.3s;
+        }
+        footer .social-links { margin-top: 12px; display: flex; justify-content: center; gap: 18px; }
+        footer .social-links a { color: white; font-size: 1.2rem; transition: color 0.3s; }
+        footer .social-links a:hover { color: var(--secondary-color); }
+
+        .toast {
+            position: fixed; bottom: 25px; left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--primary-color); color: white;
+            padding: 13px 28px; border-radius: 10px; font-weight: 600;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.2); z-index: 2000;
+            opacity: 0; transition: all 0.4s ease; text-align: center;
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        .toast.success { background: var(--success-color); }
+        .toast.error { background: var(--danger-color); }
+
+        .stats-bar {
+            display: flex; justify-content: center; gap: 40px;
+            padding: 20px; background: var(--card-bg);
+            margin: 0 5% 30px; border-radius: 12px;
+            box-shadow: var(--shadow); flex-wrap: wrap;
+        }
+        .stat-item { text-align: center; }
+        .stat-item .num { font-size: 1.8rem; font-weight: 700; color: var(--secondary-color); }
+        .stat-item .label { font-size: 0.85rem; color: #888; }
+
+        @media (max-width: 768px) {
+            header { flex-direction: column; text-align: center; }
+            nav ul { flex-wrap: wrap; justify-content: center; }
+            .hero h1 { font-size: 1.7rem; }
+            .books-container { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+            .book-cover { height: 280px; }
+            .stats-bar { gap: 20px; }
+        }
+        @media (max-width: 480px) {
+            .books-container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo"><i class="fa-solid fa-book-open-reader"></i> مكتبة آفاق</div>
+        <nav>
+            <ul>
+                <li><a href="#">الرئيسية</a></li>
+                <li><a href="#books">الكتب</a></li>
+                <li><a href="#archive">الأرشيف</a></li>
+                <li><a href="#">تواصل معنا</a></li>
+            </ul>
+        </nav>
+        <div class="header-actions">
+            <button class="icon-btn" onclick="toggleDarkMode()" title="تبديل الوضع الليلي">
+                <i class="fa-solid fa-moon" id="theme-icon"></i>
+            </button>
+            <button class="icon-btn" onclick="openFavModal()" title="المفضلة">
+                <i class="fa-solid fa-heart"></i><span class="badge" id="fav-count">0</span>
+            </button>
+            <button class="icon-btn" onclick="openCartModal()" title="سلة المشتريات">
+                <i class="fa-solid fa-cart-shopping"></i><span class="badge" id="cart-count">0</span>
+            </button>
+            <div class="user-area">
+                <div id="g_id_onload" data-client_id="YOUR_GOOGLE_CLIENT_ID" data-callback="handleCredentialResponse" data-auto_prompt="false"></div>
+                <div class="g_id_signin" data-type="standard" data-size="medium" data-theme="filled_blue" data-text="sign_in_with" data-shape="pill" data-logo_alignment="left" id="google-signin-btn"></div>
+                <div class="user-info" id="user-info">
+                    <img src="" alt="" id="user-pic"><span id="user-name"></span>
+                    <button class="logout-btn" onclick="signOut()">خروج</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section class="hero">
+        <h1>مرحباً بك في مكتبة آفاق الإلكترونية</h1>
+        <p>أكثر من 100 كتاب منوع بانتظارك — تصفح، اقرأ، وحمّل ما تشاء بكل سهولة.</p>
+    </section>
+
+    <div class="stats-bar">
+        <div class="stat-item"><div class="num">100+</div><div class="label">كتاب متاح</div></div>
+        <div class="stat-item"><div class="num">11</div><div class="label">قسم متنوع</div></div>
+        <div class="stat-item"><div class="num">مجاني</div><div class="label">تحميل فوري</div></div>
+        <div class="stat-item"><div class="num">آمن</div><div class="label">دفع إلكتروني</div></div>
+    </div>
+
+    <div class="search-section">
+        <div class="search-box">
+            <input type="text" id="search-input" placeholder="ابحث عن كتاب، مؤلف، أو قسم..." oninput="searchBooks()">
+            <button><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+        <div class="search-results-count" id="search-count"></div>
+    </div>
+
+    <section class="categories" id="books">
+        <button class="category-btn active" data-filter="all">الكل</button>
+        <button class="category-btn" data-filter="tech">تكنولوجيا</button>
+        <button class="category-btn" data-filter="novel">روايات</button>
+        <button class="category-btn" data-filter="history">تاريخ</button>
+        <button class="category-btn" data-filter="science">علوم</button>
+        <button class="category-btn" data-filter="self">تنمية ذاتية</button>
+        <button class="category-btn" data-filter="religion">دين</button>
+        <button class="category-btn" data-filter="cooking">طبخ</button>
+        <button class="category-btn" data-filter="art">فن</button>
+        <button class="category-btn" data-filter="sport">رياضة</button>
+        <button class="category-btn" data-filter="kids">أطفال</button>
+        <button class="category-btn" data-filter="paid">المدفوعة</button>
+    </section>
+
+    <section class="books-container" id="books-container">
+        
+        <div class="book-card" data-category="tech" data-title="أساسيات الذكاء الاصطناعي" data-author="د. أحمد خالد">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 1)" data-id="1">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1620712943543-bcc4688e7485?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="أساسيات الذكاء الاصطناعي" class="book-cover" loading="lazy">
+            <h3 class="book-title">أساسيات الذكاء الاصطناعي</h3>
+            <p class="book-author">د. أحمد خالد</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech" data-title="تعلم JavaScript" data-author="جون دوي">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 2)" data-id="2">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1579468118864-1b9ea3c0db4a?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="تعلم JavaScript" class="book-cover" loading="lazy">
+            <h3 class="book-title">تعلم JavaScript</h3>
+            <p class="book-author">جون دوي</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech paid" data-title="البرمجة المتقدمة" data-author="د. محمد العلي">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 3)" data-id="3">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="البرمجة المتقدمة" class="book-cover" loading="lazy">
+            <h3 class="book-title">البرمجة المتقدمة</h3>
+            <p class="book-author">د. محمد العلي</p>
+            <div class="book-price"><span class="old-price">$25.00</span>$14.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('البرمجة المتقدمة', 'د. محمد العلي', '14.99', 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(3, 'البرمجة المتقدمة', 'د. محمد العلي', 14.99, 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech" data-title="Python للمبتدئين" data-author="إريك ماتيوس">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 4)" data-id="4">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1526379095098-d400fd0bf935?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="Python للمبتدئين" class="book-cover" loading="lazy">
+            <h3 class="book-title">Python للمبتدئين</h3>
+            <p class="book-author">إريك ماتيوس</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech paid" data-title="تطوير تطبيقات الجوال" data-author="د. سامي الرفاعي">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 5)" data-id="5">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="تطوير تطبيقات الجوال" class="book-cover" loading="lazy">
+            <h3 class="book-title">تطوير تطبيقات الجوال</h3>
+            <p class="book-author">د. سامي الرفاعي</p>
+            <div class="book-price"><span class="old-price">$20.00</span>$12.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('تطوير تطبيقات الجوال', 'د. سامي الرفاعي', '12.99', 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(5, 'تطوير تطبيقات الجوال', 'د. سامي الرفاعي', 12.99, 'https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech" data-title="أمن المعلومات السيبراني" data-author="كيفن ميتنيك">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 6)" data-id="6">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1563013544-824ae1b704d3?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="أمن المعلومات السيبراني" class="book-cover" loading="lazy">
+            <h3 class="book-title">أمن المعلومات السيبراني</h3>
+            <p class="book-author">كيفن ميتنيك</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech paid" data-title="التعلم الآلي العميق" data-author="د. ياسر القحطاني">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 7)" data-id="7">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="التعلم الآلي العميق" class="book-cover" loading="lazy">
+            <h3 class="book-title">التعلم الآلي العميق</h3>
+            <p class="book-author">د. ياسر القحطاني</p>
+            <div class="book-price"><span class="old-price">$30.00</span>$18.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('التعلم الآلي العميق', 'د. ياسر القحطاني', '18.99', 'https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(7, 'التعلم الآلي العميق', 'د. ياسر القحطاني', 18.99, 'https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech" data-title="React.js من الصفر" data-author="دان أبراموف">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 8)" data-id="8">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1633356122544-f134324a6cee?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="React.js من الصفر" class="book-cover" loading="lazy">
+            <h3 class="book-title">React.js من الصفر</h3>
+            <p class="book-author">دان أبراموف</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech" data-title="قواعد البيانات SQL" data-author="د. نورة السالم">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 9)" data-id="9">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1544383835-bda2bc66a55d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="قواعد البيانات SQL" class="book-cover" loading="lazy">
+            <h3 class="book-title">قواعد البيانات SQL</h3>
+            <p class="book-author">د. نورة السالم</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech paid" data-title="الحوسبة السحابية AWS" data-author="جيف بيزوس">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 10)" data-id="10">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="الحوسبة السحابية AWS" class="book-cover" loading="lazy">
+            <h3 class="book-title">الحوسبة السحابية AWS</h3>
+            <p class="book-author">جيف بيزوس</p>
+            <div class="book-price"><span class="old-price">$28.00</span>$16.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('الحوسبة السحابية AWS', 'جيف بيزوس', '16.99', 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(10, 'الحوسبة السحابية AWS', 'جيف بيزوس', 16.99, 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech" data-title="إنترنت الأشياء IoT" data-author="د. فهد المالكي">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 11)" data-id="11">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="إنترنت الأشياء IoT" class="book-cover" loading="lazy">
+            <h3 class="book-title">إنترنت الأشياء IoT</h3>
+            <p class="book-author">د. فهد المالكي</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech paid" data-title="البلوكتشين والعملات الرقمية" data-author="ساتوشي ناكاموتو">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 12)" data-id="12">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1621761191319-c6fb62004040?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="البلوكتشين والعملات الرقمية" class="book-cover" loading="lazy">
+            <h3 class="book-title">البلوكتشين والعملات الرقمية</h3>
+            <p class="book-author">ساتوشي ناكاموتو</p>
+            <div class="book-price"><span class="old-price">$22.00</span>$13.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('البلوكتشين والعملات الرقمية', 'ساتوشي ناكاموتو', '13.99', 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(12, 'البلوكتشين والعملات الرقمية', 'ساتوشي ناكاموتو', 13.99, 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech" data-title="Docker للمطورين" data-author="سليمان بن داود">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 13)" data-id="13">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1605745341112-85968b19335b?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="Docker للمطورين" class="book-cover" loading="lazy">
+            <h3 class="book-title">Docker للمطورين</h3>
+            <p class="book-author">سليمان بن داود</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech paid" data-title="تصميم واجهات المستخدم UI/UX" data-author="د. ليلى العمر">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 14)" data-id="14">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1586717791821-3f44a5638d48?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="تصميم واجهات المستخدم UI/UX" class="book-cover" loading="lazy">
+            <h3 class="book-title">تصميم واجهات المستخدم UI/UX</h3>
+            <p class="book-author">د. ليلى العمر</p>
+            <div class="book-price"><span class="old-price">$19.00</span>$11.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('تصميم واجهات المستخدم UI/UX', 'د. ليلى العمر', '11.99', 'https://images.unsplash.com/photo-1586717791821-3f44a5638d48?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(14, 'تصميم واجهات المستخدم UI/UX', 'د. ليلى العمر', 11.99, 'https://images.unsplash.com/photo-1586717791821-3f44a5638d48?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="tech" data-title="Linux للمحترفين" data-author="لينوس تورفالدس">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 15)" data-id="15">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1629654297299-c8506221ca97?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="Linux للمحترفين" class="book-cover" loading="lazy">
+            <h3 class="book-title">Linux للمحترفين</h3>
+            <p class="book-author">لينوس تورفالدس</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel paid" data-title="مدينة لا تنام" data-author="سارة عبد الرحمن">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 16)" data-id="16">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1544947950-fa07a98d237f?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="مدينة لا تنام" class="book-cover" loading="lazy">
+            <h3 class="book-title">مدينة لا تنام</h3>
+            <p class="book-author">سارة عبد الرحمن</p>
+            <div class="book-price"><span class="old-price">$15.00</span>$9.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('مدينة لا تنام', 'سارة عبد الرحمن', '9.99', 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(16, 'مدينة لا تنام', 'سارة عبد الرحمن', 9.99, 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel paid" data-title="رحلة إلى المجهول" data-author="يوسف إدريس">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 17)" data-id="17">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1512820790803-83ca734da794?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="رحلة إلى المجهول" class="book-cover" loading="lazy">
+            <h3 class="book-title">رحلة إلى المجهول</h3>
+            <p class="book-author">يوسف إدريس</p>
+            <div class="book-price"><span class="old-price">$12.00</span>$7.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('رحلة إلى المجهول', 'يوسف إدريس', '7.99', 'https://images.unsplash.com/photo-1512820790803-83ca734da794?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(17, 'رحلة إلى المجهول', 'يوسف إدريس', 7.99, 'https://images.unsplash.com/photo-1512820790803-83ca734da794?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel" data-title="الخيميائي" data-author="باولو كويلو">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 18)" data-id="18">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1543002588-bfa74002ed7e?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="الخيميائي" class="book-cover" loading="lazy">
+            <h3 class="book-title">الخيميائي</h3>
+            <p class="book-author">باولو كويلو</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel paid" data-title="مائة عام من العزلة" data-author="غابرييل غارسيا ماركيز">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 19)" data-id="19">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1476275466078-4007374efbbe?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="مائة عام من العزلة" class="book-cover" loading="lazy">
+            <h3 class="book-title">مائة عام من العزلة</h3>
+            <p class="book-author">غابرييل غارسيا ماركيز</p>
+            <div class="book-price"><span class="old-price">$18.00</span>$10.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('مائة عام من العزلة', 'غابرييل غارسيا ماركيز', '10.99', 'https://images.unsplash.com/photo-1476275466078-4007374efbbe?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(19, 'مائة عام من العزلة', 'غابرييل غارسيا ماركيز', 10.99, 'https://images.unsplash.com/photo-1476275466078-4007374efbbe?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel" data-title="1984" data-author="جورج أورويل">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 20)" data-id="20">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1535905557558-afc4877a26fc?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="1984" class="book-cover" loading="lazy">
+            <h3 class="book-title">1984</h3>
+            <p class="book-author">جورج أورويل</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel paid" data-title="الجريمة والعقاب" data-author="فيودور دوستويفسكي">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 21)" data-id="21">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1509021436665-8f07dbf5bf1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="الجريمة والعقاب" class="book-cover" loading="lazy">
+            <h3 class="book-title">الجريمة والعقاب</h3>
+            <p class="book-author">فيودور دوستويفسكي</p>
+            <div class="book-price"><span class="old-price">$14.00</span>$8.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('الجريمة والعقاب', 'فيودور دوستويفسكي', '8.99', 'https://images.unsplash.com/photo-1509021436665-8f07dbf5bf1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(21, 'الجريمة والعقاب', 'فيودور دوستويفسكي', 8.99, 'https://images.unsplash.com/photo-1509021436665-8f07dbf5bf1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel" data-title="البؤساء" data-author="فيكتور هوغو">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 22)" data-id="22">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1495446815901-a7297e633e8d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="البؤساء" class="book-cover" loading="lazy">
+            <h3 class="book-title">البؤساء</h3>
+            <p class="book-author">فيكتور هوغو</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel" data-title="الأمير الصغير" data-author="أنطوان دو سانت إكزوبيري">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 23)" data-id="23">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1519682337058-a94d519337bc?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="الأمير الصغير" class="book-cover" loading="lazy">
+            <h3 class="book-title">الأمير الصغير</h3>
+            <p class="book-author">أنطوان دو سانت إكزوبيري</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel paid" data-title="ساق البامبو" data-author="سعود السنعوسي">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 24)" data-id="24">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1524578271613-d550eacf6090?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="ساق البامبو" class="book-cover" loading="lazy">
+            <h3 class="book-title">ساق البامبو</h3>
+            <p class="book-author">سعود السنعوسي</p>
+            <div class="book-price"><span class="old-price">$11.00</span>$6.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('ساق البامبو', 'سعود السنعوسي', '6.99', 'https://images.unsplash.com/photo-1524578271613-d550eacf6090?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+                <button class="cart-add-btn" onclick="addToCart(24, 'ساق البامبو', 'سعود السنعوسي', 6.99, 'https://images.unsplash.com/photo-1524578271613-d550eacf6090?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-cart-plus"></i> أضف للسلة
+                </button>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel" data-title="أرض البرتقال الحزين" data-author="غسان كنفاني">
+            <span class="book-badge badge-free">مجاني</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 25)" data-id="25">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="أرض البرتقال الحزين" class="book-cover" loading="lazy">
+            <h3 class="book-title">أرض البرتقال الحزين</h3>
+            <p class="book-author">غسان كنفاني</p>
+            
+            <div class="btn-group">
+                <a href="#" class="download-btn" onclick="showToast('جاري التحميل...', 'success'); return false;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> تحميل الكتاب
+                </a>
+            </div>
+        </div>
+    
+        <div class="book-card" data-category="novel paid" data-title="عزازيل" data-author="يوسف زيدان">
+            <span class="book-badge badge-paid">مدفوع</span>
+            <button class="fav-btn" onclick="toggleFavorite(this, 26)" data-id="26">
+                <i class="fa-regular fa-heart"></i>
+            </button>
+            <img src="https://images.unsplash.com/photo-1481627834876-b7833e8f5570?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" alt="عزازيل" class="book-cover" loading="lazy">
+            <h3 class="book-title">عزازيل</h3>
+            <p class="book-author">يوسف زيدان</p>
+            <div class="book-price"><span class="old-price">$16.00</span>$9.99</div>
+            <div class="btn-group">
+                <button class="buy-btn" onclick="openPaymentModal('عزازيل', 'يوسف زيدان', '9.99', 'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80')">
+                    <i class="fa-solid fa-credit-card"></i> شراء الآن
+                </button>
+            </div>
+        </div>
+    </div>        
+</div>          
