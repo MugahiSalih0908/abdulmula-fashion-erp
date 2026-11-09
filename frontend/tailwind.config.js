@@ -16,7 +16,26 @@ export default {
           800: '#166534',
           900: '#145231',
         },
-        brand: { DEFAULT: '#16a34a', light: '#22c55e' },
+        brand: { DEFAULT: '#151515', light: '#202020', gold: '#C5A46D' },
+        luxury: {
+          black: '#151515',
+          charcoal: '#202020',
+        },
+        champagne: {
+          DEFAULT: '#C5A46D',
+          light: '#E8D9BD',
+        },
+        warm: {
+          DEFAULT: '#FAF9F6',
+          white: '#FAF9F6',
+        },
+        ink: {
+          DEFAULT: '#252525',
+          secondary: '#727272',
+        },
+        border: {
+          DEFAULT: '#EAE7E0',
+        },
         accent: {
           success: '#10b981',
           warning: '#f59e0b',
@@ -24,16 +43,16 @@ export default {
           info: '#06b6d4',
         },
         charcoal: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          900: '#0f172a',
+          50: '#FAF9F6',
+          100: '#F3F1EC',
+          200: '#EAE7E0',
+          300: '#D8D4CC',
+          400: '#A9A49B',
+          500: '#777777',
+          600: '#5F5B55',
+          700: '#3F3C38',
+          800: '#252525',
+          900: '#151515',
         }
       },
       fontFamily: {
@@ -48,10 +67,10 @@ export default {
         '2xl': '24px',
       },
       boxShadow: {
-        'soft': '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-        'soft-md': '0 2px 4px 0 rgb(0 0 0 / 0.08)',
-        'glass': '0 4px 12px rgb(0 0 0 / 0.08)',
-        'glass-lg': '0 8px 24px rgb(0 0 0 / 0.12)',
+        'soft': '0 1px 2px rgb(37 37 37 / 0.04)',
+        'soft-md': '0 2px 8px rgb(37 37 37 / 0.06)',
+        'glass': '0 4px 16px rgb(37 37 37 / 0.08)',
+        'glass-lg': '0 16px 40px rgb(37 37 37 / 0.12)',
       },
       animation: {
         'slide-up': 'slideUp 300ms cubic-bezier(0.4, 0, 0.2, 1)',
