@@ -24,7 +24,10 @@ export const saveSaleOffline = async (salePayload) => {
  * Called automatically when online event fires
  */
 export const syncPendingSales = async () => {
-  const pending = await db.pendingSales.where({ isSynced: false }).toArray();
+  const pending = await db.pendingSales
+    .toCollection()
+    .filter(sale => sale.isSynced === false)
+    .toArray();
   if (!pending.length) return { synced: 0, failed: 0 };
 
   let synced = 0;
@@ -54,7 +57,10 @@ export const syncPendingSales = async () => {
  * getPendingCount – reactive count of unsynced sales
  */
 export const getPendingCount = () =>
-  db.pendingSales.where({ isSynced: false }).count();
+  db.pendingSales
+    .toCollection()
+    .filter(sale => sale.isSynced === false)
+    .count();
 
 /**
  * cacheProducts – store full product list in IndexedDB for offline POS
