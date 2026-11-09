@@ -2,10 +2,17 @@
 
 import axios from 'axios';
 
+const configuredApiUrl =
+  import.meta.env.VITE_API_URL?.trim() ||
+  'https://abdulmula-fashion-erp.onrender.com/api';
+
+export const API_BASE_URL = `${configuredApiUrl
+  .trim()
+  .replace(/\/+$/, '')
+  .replace(/(?:\/api)+$/i, '')}/api`;
+
 const api = axios.create({
-  baseURL:
-    import.meta.env.VITE_API_URL ||
-    'https://abdulmula-fashion-erp.onrender.com/api',
+  baseURL: API_BASE_URL,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json'
@@ -70,10 +77,7 @@ api.interceptors.response.use(
         }
 
         const { data } = await axios.post(
-          `${
-            import.meta.env.VITE_API_URL ||
-            'https://abdulmula-fashion-erp.onrender.com/api'
-          }/auth/refresh`,
+          `${API_BASE_URL}/auth/refresh`,
           { refreshToken }
         );
 

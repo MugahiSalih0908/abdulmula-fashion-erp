@@ -26,13 +26,55 @@ app.set('trust proxy', 1);
 // ── CORS ──────────────────────────────────────────────────────
 const allowed = [
   process.env.CLIENT_URL,
-  'https://abdulmula-fashion-erp.onrender.com/api',
-  'https://abdulmula-fashion-erp.onrender.com/api',
-].filter(Boolean);
+  process.env.CLIENT_PREVIEW_URL,
+]
+  .filter(Boolean)
+  .flatMap((origins) => origins.split(','))
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+  .map((origin) => {
+    let url;
+    try {
+      url = new URL(origin);
+    } catch {
+      throw new Error('CORS configuration must contain exact HTTP(S) origins.');
+    }
+
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.origin !== origin.replace(/\/+$/, '')
+    ) {
+      throw new Error('CORS configuration must contain exact HTTP(S) origins.');
+    }
+    return url.origin;
+  });
+
+const vercelPreviewHost =
+  /^abdulmula-fashion-[a-z0-9]+(?:-[a-z0-9]+)*-mugahid-s-projects\.vercel\.app$/i;
+
+const isApprovedVercelPreview = (origin) => {
+  let url;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+
+  return (
+    url.protocol === 'https:' &&
+    url.origin === origin &&
+    vercelPreviewHost.test(url.hostname)
+  );
+};
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowed.includes(origin)) return cb(null, true);
+    if (
+      !origin ||
+      allowed.includes(origin) ||
+      origin === 'http://localhost:5173' ||
+      isApprovedVercelPreview(origin)
+    ) return cb(null, true);
     cb(new Error(`CORS blocked: ${origin}`));
   },
   credentials:    true,

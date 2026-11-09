@@ -65,6 +65,21 @@ v6 introduces a full enterprise onboarding and security workflow:
 
 ## Setup
 
+### Vercel and Render deployment origins
+
+Set `VITE_API_URL` to `https://abdulmula-fashion-erp.onrender.com/api` in
+Vercel's Production and Preview environments. Keep those environment scopes
+separate so either deployment can be changed independently; the frontend
+normalizes the value to one `/api` path.
+
+On Render, keep `CLIENT_URL` set to the exact production Vercel origin and set
+`CLIENT_PREVIEW_URL` only when additional exact frontend origins are needed
+(comma-separated). The backend also allows HTTPS preview deployments matching
+the `abdulmula-fashion-<deployment-id>-mugahid-s-projects.vercel.app` project
+and team hostname, plus `http://localhost:5173`. It does not allow arbitrary
+`vercel.app` sites. Do not use `*`; set no URL paths or trailing slashes.
+The backend must be redeployed after changing its environment variables.
+
 ### Step 1 — Install
 
 ```bash
@@ -213,4 +228,3 @@ All emails are branded HTML with:
 - Disabled accounts (`isActive: false`) cannot log in and have all refresh tokens cleared
 - Rate limiting: 500 req/15min global, 20/15min on login route
 - Email enumeration prevented on forgot-password (always returns success)
-
