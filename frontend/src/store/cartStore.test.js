@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import useCartStore from './cartStore.js';
+import { calculateInvoiceTotals } from '../../../shared/invoiceCalculations.mjs';
 
 const resetCart = () => {
   useCartStore.getState().clearCart();
@@ -21,6 +22,30 @@ test('cart and checkout payload share post-discount tax totals', () => {
   assert.equal(cart.grandTotal(), 88);
 });
 
+test('rounded cart row amount matches the authoritative invoice calculator', () => {
+  useCartStore.getState().clearCart();
+  useCartStore.getState().addItem({
+    _id: 'precision-product',
+    name: 'Precision product',
+    price: 1.005,
+    quantity: 5
+  }, 3);
+  useCartStore.getState().setDiscount('precision-product', 0.105);
+
+  const item = useCartStore.getState().items[0];
+  const authoritativeLineTotal = calculateInvoiceTotals([{
+    unitPrice: item.unitPrice,
+    quantity: item.quantity,
+    discount: item.discount
+  }], 0).grandTotal;
+
+  assert.equal(authoritativeLineTotal, 2.92);
+  assert.equal(
+    authoritativeLineTotal,
+    useCartStore.getState().subtotal() - useCartStore.getState().discountTotal()
+  );
+});
+
 test('checkout payload uses the intended default paid amount per method', () => {
   resetCart();
   const cart = useCartStore.getState();
@@ -34,6 +59,23 @@ test('checkout payload uses the intended default paid amount per method', () => 
 
   cart.setPaymentMethod('Mobile Transfer');
   assert.equal(cart.toInvoicePayload().amountPaid, 88);
+});
+
+test('cart customer and note state flow into the existing invoice payload and clear normally', () => {
+  resetCart();
+  const customer = { _id: 'customer-1', name: 'Test customer' };
+  const cart = useCartStore.getState();
+
+  cart.setCustomer(customer);
+  cart.setNote('Alteration pickup');
+  assert.equal(useCartStore.getState().toInvoicePayload().customerId, 'customer-1');
+  assert.equal(useCartStore.getState().toInvoicePayload().note, 'Alteration pickup');
+
+  useCartStore.getState().clearCart();
+  const cleared = useCartStore.getState();
+  assert.equal(cleared.customer, null);
+  assert.equal(cleared.note, '');
+  assert.deepEqual(cleared.items, []);
 });
 
 test('cart rejects negative and oversized line discounts', () => {
