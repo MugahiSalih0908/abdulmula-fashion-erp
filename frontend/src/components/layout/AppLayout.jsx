@@ -1,166 +1,306 @@
-// src/components/layout/AppLayout.jsx – v5 role-based navigation
-
-import { useState } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useOnlineStatus }  from '../../hooks/useOnlineStatus';
-import { useRole }          from '../../hooks/useRole';
-import useAuthStore         from '../../store/authStore';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  LayoutDashboard, ShoppingCart, Package, Users, MoreHorizontal,
-  WifiOff, RefreshCw, Wallet, Truck, BarChart3, UserCog, Settings,
-  LogOut, X, ChevronRight, BookOpen, ClipboardList, ShieldCheck
+  Activity, BarChart3, BookOpen, ChevronRight, ClipboardList,
+  LayoutDashboard, LogOut, Menu, Package, PanelLeftClose,
+  PanelLeftOpen, Settings, ShieldCheck, ShoppingCart, Truck, UserCog, Users,
+  Wallet, Wifi, WifiOff, X
 } from 'lucide-react';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { useRole } from '../../hooks/useRole';
+import useAuthStore from '../../store/authStore';
+import BottomNav from './BottomNav';
+import Drawer from './Drawer';
+
+const NAV_ITEMS = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/pos', label: 'POS', icon: ShoppingCart },
+  { to: '/products', label: 'Products', icon: Package, permission: 'viewProducts' },
+  { to: '/customers', label: 'Customers', icon: Users },
+  { to: '/suppliers', label: 'Suppliers', icon: Truck, permission: 'viewSuppliers' },
+  { to: '/purchase-orders', label: 'Purchase Orders', icon: ClipboardList, permission: 'viewPOs' },
+  { to: '/expenses', label: 'Expenses', icon: Wallet, permission: 'viewExpenses' },
+  { to: '/cashbook', label: 'Cashbook', icon: BookOpen, permission: 'viewCashbook' },
+  { to: '/reports', label: 'Reports', icon: BarChart3, permission: 'viewReports' },
+  { to: '/staff', label: 'Staff', icon: UserCog, permission: 'manageStaff' },
+  { to: '/audit-logs', label: 'Audit Logs', icon: ShieldCheck, permission: 'viewAuditLogs' },
+  { to: '/settings', label: 'Settings', icon: Settings },
+];
+
+const PRIMARY_TABS = [
+  { to: '/dashboard', label: 'Home', icon: LayoutDashboard },
+  { to: '/pos', label: 'POS', icon: ShoppingCart },
+  { to: '/products', label: 'Stock', icon: Package },
+  { to: '/customers', label: 'People', icon: Users },
+];
+
+function getInitials(name) {
+  return name?.trim()?.charAt(0)?.toUpperCase() || 'U';
+}
+
+function StatusIndicator({ isOnline, isSyncing, compact = false }) {
+  const Icon = isOnline ? Wifi : WifiOff;
+  const label = isSyncing ? 'Syncing' : isOnline ? 'Online' : 'Offline';
+
+  return (
+    <span
+      className={`app-status ${isOnline ? 'is-online' : 'is-offline'} ${isSyncing ? 'is-syncing' : ''}`}
+      role="status"
+      aria-live="polite"
+      title={label}
+    >
+      {isSyncing ? <Activity size={15} aria-hidden="true" /> : <Icon size={15} aria-hidden="true" />}
+      {!compact && <span>{label}</span>}
+    </span>
+  );
+}
+
+function NavigationLinks({ items, collapsed = false, onNavigate }) {
+  return items.map(({ to, label, icon: Icon }) => (
+    <NavLink
+      key={to}
+      to={to}
+      end
+      onClick={onNavigate}
+      title={collapsed ? label : undefined}
+      aria-label={collapsed ? label : undefined}
+      className={({ isActive }) => `app-nav-link${isActive ? ' is-active' : ''}`}
+    >
+      <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
+      <span className="app-nav-label">{label}</span>
+    </NavLink>
+  ));
+}
+
+function UserIdentity({ user, compact = false }) {
+  return (
+    <div className={`app-user-identity${compact ? ' is-compact' : ''}`}>
+      <span className="app-avatar" aria-hidden="true">{getInitials(user?.name)}</span>
+      {!compact && (
+        <span className="app-user-copy">
+          <span className="app-user-name">{user?.name || 'Account'}</span>
+          <span className="app-user-role">{user?.role || 'User'}</span>
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function AppLayout() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const { isOnline, pendingCount, isSyncing } = useOnlineStatus();
-  const user     = useAuthStore(s => s.user);
-  const logout   = useAuthStore(s => s.logout);
+  const user = useAuthStore(state => state.user);
+  const logout = useAuthStore(state => state.logout);
   const navigate = useNavigate();
-  const { can, isAdmin, isManager } = useRole();
+  const location = useLocation();
+  const { can } = useRole();
 
-  const handleLogout = async () => {
+  const navigationItems = NAV_ITEMS.filter(item => !item.permission || can[item.permission]);
+  const primaryItems = PRIMARY_TABS.filter(item => navigationItems.some(nav => nav.to === item.to));
+  const moreItems = navigationItems.filter(item => !primaryItems.some(primary => primary.to === item.to));
+  const currentPage = navigationItems.find(item => item.to === location.pathname);
+  const isMoreActive = moreItems.some(item => item.to === location.pathname);
+
+  useEffect(() => {
+    setDrawerOpen(false);
     setMoreOpen(false);
-    await logout();
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+
+    const handleKeyDown = event => {
+      if (event.key === 'Escape') setMoreOpen(false);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [moreOpen]);
+
+  const handleLogout = () => {
+    setDrawerOpen(false);
+    setMoreOpen(false);
+    logout();
     navigate('/login');
   };
 
-  // ── Primary bottom tabs (always visible) ─────────────────────
-  const PRIMARY_TABS = [
-    { to: '/dashboard', icon: LayoutDashboard, label: 'Home'   },
-    { to: '/pos',       icon: ShoppingCart,    label: 'POS'    },
-    { to: '/products',  icon: Package,         label: 'Stock'  },
-    { to: '/customers', icon: Users,           label: 'People' },
-    { label: 'More',    icon: MoreHorizontal,  isMore: true    },
-  ];
-
-  // ── More menu items filtered by role ─────────────────────────
-  const MORE_ITEMS = [
-    can.viewExpenses    && { to:'/expenses',        icon:Wallet,        label:'Expenses',        color:'text-red-500',    bg:'bg-red-50'    },
-    can.viewSuppliers   && { to:'/suppliers',        icon:Truck,         label:'Suppliers',       color:'text-orange-500', bg:'bg-orange-50' },
-    can.viewPOs         && { to:'/purchase-orders',  icon:ClipboardList, label:'Purchase Orders', color:'text-amber-600',  bg:'bg-amber-50'  },
-    can.viewCashbook    && { to:'/cashbook',          icon:BookOpen,      label:'Cashbook',        color:'text-teal-600',   bg:'bg-teal-50'   },
-    can.viewReports     && { to:'/reports',           icon:BarChart3,     label:'Reports',         color:'text-blue-500',   bg:'bg-blue-50'   },
-    can.manageStaff     && { to:'/staff',             icon:UserCog,       label:'Staff',           color:'text-purple-500', bg:'bg-purple-50' },
-    can.viewAuditLogs   && { to:'/audit-logs',        icon:ShieldCheck,   label:'Audit Logs',      color:'text-gray-600',   bg:'bg-gray-100'  },
-    { to:'/settings', icon:Settings, label:'Settings', color:'text-gray-500', bg:'bg-gray-100' },
-  ].filter(Boolean);
+  const closeDrawer = () => setDrawerOpen(false);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 overflow-hidden">
-
-      {/* ── Header ─────────────────────────────────────────── */}
-      <header className="shrink-0 z-20 shadow-md px-4 py-3 flex items-center justify-between bg-white border-b border-gray-200">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm bg-green-600 text-white">AF</div>
-          <div>
-            <p className="text-gray-900 font-bold text-sm leading-tight">Abdulmula Fashion</p>
-            <p className="text-xs leading-tight capitalize text-green-600 font-medium">
-              {user?.role} · ERP v6
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {!isOnline && (
-            <span className="flex items-center gap-1 bg-red-600 text-white text-xs px-2 py-1 rounded-full font-semibold">
-              <WifiOff size={11}/> Offline
+    <div className={`app-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+      <aside className="app-sidebar" aria-label="Main navigation">
+        <div className="app-sidebar-brand">
+          <NavLink to="/dashboard" className="app-brand" aria-label="Abdulmula Fashion dashboard">
+            <span className="app-brand-mark" aria-hidden="true">AF</span>
+            <span className="app-brand-copy">
+              <span className="app-brand-name">Abdulmula Fashion</span>
+              <span className="app-brand-subtitle">Enterprise</span>
             </span>
-          )}
-          {pendingCount > 0 && (
-            <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full font-bold bg-green-100 text-green-700">
-              {isSyncing && <RefreshCw size={11} className="animate-spin"/>}
-              {pendingCount} pending
-            </span>
-          )}
-          <button onClick={() => setMoreOpen(true)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm bg-green-600 text-white hover:bg-green-700 transition-colors">
-            {user?.name?.charAt(0).toUpperCase()}
+          </NavLink>
+          <button
+            type="button"
+            className="app-collapse-button"
+            onClick={() => setSidebarCollapsed(value => !value)}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed
+              ? <PanelLeftOpen size={18} aria-hidden="true" />
+              : <PanelLeftClose size={18} aria-hidden="true" />}
           </button>
         </div>
-      </header>
 
-      {/* ── Main content ─────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto pb-20"><Outlet /></main>
+        <nav className="app-sidebar-nav" aria-label="Workspace">
+          <p className="app-nav-section-label">Workspace</p>
+          <NavigationLinks items={navigationItems} collapsed={sidebarCollapsed} />
+        </nav>
 
-      {/* ── Bottom nav ───────────────────────────────────────── */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30"
-           style={{ paddingBottom:'env(safe-area-inset-bottom, 6px)' }}>
-        <div className="flex items-stretch justify-around">
-          {PRIMARY_TABS.map(({ to, icon: Icon, label, isMore }) =>
-            isMore ? (
-              <button key="more" onClick={() => setMoreOpen(true)}
-                      className={`flex flex-col items-center py-2 px-3 flex-1 transition-colors ${
-                        moreOpen ? 'text-green-600 border-t-2 -mt-px' : 'text-gray-400'
-                      }`}>
-                <Icon size={22}/><span className="text-xs mt-0.5 font-medium">More</span>
-              </button>
-            ) : (
-              <NavLink key={to} to={to} onClick={() => setMoreOpen(false)}
-                       className={({ isActive }) =>
-                         `flex flex-col items-center py-2 px-3 flex-1 transition-colors ${isActive?'text-green-600 border-t-2 -mt-px':'text-gray-400'}`
-                       }>
-                <Icon size={22}/><span className="text-xs mt-0.5 font-medium">{label}</span>
-              </NavLink>
-            )
-          )}
+        <div className="app-sidebar-footer">
+          <UserIdentity user={user} compact={sidebarCollapsed} />
+          <button
+            type="button"
+            className="app-logout-button"
+            onClick={handleLogout}
+            title={sidebarCollapsed ? 'Log out' : undefined}
+            aria-label="Log out"
+          >
+            <LogOut size={18} aria-hidden="true" />
+            <span className="app-nav-label">Log out</span>
+          </button>
         </div>
-      </nav>
+      </aside>
 
-      {/* ── More menu ────────────────────────────────────────── */}
+      <div className="app-main-column">
+        <header className="app-header">
+          <button
+            type="button"
+            className="app-mobile-menu-button"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open navigation menu"
+            aria-expanded={drawerOpen}
+            aria-controls="app-mobile-drawer"
+          >
+            <Menu size={21} aria-hidden="true" />
+          </button>
+
+          <div className="app-header-title">
+            <span className="app-mobile-brand-mark" aria-hidden="true">AF</span>
+            <div>
+              <p className="app-page-title">{currentPage?.label || 'Workspace'}</p>
+              <p className="app-page-context">Abdulmula Fashion ERP</p>
+            </div>
+          </div>
+
+          <div className="app-header-actions">
+            <StatusIndicator isOnline={isOnline} isSyncing={isSyncing} />
+            {pendingCount > 0 && (
+              <span className="app-pending-count" title={`${pendingCount} offline sale(s) awaiting sync`}>
+                {pendingCount} pending
+              </span>
+            )}
+            <button
+              type="button"
+              className="app-mobile-profile-button"
+              onClick={() => setMoreOpen(true)}
+              aria-label="Open account and more navigation"
+              aria-haspopup="dialog"
+              aria-expanded={moreOpen}
+            >
+              <UserIdentity user={user} compact />
+            </button>
+            <span className="app-desktop-user-name">{user?.name || 'Account'}</span>
+          </div>
+        </header>
+
+        <main className="app-main-content" id="main-content">
+          <Outlet />
+        </main>
+      </div>
+
+      <BottomNav
+        items={primaryItems.map(item => ({
+          path: item.to,
+          label: item.label,
+          icon: <item.icon size={20} strokeWidth={1.8} aria-hidden="true" />,
+        }))}
+        onMoreClick={() => setMoreOpen(true)}
+        isMoreActive={isMoreActive}
+        isMoreOpen={moreOpen}
+      />
+
+      <Drawer isOpen={drawerOpen} onClose={closeDrawer} id="app-mobile-drawer">
+        <div className="app-drawer-profile">
+          <UserIdentity user={user} compact />
+          <div className="app-drawer-user-details">
+            <span>{user?.name || 'Account'}</span>
+            <span>{user?.email || 'Signed in'}</span>
+            <span className="app-drawer-user-role">{user?.role || 'User'}</span>
+          </div>
+        </div>
+        <nav className="app-drawer-nav" aria-label="Workspace">
+          <p className="app-nav-section-label">Workspace</p>
+          <NavigationLinks items={navigationItems} onNavigate={closeDrawer} />
+        </nav>
+        <button type="button" className="app-logout-button app-drawer-logout" onClick={handleLogout}>
+          <LogOut size={18} aria-hidden="true" />
+          <span>Log out</span>
+        </button>
+      </Drawer>
+
       <AnimatePresence>
         {moreOpen && (
           <>
-            <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
-                        className="fixed inset-0 bg-black/40 z-40" onClick={() => setMoreOpen(false)}/>
-            <motion.div initial={{y:'100%'}} animate={{y:0}} exit={{y:'100%'}}
-                        transition={{type:'spring',damping:28,stiffness:320}}
-                        className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-50"
-                        style={{paddingBottom:'env(safe-area-inset-bottom,16px)'}}>
-
-              <div className="flex justify-center pt-3 pb-1">
-                <div className="w-10 h-1 bg-gray-300 rounded-full"/>
-              </div>
-
-              {/* User info */}
-              <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100">
-                <div className="w-11 h-11 rounded-full flex items-center justify-center font-black text-base shrink-0 text-white bg-green-600">
-                  {user?.name?.charAt(0).toUpperCase()}
-                </div>
+            <motion.button
+              type="button"
+              className="app-more-backdrop"
+              aria-label="Dismiss more menu"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMoreOpen(false)}
+            />
+            <motion.section
+              className="app-more-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-label="More navigation"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+            >
+              <div className="app-more-sheet-header">
                 <div>
-                  <p className="font-bold text-sm text-gray-900">{user?.name}</p>
-                  <p className="text-xs text-gray-400">{user?.email}</p>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize inline-block mt-0.5 ${
-                    user?.role==='admin'   ? 'bg-red-100 text-red-700' :
-                    user?.role==='manager'? 'bg-blue-100 text-blue-700' :
-                                            'bg-gray-100 text-gray-600'
-                  }`}>{user?.role}</span>
+                  <p className="app-more-sheet-title">More</p>
+                  <p className="app-more-sheet-subtitle">Your workspace and account</p>
                 </div>
-              </div>
-
-              {/* Menu */}
-              <div className="px-4 py-3 space-y-0.5 max-h-80 overflow-y-auto">
-                {MORE_ITEMS.map(({ to, icon: Icon, label, color, bg }) => (
-                  <NavLink key={to} to={to} onClick={() => setMoreOpen(false)}
-                           className="flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-gray-50 transition-colors">
-                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${color} ${bg} shrink-0`}>
-                      <Icon size={18}/>
-                    </div>
-                    <span className="font-semibold text-gray-800 flex-1">{label}</span>
-                    <ChevronRight size={16} className="text-gray-300"/>
-                  </NavLink>
-                ))}
-
-                <button onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-red-50 transition-colors mt-1">
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center text-red-500 bg-red-50 shrink-0">
-                    <LogOut size={18}/>
-                  </div>
-                  <span className="font-semibold text-red-600 flex-1 text-left">Logout</span>
+                <button type="button" className="app-more-close" onClick={() => setMoreOpen(false)} aria-label="Close more menu">
+                  <X size={20} aria-hidden="true" />
                 </button>
               </div>
-            </motion.div>
+              <div className="app-more-links">
+                {moreItems.map(({ to, label, icon: Icon }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    end
+                    onClick={() => setMoreOpen(false)}
+                    className={({ isActive }) => `app-more-link${isActive ? ' is-active' : ''}`}
+                  >
+                    <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
+                    <span>{label}</span>
+                    <ChevronRight size={17} className="app-more-chevron" aria-hidden="true" />
+                  </NavLink>
+                ))}
+              </div>
+              <div className="app-more-footer">
+                <StatusIndicator isOnline={isOnline} isSyncing={isSyncing} />
+                {pendingCount > 0 && <span>{pendingCount} sale(s) pending sync</span>}
+              </div>
+            </motion.section>
           </>
         )}
       </AnimatePresence>

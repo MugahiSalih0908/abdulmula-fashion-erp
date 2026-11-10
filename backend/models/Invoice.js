@@ -35,8 +35,10 @@ const invoiceSchema = new mongoose.Schema({
   },
   customer:      { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
   customerName:  { type: String },
+  customerPurchaseRecorded: { type: Boolean },
   note:          { type: String, trim: true, maxlength: 300 },
-  offlineId:     { type: String, sparse: true },   // client-generated ID for offline dedup
+  offlineId:     { type: String },   // client-generated ID for offline dedup
+  offlinePayloadFingerprint: { type: String, match: /^[a-f0-9]{64}$/ },
   isSynced:      { type: Boolean, default: true },
   soldBy:        { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   soldByName:    { type: String },
@@ -55,7 +57,10 @@ invoiceSchema.pre('save', async function (next) {
 });
 
 invoiceSchema.index({ date: -1 });
-invoiceSchema.index({ offlineId: 1 }, { sparse: true });
+invoiceSchema.index(
+  { offlineId: 1 },
+  { unique: true, partialFilterExpression: { offlineId: { $type: 'string', $gt: '' } } }
+);
 invoiceSchema.index({ customer: 1 });
 
 module.exports = mongoose.model('Invoice', invoiceSchema);

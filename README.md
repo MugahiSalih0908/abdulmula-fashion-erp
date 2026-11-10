@@ -61,6 +61,146 @@ v6 introduces a full enterprise onboarding and security workflow:
 - Dexie (IndexedDB offline)
 - vite-plugin-pwa + Workbox
 
+## Offline invoice ID index preflight
+
+`Invoice.offlineId` is protected by a unique partial index that applies only to
+non-empty string IDs. Before deploying this model change to an existing
+database, an operator must perform a **read-only** duplicate preflight and
+resolve any collisions through the approved data-retention process before
+changing indexes. For example, inspect duplicates with:
+
+```javascript
+db.invoices.aggregate([
+  { $match: { offlineId: { $type: 'string', $gt: '' } } },
+  { $group: { _id: '$offlineId', count: { $sum: 1 }, invoiceIds: { $push: '$_id' } } },
+  { $match: { count: { $gt: 1 } } }
+])
+```
+
+Also inspect the existing index definitions before planning the deployment.
+After duplicates are resolved and a backup/change plan is approved, the
+database operator must drop/replace any old `offlineId` index with a **unique
+partial index** restricted to non-empty strings, matching the definition in
+`backend/models/Invoice.js`. Verify afterward that the resulting index reports
+`unique: true` and a partial filter of `offlineId` string values greater than
+the empty string, and confirm the duplicate preflight returns no rows.
+
+These are deployment instructions only: do not run a write query as part of
+application startup or this preflight. This repository change does not execute
+an index migration or access a database.
+
+Offline conflict decisions use the `offlineconflictdecisions` collection. The
+required index is named `offlineId_unique_nonempty`, is unique on
+`{ offlineId: 1 }`, and uses this exact partial filter:
+
+```javascript
+{ offlineId: { $type: 'string', $gt: '' } }
+```
+
+Before deploying, run these **read-only preflight** checks against the target
+database. Inspect records with missing, null, empty, and whitespace-only IDs:
+
+```javascript
+db.offlineconflictdecisions.aggregate([
+  {
+    $match: {
+      $or: [
+        { offlineId: { $exists: false } },
+        { offlineId: null },
+        { offlineId: '' },
+        { offlineId: { $type: 'string', $regex: /^\s+$/ } }
+      ]
+    }
+  },
+  { $project: { _id: 1, offlineId: 1, state: 1 } }
+])
+```
+
+The partial filter `{ offlineId: { $type: 'string', $gt: '' } }` includes
+whitespace-only strings because they are non-empty strings. Such historical
+values therefore participate in the unique index even though the application
+rejects whitespace-only IDs for new requests. Also inspect padded non-empty
+IDs, which are distinct index keys today but normalize to the same application
+ID:
+
+```javascript
+db.offlineconflictdecisions.aggregate([
+  { $match: { offlineId: { $type: 'string', $gt: '' } } },
+  {
+    $match: {
+      $expr: {
+        $ne: ['$offlineId', { $trim: { input: '$offlineId' } }]
+      }
+    }
+  },
+  { $project: { _id: 1, offlineId: 1, state: 1 } }
+])
+```
+
+Then detect duplicate valid non-empty IDs (including the record IDs for
+investigation):
+
+```javascript
+db.offlineconflictdecisions.aggregate([
+  { $match: { offlineId: { $type: 'string', $gt: '' } } },
+  {
+    $group: {
+      _id: '$offlineId',
+      count: { $sum: 1 },
+      decisionIds: { $push: '$_id' }
+    }
+  },
+  { $match: { count: { $gt: 1 } } }
+])
+```
+
+Also identify IDs that are distinct in storage but collide after trimming:
+
+```javascript
+db.offlineconflictdecisions.aggregate([
+  { $match: { offlineId: { $type: 'string', $gt: '' } } },
+  {
+    $group: {
+      _id: { $trim: { input: '$offlineId' } },
+      count: { $sum: 1 },
+      originalIds: { $push: { _id: '$_id', offlineId: '$offlineId' } }
+    }
+  },
+  { $match: { count: { $gt: 1 } } }
+])
+```
+
+Review all four query results before enabling the normalized-ID workflow.
+Do not silently rewrite historical identifiers. Any whitespace-only or
+padded IDs, and any collisions after trimming, require an explicitly approved
+retention/reconciliation plan; leave existing records unchanged until that
+plan is carried out separately. Inspect
+`db.offlineconflictdecisions.getIndexes()` and identify the exact obsolete
+index name and definition. After a backup and an approved staging-first
+change plan, replace **only that verified obsolete index**—never use
+`dropIndexes()` or `dropIndex()` against an unverified name:
+
+```javascript
+db.offlineconflictdecisions.dropIndex('<verified-obsolete-index-name>')
+db.offlineconflictdecisions.createIndex(
+  { offlineId: 1 },
+  {
+    name: 'offlineId_unique_nonempty',
+    unique: true,
+    partialFilterExpression: { offlineId: { $type: 'string', $gt: '' } }
+  }
+)
+```
+
+Do not drop an index already named `offlineId_unique_nonempty` with the exact
+definition above. Verify with `getIndexes()` that the named index is unique,
+has the exact key and partial filter, then rerun all applicable read-only
+preflight checks and confirm no duplicate normalized IDs remain. Perform and
+verify this in staging first; production migration requires separate approval. Invoice,
+decision, stock, customer, and audit writes must remain in the same MongoDB
+transaction. This repository change does not execute a migration or access a
+database.
+
 ---
 
 ## Setup
