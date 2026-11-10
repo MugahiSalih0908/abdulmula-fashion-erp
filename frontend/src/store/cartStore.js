@@ -1,6 +1,16 @@
 // src/store/cartStore.js – full POS cart with cash/change logic
 
 import { create } from 'zustand';
+import { calculateCashChange, calculateInvoiceTotals } from '../../../shared/invoiceCalculations.mjs';
+
+const getTotals = (state) => calculateInvoiceTotals(
+  state.items.map(item => ({
+    unitPrice: item.unitPrice,
+    quantity: item.quantity,
+    discount: item.discount || 0
+  })),
+  state.taxRate
+);
 
 const useCartStore = create((set, get) => ({
   items:         [],
@@ -31,10 +41,15 @@ const useCartStore = create((set, get) => ({
     set({ items: get().items.map(i => i.product._id === productId ? { ...i, quantity: capped } : i) });
   },
 
-  setDiscount: (productId, discount) =>
+  setDiscount: (productId, discount) => {
+    const amount = Number(discount);
+    const item = get().items.find(i => i.product._id === productId);
+    if (!item || !Number.isFinite(amount) || amount < 0 || amount > item.unitPrice * item.quantity) return false;
     set({ items: get().items.map(i =>
-      i.product._id === productId ? { ...i, discount: Math.max(0, parseFloat(discount) || 0) } : i
-    ) }),
+      i.product._id === productId ? { ...i, discount: amount } : i
+    ) });
+    return true;
+  },
 
   removeItem: (productId) =>
     set({ items: get().items.filter(i => i.product._id !== productId) }),
@@ -44,23 +59,26 @@ const useCartStore = create((set, get) => ({
 
   setCustomer:      (c)  => set({ customer: c }),
   setPaymentMethod: (pm) => set({ paymentMethod: pm }),
-  setTaxRate:       (r)  => set({ taxRate: parseFloat(r) || 0 }),
+  setTaxRate:       (r)  => {
+    const rate = Number(r);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) return false;
+    set({ taxRate: rate });
+    return true;
+  },
   setNote:          (n)  => set({ note: n }),
   setCashReceived:  (v)  => set({ cashReceived: parseFloat(v) || 0 }),
 
   itemCount:    () => get().items.reduce((s, i) => s + i.quantity, 0),
-  subtotal:     () => get().items.reduce((s, i) => s + i.unitPrice * i.quantity, 0),
-  discountTotal:() => get().items.reduce((s, i) => s + (i.discount || 0), 0),
-  taxAmount:    () => {
-    const net = get().subtotal() - get().discountTotal();
-    return net * (get().taxRate / 100);
-  },
-  grandTotal:   () => get().subtotal() - get().discountTotal() + get().taxAmount(),
-  changeAmount: () => Math.max(0, get().cashReceived - get().grandTotal()),
+  subtotal:     () => getTotals(get()).subtotal,
+  discountTotal:() => getTotals(get()).discountTotal,
+  taxAmount:    () => getTotals(get()).taxAmount,
+  grandTotal:   () => getTotals(get()).grandTotal,
+  changeAmount: () => calculateCashChange(get().cashReceived, get().grandTotal()),
 
   toInvoicePayload: () => ({
     items: get().items.map(i => ({
       productId: i.product._id,
+      productName: i.product.name,
       quantity:  i.quantity,
       unitPrice: i.unitPrice,
       discount:  i.discount || 0
@@ -69,9 +87,12 @@ const useCartStore = create((set, get) => ({
     taxRate:       get().taxRate,
     customerId:    get().customer?._id,
     note:          get().note,
-    amountPaid:    get().paymentMethod === 'Cash'
-                     ? Math.min(get().cashReceived, get().grandTotal())
-                     : get().grandTotal()
+    cashReceived:  get().paymentMethod === 'Cash' ? get().cashReceived : undefined,
+    amountPaid:    get().paymentMethod === 'Credit'
+                     ? 0
+                     : get().paymentMethod === 'Cash'
+                       ? Math.max(0, Math.min(get().cashReceived, get().grandTotal()))
+                       : get().grandTotal()
   })
 }));
 

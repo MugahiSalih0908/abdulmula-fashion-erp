@@ -381,7 +381,12 @@ function CartItem({ item, cart }) {
                 min="0"
                 step="0.01"
                 value={item.discount || ''}
-                onChange={e => cart.setDiscount(item.product._id, e.target.value)}
+                max={item.unitPrice * item.quantity}
+                onChange={e => {
+                  if (!cart.setDiscount(item.product._id, e.target.value)) {
+                    toast.error('Discount must be between $0 and the line amount.');
+                  }
+                }}
                 className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none"
                 placeholder="0.00"
                 autoFocus

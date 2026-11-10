@@ -5,8 +5,15 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import api from '../services/api';
 import useCartStore from '../store/cartStore';
+import { calculateCashChange } from '../../../shared/invoiceCalculations.mjs';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { saveSaleOffline, getOfflineProducts, cacheProducts } from '../offline/syncManager';
+import {
+  saveSaleOffline,
+  markSaleSynced,
+  getOfflineProducts,
+  cacheProducts
+} from '../offline/syncManager';
+import db from '../offline/db';
 import CartDrawer from '../components/pos/CartDrawer';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import Button from '../components/ui/Button';
@@ -21,6 +28,8 @@ export default function POSPage() {
   const [cartOpen, setCartOpen] = useState(false);
   const [receipt, setReceipt] = useState(null);
   const [scanning, setScanning] = useState(false);
+  const checkoutId = useRef(localStorage.getItem('pos.pendingCheckoutId'));
+  const checkoutCreatedAt = useRef(localStorage.getItem('pos.pendingCheckoutCreatedAt'));
 
   const cart = useCartStore();
   const { isOnline } = useOnlineStatus();
@@ -80,10 +89,33 @@ export default function POSPage() {
   const { mutate: checkout, isPending: isCheckingOut } = useMutation({
     mutationFn: async (payload) => {
       if (isOnline) {
-        const { data } = await api.post('/invoices', payload);
-        return data.data;
+        const offlineId = await saveSaleOffline(payload, payload.offlineId);
+        try {
+          const { data } = await api.post('/invoices', payload);
+          await markSaleSynced(offlineId);
+          return data.data;
+        } catch (err) {
+          const status = err?.response?.status;
+          if (status && status >= 400 && status < 500) {
+            const queued = await db.pendingSales.where('offlineId').equals(offlineId).first();
+            if (queued && queued.syncStatus !== 'rejected') {
+              await db.pendingSales.update(queued.id, {
+                syncStatus: 'blocked',
+                syncError: err?.response?.data?.message || 'Sale requires review before it can sync.',
+                ...(err?.response?.data?.conflictDetails
+                  ? { syncConflict: err.response.data.conflictDetails }
+                  : {})
+              });
+            }
+          }
+          throw err;
+        }
       }
-      const offlineId = await saveSaleOffline(payload);
+      const offlineId = await saveSaleOffline(payload, payload.offlineId);
+      localStorage.removeItem('pos.pendingCheckoutId');
+      localStorage.removeItem('pos.pendingCheckoutCreatedAt');
+      checkoutId.current = null;
+      checkoutCreatedAt.current = null;
       return {
         offlineId,
         isOffline: true,
@@ -102,7 +134,11 @@ export default function POSPage() {
     },
     onSuccess: (invoice) => {
       const cash = cart.cashReceived;
-      const change = cart.changeAmount();
+      const change = calculateCashChange(cash, invoice.grandTotal);
+      checkoutId.current = null;
+      localStorage.removeItem('pos.pendingCheckoutId');
+      localStorage.removeItem('pos.pendingCheckoutCreatedAt');
+      checkoutCreatedAt.current = null;
       queryClient.invalidateQueries(['pos-products']);
       cart.clearCart();
       setCartOpen(false);
@@ -119,7 +155,29 @@ export default function POSPage() {
   });
 
   const handleCheckout = () => {
-    checkout({ ...cart.toInvoicePayload() });
+    const payload = cart.toInvoicePayload();
+    checkoutCreatedAt.current ||= new Date().toISOString();
+    payload.offlineCreatedAt = checkoutCreatedAt.current;
+    if (isOnline) {
+      checkoutId.current ||= globalThis.crypto?.randomUUID?.()
+        || `pos_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem('pos.pendingCheckoutId', checkoutId.current);
+      localStorage.setItem('pos.pendingCheckoutCreatedAt', checkoutCreatedAt.current);
+      payload.offlineId = checkoutId.current;
+      payload.items = payload.items.map(({ unitPrice, ...item }) => ({
+        ...item,
+        expectedUnitPrice: unitPrice
+      }));
+      delete payload.amountPaid;
+      if (cart.paymentMethod !== 'Cash') delete payload.cashReceived;
+    } else {
+      checkoutId.current ||= globalThis.crypto?.randomUUID?.()
+        || `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem('pos.pendingCheckoutId', checkoutId.current);
+      localStorage.setItem('pos.pendingCheckoutCreatedAt', checkoutCreatedAt.current);
+      payload.offlineId = checkoutId.current;
+    }
+    checkout(payload);
   };
 
   // ── Barcode scan result (now uses stable scanner) ────────────
