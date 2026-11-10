@@ -44,3 +44,72 @@ test('cart rejects negative and oversized line discounts', () => {
   assert.equal(cart.setDiscount('product-1', 101), false);
   assert.equal(useCartStore.getState().items[0].discount, 20);
 });
+
+test('cart rejects zero, negative, non-finite, non-numeric, and fractional stock', () => {
+  for (const [index, quantity] of [0, -1, NaN, Infinity, '2', 'unknown', 0.75, null].entries()) {
+    useCartStore.getState().clearCart();
+    const result = useCartStore.getState().addItem({
+      _id: `unavailable-${index}`,
+      name: 'Unavailable',
+      price: 10,
+      quantity
+    });
+    assert.equal(result.ok, false);
+    assert.equal(useCartStore.getState().items.length, 0);
+  }
+
+  assert.equal(useCartStore.getState().addItem({
+    _id: 'valid-integer',
+    name: 'Valid inventory',
+    price: 10,
+    quantity: 1
+  }).ok, true);
+});
+
+test('initial cart quantity is capped at available whole units', () => {
+  useCartStore.getState().clearCart();
+  const result = useCartStore.getState().addItem({
+    _id: 'limited',
+    name: 'Limited',
+    price: 10,
+    quantity: 2
+  }, 4);
+
+  assert.deepEqual(result, { ok: true, status: 'stock-limit', quantity: 2 });
+  assert.equal(useCartStore.getState().items[0].quantity, 2);
+});
+
+test('repeated additions stop at stock boundaries and reconcile stale cart stock', () => {
+  useCartStore.getState().clearCart();
+  const product = { _id: 'boundary', name: 'Boundary', price: 10, quantity: 2 };
+
+  assert.equal(useCartStore.getState().addItem(product).status, 'added');
+  assert.equal(useCartStore.getState().addItem(product).status, 'added');
+  assert.deepEqual(useCartStore.getState().addItem(product), {
+    ok: true,
+    status: 'stock-limit',
+    quantity: 2
+  });
+  assert.equal(useCartStore.getState().items[0].quantity, 2);
+
+  useCartStore.getState().setQty('boundary', 4);
+  const reducedStock = { ...product, quantity: 1 };
+  assert.deepEqual(useCartStore.getState().addItem(reducedStock), {
+    ok: true,
+    status: 'stock-adjusted',
+    quantity: 1
+  });
+  assert.equal(useCartStore.getState().items[0].quantity, 1);
+});
+
+test('fractional inventory is invalid and quantity edits stay within whole stock', () => {
+  useCartStore.getState().clearCart();
+  const product = { _id: 'fractional', name: 'Fractional stock', price: 10, quantity: 1.5 };
+
+  assert.deepEqual(useCartStore.getState().addItem(product), {
+    ok: false,
+    status: 'invalid-stock',
+    cartReconciled: 'unchanged'
+  });
+  assert.equal(useCartStore.getState().items.length, 0);
+});
