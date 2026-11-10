@@ -18,9 +18,14 @@ import CartDrawer from '../components/pos/CartDrawer';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
-import { Search, ScanLine, ShoppingCart, Package, X, Wifi, WifiOff } from 'lucide-react';
-
-const CATEGORIES = ['All', 'Men', 'Women', 'Girls', 'Boys', 'Kids', 'Sudanese Silk Toub Wraps', 'Accessories', 'Other'];
+import EmptyState from '../components/ui/EmptyState';
+import Skeleton from '../components/ui/Skeleton';
+import { filterCatalogProducts, getCatalogCategories, scanCatalogProduct } from './posCatalog.mjs';
+import { createBarcodeScannerLifecycle } from './barcodeScannerLifecycle.mjs';
+import {
+  Search, ScanLine, ShoppingCart, Package, X, Wifi, WifiOff,
+  RotateCw, Plus
+} from 'lucide-react';
 
 export default function POSPage() {
   const [search, setSearch] = useState('');
@@ -28,6 +33,8 @@ export default function POSPage() {
   const [cartOpen, setCartOpen] = useState(false);
   const [receipt, setReceipt] = useState(null);
   const [scanning, setScanning] = useState(false);
+  const scannerTriggerRef = useRef(null);
+  const scannerWasOpenedRef = useRef(false);
   const checkoutId = useRef(localStorage.getItem('pos.pendingCheckoutId'));
   const checkoutCreatedAt = useRef(localStorage.getItem('pos.pendingCheckoutCreatedAt'));
 
@@ -36,7 +43,13 @@ export default function POSPage() {
   const queryClient = useQueryClient();
 
   // ── Load products ────────────────────────────────────────────
-  const { data: apiProducts = [], isLoading } = useQuery({
+  const {
+    data: apiProducts = [],
+    isLoading,
+    isError: productsError,
+    error: productsErrorDetails,
+    refetch: refetchProducts
+  } = useQuery({
     queryKey: ['pos-products'],
     queryFn: async () => {
       const { data } = await api.get('/products?limit=500');
@@ -48,11 +61,35 @@ export default function POSPage() {
   });
 
   const [offlineProds, setOfflineProds] = useState([]);
+  const [offlineProductsLoading, setOfflineProductsLoading] = useState(false);
+  const [offlineProductsError, setOfflineProductsError] = useState(null);
+  const [offlineProductsLoaded, setOfflineProductsLoaded] = useState(false);
   useEffect(() => {
-    if (!isOnline) getOfflineProducts().then(setOfflineProds);
+    if (isOnline) return undefined;
+    let active = true;
+    setOfflineProductsLoading(true);
+    setOfflineProductsError(null);
+    getOfflineProducts()
+      .then(products => {
+        if (active) setOfflineProds(products);
+      })
+      .catch(error => {
+        if (active) setOfflineProductsError(error);
+      })
+      .finally(() => {
+        if (active) {
+          setOfflineProductsLoading(false);
+          setOfflineProductsLoaded(true);
+        }
+      });
+    return () => { active = false; };
   }, [isOnline]);
 
   const allProducts = isOnline ? apiProducts : offlineProds;
+  const catalogLoading = isOnline ? isLoading : offlineProductsLoading || !offlineProductsLoaded;
+  const catalogError = isOnline ? productsError : Boolean(offlineProductsError);
+  const offlineCatalogEmpty = !isOnline && !catalogLoading && !catalogError && offlineProds.length === 0;
+  const categories = getCatalogCategories(allProducts);
 
   // ── Load customers for cart ──────────────────────────────────
   const { data: customers = [] } = useQuery({
@@ -66,24 +103,30 @@ export default function POSPage() {
   });
 
   // ── Filter ───────────────────────────────────────────────────
-  const filtered = allProducts.filter((p) => {
-    if (!p) return false;
-    const q = (search || '').toLowerCase();
-    const name = p.name || '';
-    const sku = p.sku || '';
-    const barcode = p.barcode || '';
-    const productCategory = p.category || 'Other';
+  const filtered = filterCatalogProducts(allProducts, search, category);
 
-    const matchSearch =
-      !search ||
-      name.toLowerCase().includes(q) ||
-      sku.toLowerCase().includes(q) ||
-      barcode.includes(search);
+  const retryCatalog = () => {
+    if (isOnline) {
+      refetchProducts();
+      return;
+    }
+    setOfflineProductsLoading(true);
+    setOfflineProductsError(null);
+    getOfflineProducts()
+      .then(setOfflineProds)
+      .catch(setOfflineProductsError)
+      .finally(() => {
+        setOfflineProductsLoading(false);
+        setOfflineProductsLoaded(true);
+      });
+  };
 
-    const matchCat = category === 'All' || productCategory === category;
-
-    return matchSearch && matchCat && (p.quantity || 0) > 0;
-  });
+  useEffect(() => {
+    if (!scanning && scannerWasOpenedRef.current) {
+      scannerWasOpenedRef.current = false;
+      scannerTriggerRef.current?.focus();
+    }
+  }, [scanning]);
 
   // ── Checkout mutation ────────────────────────────────────────
   const { mutate: checkout, isPending: isCheckingOut } = useMutation({
@@ -181,176 +224,288 @@ export default function POSPage() {
   };
 
   // ── Barcode scan result (now uses stable scanner) ────────────
-  const handleBarcode = useCallback(
-    (code) => {
-      const product = allProducts.find(p => p.barcode === code || p.sku === code);
-      if (product) {
-        cart.addItem(product);
-        toast.success(`Added: ${product.name}`, { duration: 1500 });
-      } else {
-        toast.error(`No product found: ${code}`);
-      }
-      setScanning(false);
-    },
-    [allProducts, cart]
-  );
+  const reportAddResult = useCallback((product, result) => {
+    const name = product?.name || 'Product';
+    if (result.status === 'not-found') {
+      toast.error('No product found for that barcode or SKU.');
+    } else if (result.cartReconciled === 'removed') {
+      toast.error(`${name} was removed from the cart because its stock is ${result.status === 'out-of-stock' ? 'zero' : 'invalid'}.`);
+    } else if (result.status === 'invalid-stock') {
+      toast.error(`Cannot add ${name}: available stock is invalid.`);
+    } else if (result.status === 'out-of-stock') {
+      toast.error(`${name} is out of stock.`);
+    } else if (result.status === 'invalid-quantity' || result.status === 'invalid-cart-quantity') {
+      toast.error(`Cannot add ${name}: the requested quantity is invalid.`);
+    } else if (result.status === 'stock-adjusted') {
+      toast.error(`${name} was adjusted to ${result.quantity} available unit(s) in the cart.`);
+    } else if (result.status === 'stock-limit') {
+      toast.error(`Stock limit reached for ${name}; cart quantity is ${result.quantity}.`);
+    } else if (result.ok) {
+      toast.success(`Added ${name} to cart`, { duration: 1400 });
+    }
+  }, []);
+
+  const handleBarcode = useCallback((code) => {
+    const result = scanCatalogProduct(allProducts, code, cart.addItem);
+    reportAddResult(result.product, result);
+    setScanning(false);
+  }, [allProducts, cart.addItem, reportAddResult]);
 
   const itemCount = cart.itemCount();
   const grandTotal = cart.grandTotal();
+  const closeScanner = useCallback(() => setScanning(false), []);
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 overflow-hidden">
-      {/* ── Search + scan ────────────────────────────────────── */}
-      <div className="bg-white px-4 pt-3 pb-2 shadow-sm z-10 border-b border-gray-100">
-        <div className="flex gap-2 items-center mb-3">
-          <div className="relative flex-1">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search product, SKU or barcode…"
-              className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition bg-gray-50"
-            />
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[var(--color-bg)]">
+      <section className="z-10 border-b border-[var(--color-border)] bg-white px-4 pb-3 pt-4 shadow-[var(--shadow-sm)] sm:px-6 sm:pt-5">
+        <div className="mx-auto w-full max-w-[1600px]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#927746]">Abdulmula Fashion</p>
+              <h1 className="text-xl font-semibold tracking-tight text-[var(--color-text)] sm:text-2xl">Point of sale</h1>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)] sm:text-sm">Find an item or scan its barcode to add it to the cart.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                isOnline
+                  ? 'border-[#d7e5dc] bg-[#f2f7f3] text-[#356447]'
+                  : 'border-[#eadfc7] bg-[#fbf6eb] text-[#80622e]'
+              }`} role="status" aria-live="polite">
+                {isOnline ? <Wifi size={14} aria-hidden="true" /> : <WifiOff size={14} aria-hidden="true" />}
+                {isOnline ? 'Online' : 'Offline catalogue'}
+              </span>
+              <Badge variant="primary" className="border border-[var(--color-border)] bg-white text-[var(--color-text-secondary)]">
+                {allProducts.length} items
+              </Badge>
+            </div>
+          </div>
+
+          <div className="mt-4 flex gap-2 sm:mt-5">
+            <label className="relative min-w-0 flex-1">
+              <span className="sr-only">Search products by name, SKU, or barcode</span>
+              <Search size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" aria-hidden="true" />
+              <input
+                type="search"
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                placeholder="Search name, SKU or barcode"
+                autoComplete="off"
+                className="h-12 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] pl-11 pr-11 text-sm text-[var(--color-text)] outline-none transition focus:border-[var(--color-gold)] focus:bg-white focus:shadow-[var(--focus-ring)]"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  aria-label="Clear product search"
+                  className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-[var(--color-text-muted)] transition hover:bg-[var(--color-bg-secondary)] hover:text-[var(--color-text)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
+                >
+                  <X size={16} aria-hidden="true" />
+                </button>
+              )}
+            </label>
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              icon={ScanLine}
+              onClick={event => {
+                scannerTriggerRef.current = event.currentTarget;
+                scannerWasOpenedRef.current = true;
+                setScanning(true);
+              }}
+              className="h-12 shrink-0 border-[var(--color-border)] px-3 sm:px-4"
+              aria-label="Open barcode scanner or enter a code manually"
+            >
+              <span className="hidden sm:inline">Scan barcode</span>
+            </Button>
+          </div>
+
+          <nav className="mt-4 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 no-scrollbar" aria-label="Product categories">
+            {categories.map(cat => {
+              const active = category === cat;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setCategory(cat)}
+                  aria-pressed={active}
+                  className={`min-h-9 shrink-0 rounded-full border px-3.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)] ${
+                    active
+                      ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white shadow-[var(--shadow-sm)]'
+                      : 'border-[var(--color-border)] bg-white text-[var(--color-text-secondary)] hover:border-[var(--color-gold)] hover:text-[var(--color-text)]'
+                  }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </section>
+
+      <section className="min-h-0 flex-1 overflow-y-auto px-4 pb-2 pt-4 sm:px-6 sm:pt-5" aria-label="Product catalogue">
+        <div className="mx-auto w-full max-w-[1600px]">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--color-text)] sm:text-base">
+                {category === 'All' ? 'Available products' : category}
+              </h2>
+              <p className="mt-0.5 text-xs text-[var(--color-text-muted)]" aria-live="polite">
+                {catalogLoading ? 'Loading catalogue…' : `${filtered.length} ${filtered.length === 1 ? 'item' : 'items'} available`}
+              </p>
+            </div>
             {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
-                <X size={16} />
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-[#80622e] transition hover:bg-[#f4eee3] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
+              >
+                <X size={14} aria-hidden="true" />
+                Clear search
               </button>
             )}
           </div>
-          <button
-            onClick={() => setScanning(true)}
-            className="p-3 rounded-lg text-white flex items-center justify-center hover:opacity-90 transition flex-shrink-0"
-            style={{ background: '#16a34a' }}
-            title="Scan barcode"
-          >
-            <ScanLine size={20} />
-          </button>
-        </div>
 
-        {/* Status indicator */}
-        <div className="flex items-center gap-2 mb-3">
-          <div className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-full ${isOnline ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-            {isOnline ? (
-              <>
-                <Wifi size={12} />
-                Online
-              </>
-            ) : (
-              <>
-                <WifiOff size={12} />
-                Offline Mode
-              </>
-            )}
-          </div>
-        </div>
+          {catalogError && (
+            <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[#ead4cd] bg-[#fff8f6] px-4 py-3 text-sm text-[#8d4a3e]">
+              <span>
+                {isOnline
+                  ? productsErrorDetails?.response?.data?.message || 'The product catalogue could not be loaded.'
+                  : 'The saved offline catalogue could not be opened.'}
+              </span>
+              <Button type="button" variant="secondary" size="sm" icon={RotateCw} onClick={retryCatalog}>
+                Retry
+              </Button>
+            </div>
+          )}
 
-        {/* Category pills */}
-        <div className="flex gap-2 overflow-x-auto py-2 no-scrollbar">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat)}
-              className={`shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${
-                category === cat
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Product grid ─────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {isLoading ? (
-          <div className="grid grid-cols-2 gap-3">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-28 bg-gray-200 rounded-lg animate-pulse" />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            <Package size={32} strokeWidth={1.75} className="mx-auto mb-3 text-gray-400" aria-hidden="true" />
-            <p className="font-semibold text-gray-500">No products found</p>
-            {search && <p className="text-sm mt-2 text-gray-400">Try a different search term</p>}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {filtered.map((product) => {
-              const inCart = cart.items.find((i) => i?.product?._id === product?._id);
-              return (
-                <motion.button
-                  key={product._id}
-                  whileTap={{ scale: 0.94 }}
-                  onClick={() => {
-                    if (!product) return;
-                    cart.addItem(product);
-                    toast.success(`+ ${product.name || 'Product'}`, {
-                      duration: 800,
-                      style: { fontSize: '13px' }
-                    });
-                  }}
-                  className={`bg-white rounded-lg p-3 text-left shadow-sm transition-all relative overflow-hidden border-2 ${
-                    inCart ? 'border-emerald-500 ring-1 ring-emerald-200' : 'border-transparent hover:shadow-md'
-                  }`}
-                >
-                  {/* In-cart badge */}
-                  {inCart && (
-                    <div className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white bg-emerald-600">
-                      {inCart.quantity}
+          {catalogLoading ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 2xl:grid-cols-5" aria-label="Loading products" aria-busy="true">
+              {Array.from({ length: 8 }, (_, index) => (
+                <div key={index} className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-white p-3">
+                  <Skeleton variant="card" className="!h-28 bg-[var(--color-bg-secondary)] sm:!h-36" />
+                  <Skeleton variant="text" className="mt-3 !h-4 w-4/5 bg-[var(--color-bg-secondary)]" />
+                  <Skeleton variant="line" className="mt-2 !h-3 w-1/2 bg-[var(--color-bg-secondary)]" />
+                  <Skeleton variant="text" className="mt-4 !h-8 bg-[var(--color-bg-secondary)]" />
+                </div>
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon={<Package size={24} strokeWidth={1.7} aria-hidden="true" />}
+              title={catalogError
+                ? 'Catalogue unavailable'
+                : offlineCatalogEmpty
+                  ? 'Offline catalogue not available'
+                  : search
+                    ? 'No matching products'
+                    : 'No products in this category'}
+              description={
+                catalogError
+                  ? 'Check your connection and try loading the catalogue again.'
+                  : offlineCatalogEmpty
+                    ? 'No saved product catalogue is available on this device. Reconnect while online to load products for offline use.'
+                    : search
+                      ? 'Try another product name, SKU, or barcode.'
+                      : category !== 'All'
+                        ? 'Choose another category to browse available items.'
+                        : 'There are no in-stock products to display right now.'
+              }
+              action={catalogError || offlineCatalogEmpty
+                ? <Button type="button" variant="secondary" icon={RotateCw} onClick={retryCatalog}>Retry loading</Button>
+                : (search || category !== 'All')
+                  ? <Button type="button" variant="ghost" onClick={() => { setSearch(''); setCategory('All'); }}>View all products</Button>
+                  : null}
+              className="my-8 rounded-[var(--radius-xl)] border border-dashed border-[var(--color-border)] bg-white px-5 py-12"
+            />
+          ) : (
+            <div className="grid grid-cols-2 gap-3 pb-4 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 2xl:grid-cols-5">
+              {filtered.map(product => {
+                const inCart = cart.items.find(item => item?.product?._id === product?._id);
+                const quantity = Number(product.quantity) || 0;
+                const lowStock = quantity <= (Number(product.lowStockThreshold) || 0);
+                const stockLabel = lowStock ? 'Low stock' : 'In stock';
+                return (
+                  <motion.button
+                    key={product._id}
+                    type="button"
+                    whileTap={{ scale: 0.985 }}
+                    onClick={() => {
+                      const result = cart.addItem(product);
+                      reportAddResult(product, result);
+                    }}
+                    aria-label={`Add ${product.name || 'product'} to cart, $${(Number(product.price) || 0).toFixed(2)}, ${quantity} in stock${inCart ? `, ${inCart.quantity} in cart` : ''}`}
+                    aria-pressed={Boolean(inCart)}
+                    className={`group relative min-w-0 overflow-hidden rounded-[var(--radius-lg)] border bg-white p-2.5 text-left shadow-[var(--shadow-sm)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)] sm:p-3 ${
+                      inCart
+                        ? 'border-[var(--color-gold)] ring-1 ring-[var(--color-gold-light)]'
+                        : 'border-[var(--color-border)] hover:border-[var(--color-gold-light)]'
+                    }`}
+                  >
+                    {inCart && (
+                      <span className="absolute right-3 top-3 z-10 flex h-7 min-w-7 items-center justify-center rounded-full bg-[var(--color-primary)] px-1.5 text-xs font-bold text-white shadow-[var(--shadow-md)]" aria-label={`${inCart.quantity} in cart`}>
+                        {inCart.quantity}
+                      </span>
+                    )}
+                    <ProductThumbnail product={product} />
+                    <div className="flex min-w-0 items-center justify-between gap-2 pt-3">
+                      <Badge variant="primary" className="max-w-[72%] truncate border border-[#eee5d5] bg-[#faf7f0] text-[10px] font-medium text-[#80622e]">
+                        {product.category || 'Other'}
+                      </Badge>
+                      <span className={`inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold ${lowStock ? 'text-[#946a22]' : 'text-[#5f6f63]'}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${lowStock ? 'bg-[var(--color-warning)]' : 'bg-[#7a927e]'}`} aria-hidden="true" />
+                        {stockLabel}
+                      </span>
                     </div>
-                  )}
-
-                  <div className="mb-2">
-                    <Badge variant="secondary" className="text-xs">
-                      {product.category || 'Other'}
-                    </Badge>
-                  </div>
-
-                  <p className="font-semibold text-sm text-gray-900 leading-tight mb-1 pr-6 line-clamp-2">
-                    {product.name}
-                  </p>
-
-                  {product.sku && <p className="text-xs text-gray-500 font-mono mb-2">{product.sku}</p>}
-
-                  <div className="flex items-end justify-between mt-2 pt-2 border-t border-gray-100">
-                    <p className="font-bold text-base text-emerald-600">${(product.price || 0).toFixed(2)}</p>
-                    <p
-                      className={`text-xs font-medium ${
-                        product.quantity <= product.lowStockThreshold ? 'text-red-600' : 'text-gray-500'
-                      }`}
-                    >
-                      {product.quantity} left
+                    <p className="mt-2 min-h-10 text-sm font-semibold leading-5 text-[var(--color-text)] line-clamp-2 sm:text-[15px]">
+                      {product.name || 'Unnamed product'}
                     </p>
-                  </div>
-                </motion.button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Bottom spacer for the sticky cart button */}
-        <div className="h-24" />
-      </div>
+                    {(product.sku || product.barcode) && (
+                      <p className="mt-1 truncate font-mono text-[10px] text-[var(--color-text-muted)]">
+                        {product.sku ? `SKU ${product.sku}` : `Barcode ${product.barcode}`}
+                      </p>
+                    )}
+                    <div className="mt-3 flex items-end justify-between gap-2 border-t border-[var(--color-border-light)] pt-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--color-text-muted)]">Price</p>
+                        <p className="truncate text-base font-semibold tabular-nums text-[var(--color-text)] sm:text-lg">
+                          ${(Number(product.price) || 0).toFixed(2)}
+                        </p>
+                      </div>
+                      <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium tabular-nums text-[var(--color-text-secondary)]">
+                        <Package size={13} aria-hidden="true" />
+                        {quantity}
+                      </span>
+                    </div>
+                    <span className="mt-2 flex min-h-8 items-center justify-center gap-1.5 rounded-md bg-[var(--color-bg)] text-xs font-semibold text-[var(--color-text-secondary)] transition group-hover:bg-[#f4eee3] group-hover:text-[#80622e]">
+                      <Plus size={14} aria-hidden="true" />
+                      {inCart ? 'Add another' : 'Add to cart'}
+                    </span>
+                  </motion.button>
+                );
+              })}
+            </div>
+          )}
+          <div className="h-24" />
+        </div>
+      </section>
 
       {/* ── Sticky cart button ─────────────────────────────────── */}
       {itemCount > 0 && (
-        <div className="sticky bottom-0 px-4 pb-4 bg-gradient-to-t from-white via-white to-transparent">
+        <div className="sticky bottom-0 z-10 border-t border-[var(--color-border)] bg-white/95 px-4 pb-[calc(env(safe-area-inset-bottom,0px)+1rem)] pt-3 backdrop-blur sm:px-6">
           <button
+            type="button"
             onClick={() => setCartOpen(true)}
-            className="w-full text-white py-4 rounded-lg flex items-center justify-between px-5 font-bold text-base shadow-lg hover:shadow-xl transition-shadow"
-            style={{ background: '#16a34a' }}
+            className="mx-auto flex min-h-12 w-full max-w-[1600px] items-center justify-between rounded-[var(--radius-md)] bg-[var(--color-primary)] px-4 py-3 text-sm font-semibold text-white shadow-[var(--shadow-md)] transition hover:bg-[var(--color-primary-light)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)] sm:px-5 sm:text-base"
           >
-            <div className="flex items-center gap-3">
-              <ShoppingCart size={20} />
-              <Badge variant="secondary" className="bg-white text-emerald-700 font-bold">
+            <div className="flex items-center gap-2.5">
+              <ShoppingCart size={19} aria-hidden="true" />
+              <Badge variant="primary" className="border border-white/20 bg-white/10 font-bold text-white">
                 {itemCount}
               </Badge>
             </div>
-            <span>View Cart</span>
-            <span className="text-emerald-100 font-mono">${(grandTotal || 0).toFixed(2)}</span>
+            <span>View cart</span>
+            <span className="font-mono tabular-nums text-[#e8d9bd]">${(grandTotal || 0).toFixed(2)}</span>
           </button>
         </div>
       )}
@@ -375,7 +530,28 @@ export default function POSPage() {
       )}
 
       {/* ── Barcode scanner modal (fixed) ────────────────────── */}
-      {scanning && <BarcodeScanner onResult={handleBarcode} onClose={() => setScanning(false)} />}
+      {scanning && <BarcodeScanner onResult={handleBarcode} onClose={closeScanner} />}
+    </div>
+  );
+}
+
+function ProductThumbnail({ product }) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  return (
+    <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-[var(--radius-md)] bg-[var(--color-bg-secondary)]">
+      {product.imageUrl && !imageFailed ? (
+        <img
+          src={product.imageUrl}
+          alt=""
+          loading="lazy"
+          onError={() => setImageFailed(true)}
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+        />
+      ) : (
+        <Package size={28} strokeWidth={1.4} className="text-[#b8a783]" aria-hidden="true" />
+      )}
+      <span className="pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-black/10 to-transparent" aria-hidden="true" />
     </div>
   );
 }
@@ -385,58 +561,51 @@ function BarcodeScanner({ onResult, onClose }) {
   const [error, setError] = useState(null);
   const [manualCode, setManualCode] = useState('');
   const scannerRef = useRef(null);
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const onResultRef = useRef(onResult);
+  onResultRef.current = onResult;
 
   useEffect(() => {
-    let html5QrCode = null;
+    closeButtonRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
+    let lifecycle = null;
 
     async function initScanner() {
       try {
         const { Html5Qrcode } = await import('html5-qrcode');
-
-        // Ensure DOM element exists
-        const element = document.getElementById('qr-reader');
+        if (!mounted) return;
+        const element = scannerRef.current;
         if (!element) throw new Error('Scanner container not found');
 
-        html5QrCode = new Html5Qrcode('qr-reader');
-
-        // Get available cameras
+        const html5QrCode = new Html5Qrcode(element.id);
+        lifecycle = createBarcodeScannerLifecycle(html5QrCode, {
+          onError: err => {
+            if (mounted) setError(err.message || 'Failed to start camera');
+          }
+        });
         const cameras = await Html5Qrcode.getCameras();
+        if (!mounted) return;
         if (!cameras || cameras.length === 0) {
           toast.error('No camera found on this device');
-          if (mounted) setError('No camera available');
+          setError('No camera available');
           return;
         }
 
-        // Prefer rear/back camera on phones
         const backCamera = cameras.find(
-          (c) =>
-            c.label.toLowerCase().includes('back') ||
-            c.label.toLowerCase().includes('rear')
+          camera => /back|rear/i.test(camera.label || '')
         ) || cameras[0];
 
-        // Small delay to ensure DOM is ready
-        setTimeout(async () => {
-          if (!mounted) return;
-          try {
-            await html5QrCode.start(
-              backCamera.id,
-              {
-                fps: 10,
-                qrbox: { width: 250, height: 120 },
-                aspectRatio: 1.777
-              },
-              (decodedText) => {
-                html5QrCode.stop().catch(console.error);
-                if (mounted) onResult(decodedText);
-              },
-              () => {} // ignore scanning errors
-            );
-          } catch (err) {
-            console.error('Start error:', err);
-            if (mounted) setError(err.message || 'Failed to start camera');
-          }
-        }, 300);
+        lifecycle.scheduleStart(backCamera.id, {
+          fps: 10,
+          qrbox: { width: 250, height: 120 },
+          aspectRatio: 1.777
+        }, decodedText => {
+          if (mounted) onResultRef.current(decodedText);
+        });
       } catch (err) {
         console.error('Init error:', err);
         if (mounted) setError(err.message || 'Could not access camera');
@@ -447,11 +616,9 @@ function BarcodeScanner({ onResult, onClose }) {
 
     return () => {
       mounted = false;
-      if (html5QrCode && typeof html5QrCode.stop === 'function') {
-        html5QrCode.stop().catch(console.error);
-      }
+      if (lifecycle) lifecycle.close();
     };
-  }, [onResult]);
+  }, []);
 
   const handleManualSubmit = (e) => {
     e.preventDefault();
@@ -461,17 +628,57 @@ function BarcodeScanner({ onResult, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#151515]/75 p-3 backdrop-blur-sm sm:p-4" onMouseDown={event => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-xl p-4 w-full max-w-sm shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="barcode-dialog-title"
+        aria-describedby="barcode-dialog-description"
+        ref={dialogRef}
+        onKeyDown={event => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose();
+            return;
+          }
+          if (event.key !== 'Tab' || !dialogRef.current) return;
+          const focusable = Array.from(dialogRef.current.querySelectorAll(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )).filter(element => element.tabIndex >= 0 && element.getAttribute('aria-hidden') !== 'true');
+          if (focusable.length === 0) {
+            event.preventDefault();
+            return;
+          }
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (event.shiftKey && (document.activeElement === first || !dialogRef.current.contains(document.activeElement))) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && (document.activeElement === last || !dialogRef.current.contains(document.activeElement))) {
+            event.preventDefault();
+            first.focus();
+          }
+        }}
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-white p-4 shadow-[var(--shadow-xl)] sm:p-5"
       >
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="font-bold text-lg text-gray-900">Scan Barcode / QR</h3>
+        <p id="barcode-dialog-description" className="sr-only">
+          Scan a product barcode with the camera or enter a barcode or SKU manually.
+        </p>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#927746]">Product lookup</p>
+            <h3 id="barcode-dialog-title" className="mt-1 text-lg font-semibold text-[var(--color-text)]">Scan barcode</h3>
+          </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition flex items-center justify-center"
+            ref={closeButtonRef}
+            aria-label="Close barcode scanner"
+            className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border)] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-bg-secondary)] focus-visible:outline-none focus-visible:shadow-[var(--focus-ring)]"
           >
             <X size={18} />
           </button>
@@ -479,19 +686,20 @@ function BarcodeScanner({ onResult, onClose }) {
 
         {error ? (
           <div className="text-center p-6">
-            <p className="text-red-600 text-sm mb-4 font-medium">{error}</p>
-            <p className="text-gray-600 text-xs mb-3">Enter the barcode manually:</p>
+            <p role="alert" className="mb-4 text-sm font-medium text-[var(--color-danger)]">{error}</p>
+            <p className="mb-3 text-xs text-[var(--color-text-secondary)]">Enter the barcode or SKU manually:</p>
             <form onSubmit={handleManualSubmit} className="flex gap-2">
               <input
                 type="text"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
-                placeholder="Enter barcode / SKU"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+                placeholder="Barcode or SKU"
+                aria-label="Enter barcode or SKU"
+                className="h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 text-sm outline-none transition focus:border-[var(--color-gold)] focus:shadow-[var(--focus-ring)]"
                 autoFocus
               />
               <Button type="submit" variant="primary" size="sm">
-                Add
+                Find
               </Button>
             </form>
           </div>
@@ -500,24 +708,24 @@ function BarcodeScanner({ onResult, onClose }) {
             {/* Fixed scanner container with black background and min height */}
             <div
               id="qr-reader"
-              className="rounded-lg overflow-hidden bg-black"
-              style={{ width: '100%', minHeight: '300px' }}
+              className="min-h-[240px] overflow-hidden rounded-[var(--radius-md)] bg-[var(--color-primary)] sm:min-h-[300px]"
               ref={scannerRef}
             />
-            <p className="text-xs text-center text-gray-600 mt-3 font-medium">
+            <p className="mt-3 text-center text-xs font-medium text-[var(--color-text-secondary)]">
               Position the barcode inside the frame
             </p>
-            <p className="text-xs text-center text-gray-500 mt-2">Or enter manually:</p>
-            <form onSubmit={handleManualSubmit} className="flex gap-2 mt-3">
+            <p className="mt-2 text-center text-xs text-[var(--color-text-muted)]">Or enter a barcode or SKU:</p>
+            <form onSubmit={handleManualSubmit} className="mt-3 flex gap-2">
               <input
                 type="text"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
-                placeholder="Enter barcode / SKU"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
+                placeholder="Barcode or SKU"
+                aria-label="Enter barcode or SKU"
+                className="h-11 min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 text-sm outline-none transition focus:border-[var(--color-gold)] focus:shadow-[var(--focus-ring)]"
               />
               <Button type="submit" variant="primary" size="sm">
-                Add
+                Find
               </Button>
             </form>
           </>
