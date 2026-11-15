@@ -48,7 +48,7 @@ export default function ProductsPage(){
   {manage&&<Sheet open={Boolean(removing)} title="Remove product?" subtitle="This item will be hidden from the active catalogue." onClose={()=>setRemoving(null)} maxH="auto"><div className="space-y-4 p-5"><p className="rounded-xl bg-[#fff7f5] p-3 text-sm text-[var(--color-text-secondary)]"><strong>{removing?.name}</strong> will be soft-deleted. Existing invoice records are not deleted.</p><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="secondary" onClick={()=>setRemoving(null)}>Keep product</Button><Button variant="danger" loading={del.isPending} onClick={()=>removing&&del.mutate(removing._id)}><Trash2 size={15}/>Remove product</Button></div></div></Sheet>}
  </main>;
 }
-function Field({id,label,error,children,hint}){return <div className="space-y-1.5"><label htmlFor={id} className="block text-xs font-semibold text-[var(--color-text-secondary)]">{label}</label>{children}{error&&<p className="text-xs text-[var(--color-danger)]">{error}</p>}{!error&&hint&&<p className="text-[11px] text-[var(--color-text-muted)]">{hint}</p>}</div>;}
+
 function ProductForm({product,onClose,onSaved}){
  const editing=Boolean(product),{can}=useRole();
  const{suppliers,isLoading:supplierLoading,isError:supplierError}=useQuery({queryKey:['suppliers'],queryFn:async()=>{const{data}=await api.get('/suppliers');return Array.isArray(data?.data)?data.data:[];},enabled:can.editProducts,staleTime:60000});
