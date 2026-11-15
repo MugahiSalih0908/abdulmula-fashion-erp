@@ -31,3 +31,8 @@ Thumbs.db
 
 # Cache
 .cache/
+# Local frontend environment
+frontend/.env.local
+
+# Local VS Code settings
+.vscode/
