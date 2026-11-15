@@ -84,7 +84,7 @@ router.post('/', authorize('admin'), async (req, res, next) => {
 
     // Build activation URL
     const activationUrl = `${process.env.FRONTEND_URL}/activate/${rawToken}`;
-    console.log('ACTIVATION URL:', activationUrl);
+    // Never log raw verification tokens or activation URLs.
     const tmpl          = templates.welcome({ name: member.name, role: member.role, tempPassword, activationUrl });
 
     // Send welcome email
