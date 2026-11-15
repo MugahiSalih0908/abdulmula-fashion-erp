@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Activity, BarChart3, BookOpen, ChevronRight, ClipboardList,
+  Activity, Archive, BarChart3, BookOpen, ChevronRight, ClipboardList,
   LayoutDashboard, LogOut, Menu, Package, PanelLeftClose,
   PanelLeftOpen, Settings, ShieldCheck, ShoppingCart, Truck, UserCog, Users,
   Wallet, Wifi, WifiOff, X
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/pos', label: 'POS', icon: ShoppingCart },
   { to: '/products', label: 'Products', icon: Package, permission: 'viewProducts' },
+  { to: '/out-of-stock', label: 'Out of Stock', icon: Archive, permission: 'viewProducts' },
   { to: '/customers', label: 'Customers', icon: Users },
   { to: '/suppliers', label: 'Suppliers', icon: Truck, permission: 'viewSuppliers' },
   { to: '/purchase-orders', label: 'Purchase Orders', icon: ClipboardList, permission: 'viewPOs' },
