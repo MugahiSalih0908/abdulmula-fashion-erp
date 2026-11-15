@@ -1,0 +1,7 @@
+const test=require('node:test');const assert=require('node:assert/strict');const{validateProductPayload}=require('./productValidation');const valid={name:'Polo Shirt',category:'Men',price:12.5,costPrice:7,quantity:10,lowStockThreshold:3};
+test('accepts zero stock and threshold',()=>assert.equal(validateProductPayload({...valid,quantity:0,lowStockThreshold:0}),null));
+test('rejects invalid required fields',()=>{assert.equal(validateProductPayload({...valid,name:' '}).field,'name');assert.equal(validateProductPayload({...valid,price:-1}).field,'price');assert.equal(validateProductPayload({...valid,category:'bad'}).field,'category');});
+test('rejects fractional and negative stock',()=>{for(const quantity of [1.5,-1,'Infinity',''])assert.equal(validateProductPayload({...valid,quantity}).field,'quantity');});
+test('rejects fractional alert thresholds',()=>assert.equal(validateProductPayload({...valid,lowStockThreshold:1.5}).field,'lowStockThreshold'));
+test('validates safe image URLs',()=>{assert.equal(validateProductPayload({...valid,imageUrl:'https://cdn.example/a.jpg'}),null);assert.equal(validateProductPayload({...valid,imageUrl:'javascript:1'}).field,'imageUrl');});
+test('partial update only validates supplied fields',()=>{assert.equal(validateProductPayload({quantity:3},{partial:true}),null);assert.equal(validateProductPayload({quantity:3.5},{partial:true}).field,'quantity');});
