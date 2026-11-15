@@ -11,11 +11,12 @@ const { validateProductPayload } = require('../utils/productValidation');
 // GET – all authenticated users (staff need product list for POS)
 router.get('/', protect, async (req, res, next) => {
   try {
-    const { search, category, lowStock, page = 1, limit = 500 } = req.query;
+    const { search, category, lowStock, outOfStock, page = 1, limit = 500 } = req.query;
     const filter = { isDeleted: false };
     if (search) filter.$text = { $search: search };
     if (category && category !== 'all') filter.category = category;
-    if (lowStock === 'true') filter.$expr = { $lte: ['$quantity', '$lowStockThreshold'] };
+    if (outOfStock === 'true') filter.quantity = 0;
+    if (lowStock === 'true') filter.$expr = { $and: [{ $gt: ['$quantity', 0] }, { $lte: ['$quantity', '$lowStockThreshold'] }] };
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [products, total] = await Promise.all([

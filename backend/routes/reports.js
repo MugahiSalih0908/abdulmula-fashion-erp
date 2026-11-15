@@ -64,7 +64,7 @@ router.get('/inventory', async (req, res, next) => {
   try {
     const [total, lowStock, deadStock, valueAgg] = await Promise.all([
       Product.countDocuments({ isDeleted:false }),
-      Product.find({ isDeleted:false, $expr:{ $lte:['$quantity','$lowStockThreshold'] } }).sort({ quantity:1 }).limit(20),
+      Product.find({ isDeleted:false, $expr:{ $and:[{ $gt:['$quantity',0] },{ $lte:['$quantity','$lowStockThreshold'] }] } }).sort({ quantity:1 }).limit(20),
       Product.find({ isDeleted:false, quantity:0 }).sort({ updatedAt:1 }).limit(20),
       Product.aggregate([{ $match:{ isDeleted:false } }, { $group:{ _id:null, atCost:{ $sum:{ $multiply:['$costPrice','$quantity'] } }, atRetail:{ $sum:{ $multiply:['$price','$quantity'] } } } }])
     ]);
