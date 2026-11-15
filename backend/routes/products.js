@@ -6,6 +6,7 @@ const Product       = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
 const { protect, authorize } = require('../middleware/auth');
 const { log } = require('../utils/auditLogger');
+const { validateProductPayload } = require('../utils/productValidation');
 
 // GET – all authenticated users (staff need product list for POS)
 router.get('/', protect, async (req, res, next) => {
@@ -47,11 +48,13 @@ router.get('/:id', protect, async (req, res, next) => {
 // POST/PUT/DELETE – admin + manager only
 router.post('/', protect, authorize('admin','manager'), async (req, res, next) => {
   try {
-    const { name, sku, barcode, price, costPrice, quantity, category, description, size, color, lowStockThreshold, supplier } = req.body;
+    const validationError = validateProductPayload(req.body);
+    if (validationError) return res.status(400).json({ success: false, message: validationError.message, field: validationError.field });
+    const { name, sku, barcode, price, costPrice, quantity, category, description, size, color, lowStockThreshold, supplier, imageUrl } = req.body;
     const product = await Product.create({
-      name, sku, barcode, price, costPrice: costPrice||0, quantity: quantity||0,
-      category, description, size, color, lowStockThreshold: lowStockThreshold||5,
-      supplier: supplier||undefined, createdBy: req.user._id
+      name, sku, barcode, price, costPrice: costPrice ?? 0, quantity: quantity ?? 0,
+      category, description, size, color, imageUrl, lowStockThreshold: lowStockThreshold ?? 5,
+      supplier: supplier || undefined, createdBy: req.user._id
     });
     if (quantity > 0) {
       await StockMovement.create({ product: product._id, type:'opening', quantity, before:0, after:quantity, note:'Opening stock', performedBy: req.user._id });
@@ -63,13 +66,15 @@ router.post('/', protect, authorize('admin','manager'), async (req, res, next) =
 
 router.put('/:id', protect, authorize('admin','manager'), async (req, res, next) => {
   try {
+    const validationError = validateProductPayload(req.body, { partial: true });
+    if (validationError) return res.status(400).json({ success: false, message: validationError.message, field: validationError.field });
     const before = await Product.findOne({ _id: req.params.id, isDeleted: false });
     if (!before) return res.status(404).json({ success: false, message: 'Product not found.' });
-    const { name, sku, barcode, price, costPrice, quantity, category, description, size, color, lowStockThreshold, supplier } = req.body;
-    const qtyDiff = quantity !== undefined ? quantity - before.quantity : 0;
+    const { name, sku, barcode, price, costPrice, quantity, category, description, size, color, lowStockThreshold, supplier, imageUrl } = req.body;
+    const qtyDiff = quantity !== undefined ? Number(quantity) - before.quantity : 0;
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
-      { name, sku, barcode, price, costPrice, quantity, category, description, size, color, lowStockThreshold, supplier },
+      { name, sku, barcode, price, costPrice, quantity, category, description, size, color, imageUrl, lowStockThreshold, supplier },
       { new:true, runValidators:true }
     );
     if (qtyDiff !== 0) {

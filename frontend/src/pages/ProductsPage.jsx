@@ -1,389 +1,80 @@
-// src/pages/ProductsPage.jsx – v5 role-aware (staff = view only)
+import{useMemo,useState}from'react';
+import{useMutation,useQuery,useQueryClient}from'@tanstack/react-query';
+import{useForm}from'react-hook-form';
+import{motion}from'framer-motion';
+import toast from'react-hot-toast';
+import{AlertTriangle,Archive,BarChart3,Image as ImageIcon,Layers3,Package,Pencil,Plus,RefreshCw,Search,ShieldAlert,Trash2,TrendingDown,X}from'lucide-react';
+import api from'../services/api';
+import{useRole}from'../hooks/useRole';
+import useSettingsStore from'../store/settingsStore';
+import PageHeader from'../components/ui/PageHeader';
+import Sheet from'../components/ui/Sheet';
+import Button from'../components/ui/Button';
+import Card from'../components/ui/Card';
+import CardBody from'../components/ui/CardBody';
+import Badge from'../components/ui/Badge';
+import{PRODUCT_CATEGORIES,filterProducts,getProductPayloadErrors,getSafeProductImageUrl,getStockStatus,normalizeProductPayload,summarizeProducts}from'./productManagement.mjs';
 
-import { useState }                          from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm, useFieldArray }            from 'react-hook-form';
-import { motion, AnimatePresence }           from 'framer-motion';
-import toast                                 from 'react-hot-toast';
-import api                                   from '../services/api';
-import { useRole }                           from '../hooks/useRole';
-import PageHeader from '../components/ui/PageHeader';
-import Sheet      from '../components/ui/Sheet';
-import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
-import CardBody from '../components/ui/CardBody';
-import Badge from '../components/ui/Badge';
-import { Plus, Search, Pencil, Trash2, BarChart3, X, AlertTriangle, Package, Eye, TrendingUp } from 'lucide-react';
+const input='w-full min-h-11 rounded-xl border border-[var(--color-border)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-gold)] focus:outline-none focus:ring-2 focus:ring-[rgba(197,164,109,0.2)]';
+const stockFilters=[['all','All stock'],['low','Low stock'],['out','Out of stock'],['healthy','Healthy']];
+const money=(v,fmt)=>fmt(Number.isFinite(Number(v))?Number(v):0);
+function Field({id,label,error,children,hint}){return <div className="min-w-0 space-y-1.5"><label htmlFor={id} className="block text-xs font-semibold text-[var(--color-text-secondary)]">{label}</label>{children}{error&&<p role="alert" className="text-xs text-[var(--color-danger)]">{error}</p>}{!error&&hint&&<p className="text-[11px] text-[var(--color-text-muted)]">{hint}</p>}</div>;}
+function Metric({label,value,detail,Icon,tone}){return <Card className="kpi-card min-w-0"><CardBody className="p-4 sm:p-5"><span className={\`kpi-icon \${tone}\`}><Icon aria-hidden="true"/></span><p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">{label}</p><p className="mt-1.5 text-2xl font-semibold tabular-nums text-[var(--color-text)]">{value}</p><p className="mt-1 text-xs text-[var(--color-text-muted)]">{detail}</p></CardBody></Card>;}
+function StockBadge({product}){const s=getStockStatus(product),v={healthy:['success','In stock'],low:['warning','Low stock'],out:['danger','Out of stock'],invalid:['danger','Check quantity']}[s];return <Badge variant={v[0]}>{v[1]}</Badge>;}
+function ProductCard({p,fmt,manage,onEdit,onHistory,onDelete,pending}){const url=getSafeProductImageUrl(p.imageUrl),s=getStockStatus(p),tone={healthy:'text-[var(--color-success)]',low:'text-[var(--color-warning)]',out:'text-[var(--color-danger)]',invalid:'text-[var(--color-danger)]'}[s];return <motion.article layout initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}><Card className="h-full overflow-hidden transition hover:-translate-y-0.5 hover:border-[var(--color-gold-light)] hover:shadow-md"><CardBody className="flex h-full flex-col gap-3 p-3.5 sm:p-4">{url?<div className="h-28 overflow-hidden rounded-xl bg-[var(--color-bg-secondary)] sm:h-32"><img src={url} alt={p.name} loading="lazy" className="h-full w-full object-cover" onError={e=>{e.currentTarget.style.display='none';}}/></div>:<div className="flex h-28 items-center justify-center rounded-xl bg-[var(--color-bg-secondary)] text-[#a69a84] sm:h-32"><ImageIcon size={28}/></div>}<div className="flex items-start justify-between gap-2"><div className="min-w-0"><h2 className="truncate text-sm font-semibold text-[var(--color-text)] sm:text-base">{p.name}</h2><div className="mt-1.5 flex flex-wrap gap-1.5"><Badge>{p.category}</Badge>{p.sku&&<span className="rounded-lg bg-[var(--color-bg-secondary)] px-2 py-1 font-mono text-[10px] text-[var(--color-text-secondary)]">{p.sku}</span>}</div></div><StockBadge product={p}/></div>{(p.size||p.color||p.barcode)&&<p className="truncate text-xs text-[var(--color-text-muted)]">{[p.size&&\`Size \${p.size}\`,p.color,p.barcode&&\`Barcode \${p.barcode}\`].filter(Boolean).join(' · ')}</p>}<div className="mt-auto flex items-end justify-between gap-2 border-t border-[var(--color-border-light)] pt-3"><div><p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Selling price</p><p className="mt-0.5 text-lg font-semibold tabular-nums text-[var(--color-text)]">{money(p.price,fmt)}</p><p className={\`mt-0.5 text-xs font-medium \${tone}\`}>{Number(p.quantity).toLocaleString()} units available</p></div>{manage&&<div className="flex gap-0.5"><button type="button" aria-label="Stock history" title="Stock history" onClick={()=>onHistory(p)} className="min-h-10 min-w-10 rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]"><BarChart3 size={17}/></button><button type="button" aria-label="Edit product" title="Edit product" onClick={()=>onEdit(p)} className="min-h-10 min-w-10 rounded-xl text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]"><Pencil size={17}/></button><button type="button" aria-label="Remove product" title="Remove product" disabled={pending} onClick={()=>onDelete(p)} className="min-h-10 min-w-10 rounded-xl text-[var(--color-danger)] hover:bg-[var(--color-bg-secondary)] disabled:opacity-40"><Trash2 size={17}/></button></div>}</div></CardBody></Card></motion.article>;}
 
-const CATEGORIES = ['Men','Women','Girls','Boys','Kids','Sudanese Silk Toub Wraps','Accessories','Other'];
-
-export default function ProductsPage() {
-  const [search,   setSearch]   = useState('');
-  const [category, setCategory] = useState('All');
-  const [showForm, setShowForm] = useState(false);
-  const [editProd, setEditProd] = useState(null);
-  const [movements, setMovements] = useState(null);
-  const { can } = useRole();
-  const queryClient = useQueryClient();
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['products', search, category],
-    queryFn:  async () => {
-      const params = new URLSearchParams({ limit:500 });
-      if (search)             params.set('search',   search);
-      if (category !== 'All') params.set('category', category);
-      const { data } = await api.get(`/products?${params}`);
-      return data.data;
-    },
-    staleTime: 30000,
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id) => api.delete(`/products/${id}`),
-    onSuccess:  () => { queryClient.invalidateQueries(['products']); toast.success('Product removed.'); },
-    onError:    (e) => toast.error(e?.response?.data?.message || 'Delete failed.'),
-  });
-
-  const products      = data || [];
-  const lowStockCount = products.filter(p => p.quantity <= p.lowStockThreshold).length;
-
-  const openEdit = (p) => { setEditProd(p); setShowForm(true); };
-  const openAdd  = ()  => { setEditProd(null); setShowForm(true); };
-
-  return (
-    <div className="p-4 space-y-5">
-      <PageHeader
-        title="Products"
-        sub={`${products.length} items in stock`}
-        action={
-          can.editProducts ? (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={openAdd}
-              className="flex items-center gap-1.5"
-            >
-              <Plus size={16} /> Add
-            </Button>
-          ) : (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Eye size={14} /> View only
-            </Badge>
-          )
-        }
-      />
-
-      {lowStockCount > 0 && (
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-          <AlertTriangle size={16} className="text-amber-600 shrink-0" />
-          <span className="text-amber-800 text-sm font-medium">
-            {lowStockCount} item(s) running low on stock
-          </span>
-        </div>
-      )}
-
-      {/* Search */}
-      <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name, SKU, barcode…"
-          className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition bg-white"
-        />
-      </div>
-
-      {/* Category pills */}
-      <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-        {['All', ...CATEGORIES].map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setCategory(cat)}
-            className={`shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${
-              category === cat
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* List */}
-      {isLoading ? (
-        <div className="space-y-3">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-20 bg-gray-200 rounded-lg animate-pulse" />
-          ))}
-        </div>
-      ) : products.length === 0 ? (
-        <div className="text-center py-16">
-          <Package size={48} className="mx-auto mb-3 text-gray-300" />
-          <p className="font-semibold text-gray-500">No products found</p>
-          {can.editProducts && <p className="text-xs text-gray-400 mt-1">Add your first product to get started</p>}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {products.map((p) => (
-            <motion.div key={p._id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Card>
-                <CardBody className="p-4">
-                  <div className="flex items-center gap-3">
-                    {/* Stock indicator */}
-                    <div
-                      className={`w-3 h-3 rounded-full shrink-0 ${
-                        p.quantity === 0
-                          ? 'bg-red-500'
-                          : p.quantity <= p.lowStockThreshold
-                          ? 'bg-amber-500'
-                          : 'bg-emerald-500'
-                      }`}
-                      title={p.quantity === 0 ? 'Out of stock' : p.quantity <= p.lowStockThreshold ? 'Low stock' : 'In stock'}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-900 truncate">{p.name}</p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <Badge variant="secondary" className="text-xs">
-                          {p.category}
-                        </Badge>
-                        {p.sku && (
-                          <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                            {p.sku}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-bold text-emerald-600">${p.price.toFixed(2)}</p>
-                      <p
-                        className={`text-xs font-medium ${
-                          p.quantity === 0
-                            ? 'text-red-600'
-                            : p.quantity <= p.lowStockThreshold
-                            ? 'text-amber-600'
-                            : 'text-gray-500'
-                        }`}
-                      >
-                        {p.quantity} in stock
-                      </p>
-                    </div>
-                    {can.editProducts && (
-                      <div className="flex gap-1 shrink-0">
-                        <button
-                          onClick={() => setMovements(p)}
-                          className="p-2 text-gray-400 hover:text-emerald-600 rounded-lg transition"
-                          title="View stock history"
-                        >
-                          <BarChart3 size={16} />
-                        </button>
-                        <button
-                          onClick={() => openEdit(p)}
-                          className="p-2 text-gray-400 hover:text-blue-600 rounded-lg transition"
-                          title="Edit product"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Remove "${p.name}"?`)) deleteMutation.mutate(p._id);
-                          }}
-                          className="p-2 text-gray-400 hover:text-red-600 rounded-lg transition disabled:opacity-50"
-                          disabled={deleteMutation.isPending}
-                          title="Delete product"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </CardBody>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-      )}
-
-      <div className="h-4" />
-
-      {/* Product Form Sheet */}
-      {can.editProducts && (
-        <Sheet open={showForm} title={editProd ? 'Edit Product' : 'Add Product'} onClose={() => { setShowForm(false); setEditProd(null); }}>
-          <ProductForm product={editProd} onClose={() => { setShowForm(false); setEditProd(null); }}
-                       onSaved={() => { queryClient.invalidateQueries(['products']); setShowForm(false); setEditProd(null); }}/>
-        </Sheet>
-      )}
-
-      {/* Stock movements sheet */}
-      <Sheet open={!!movements} title="Stock History" subtitle={movements?.name} onClose={() => setMovements(null)}>
-        {movements && <MovementsView productId={movements._id}/>}
-      </Sheet>
-    </div>
-  );
+export default function ProductsPage(){
+ const[search,setSearch]=useState(''),[category,setCategory]=useState('All'),[stock,setStock]=useState('all'),[formOpen,setFormOpen]=useState(false),[editing,setEditing]=useState(null),[history,setHistory]=useState(null),[removing,setRemoving]=useState(null);
+ const{can}=useRole(),manage=can.editProducts,fmt=useSettingsStore(s=>s.fmt),qc=useQueryClient();
+ const{data:response,isLoading,isError,error,refetch,isFetching}=useQuery({queryKey:['products'],queryFn:async()=>{const{data}=await api.get('/products?limit=500');return{items:Array.isArray(data?.data)?data.data:[],total:Number.isFinite(Number(data?.total))?Number(data.total):(data?.data?.length||0)};},staleTime:30000});
+ const products=response?.items||[],total=response?.total??products.length;
+ const summary=useMemo(()=>summarizeProducts(products,total),[products,total]);
+ const filtered=useMemo(()=>filterProducts(products,search,category,stock),[products,search,category,stock]);
+ const del=useMutation({mutationFn:id=>api.delete(\`/products/\${id}\`),onSuccess:()=>{qc.invalidateQueries({queryKey:['products']});toast.success('Product removed from active inventory.');setRemoving(null);},onError:e=>toast.error(e?.response?.data?.message||'Could not remove product.')});
+ const create=()=>{setEditing(null);setFormOpen(true);},edit=p=>{setEditing(p);setFormOpen(true);},close=()=>{setFormOpen(false);setEditing(null);};
+ return <main className="space-y-5 p-4 pb-8 sm:space-y-6 sm:p-6 lg:p-7">
+  <PageHeader title="Product management" sub="Manage your catalogue, pricing and stock levels" action={manage?<Button onClick={create}><Plus size={16}/>Add product</Button>:<Badge variant="info">View only access</Badge>}/>
+  {isError&&<div className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-[#fff7f5] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-start gap-3"><ShieldAlert className="mt-0.5 text-[var(--color-danger)]" size={19}/><div><p className="text-sm font-semibold">Products could not be loaded</p><p className="mt-1 text-xs text-[var(--color-text-muted)]">{error?.response?.data?.message||error?.message||'Check your connection and try again.'}</p></div></div><Button variant="secondary" size="sm" onClick={()=>refetch()} loading={isFetching}><RefreshCw size={14}/>Try again</Button></div>}
+  {!isError&&total>products.length&&<div className="flex gap-2 rounded-xl border border-[var(--color-gold-light)] bg-[#fbf8f1] p-3 text-xs text-[var(--color-text-secondary)]"><AlertTriangle size={15} className="shrink-0"/><span>Showing the first {products.length} of {total} products. Stock summaries below reflect loaded products.</span></div>}
+  <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Inventory summary"><Metric label="Products" value={summary.productCount.toLocaleString()} detail="Active catalogue items" Icon={Package} tone="kpi-icon-gold"/><Metric label="Units on hand" value={summary.unitsOnHand.toLocaleString()} detail="Physical stock recorded" Icon={Layers3} tone="kpi-icon-green"/><Metric label="Low stock" value={summary.lowStockCount.toLocaleString()} detail="At or below alert level" Icon={TrendingDown} tone="kpi-icon-gold"/><Metric label="Out of stock" value={summary.outOfStockCount.toLocaleString()} detail="Items needing restock" Icon={Archive} tone="kpi-icon-red"/></section>
+  {!isError&&summary.inventoryCostValue>0&&<div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--color-border)] bg-white px-4 py-3"><span className="text-sm text-[var(--color-text-secondary)]">{total>products.length?'Loaded inventory value at cost':'Inventory value at cost'}</span><strong className="font-semibold tabular-nums">{money(summary.inventoryCostValue,fmt)}</strong></div>}
+  <section className="space-y-3" aria-label="Catalogue filters"><div className="relative"><Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]"/><input value={search} onChange={e=>setSearch(e.target.value)} type="search" placeholder="Search product, SKU, barcode, size or colour…" aria-label="Search products" className={\`\${input} min-h-12 pl-10 pr-10\`}/>{search&&<button type="button" aria-label="Clear search" onClick={()=>setSearch('')} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg"><X size={16}/></button>}</div>
+   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="no-scrollbar flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter by category">{['All',...PRODUCT_CATEGORIES].map(c=><button type="button" key={c} aria-pressed={category===c} onClick={()=>setCategory(c)} className={\`min-h-10 shrink-0 rounded-full border px-3.5 text-xs font-semibold \${category===c?'border-[var(--color-primary)] bg-[var(--color-primary)] text-white':'border-[var(--color-border)] bg-white text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-secondary)]'}\`}>{c}</button>)}</div><div className="flex flex-wrap gap-1 rounded-xl border border-[var(--color-border)] bg-white p-1" role="group" aria-label="Filter by stock status">{stockFilters.map(([v,l])=><button type="button" key={v} aria-pressed={stock===v} onClick={()=>setStock(v)} className={\`min-h-8 rounded-lg px-2.5 text-[11px] font-semibold \${stock===v?'bg-[#f4eee3] text-[#70582e]':'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-secondary)]'}\`}>{l}</button>)}</div></div></section>
+  <section className="space-y-3" aria-label="Product results"><div className="flex items-center justify-between"><div><h2 className="text-sm font-semibold">Catalogue</h2><p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{filtered.length} products shown</p></div>{isFetching&&!isLoading&&<span className="text-xs text-[var(--color-text-muted)]">Updating…</span>}</div>
+   {isLoading?<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{[...Array(6)].map((_,i)=><div key={i} className="h-64 animate-pulse rounded-2xl border bg-white p-3"><div className="h-28 rounded-xl bg-[var(--color-bg-secondary)]"/><div className="mt-4 h-4 w-2/3 rounded bg-[var(--color-bg-secondary)]"/><div className="mt-3 h-3 w-1/3 rounded bg-[var(--color-bg-secondary)]"/></div>)}</div>:isError?null:filtered.length===0?<div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white px-5 py-14 text-center"><Package size={25} className="mx-auto text-[#8a6a37]"/><h3 className="mt-4 text-sm font-semibold">{products.length?'No matching products':'Your catalogue is ready for its first product'}</h3><p className="mt-1 text-xs text-[var(--color-text-muted)]">{products.length?'Try another search or clear your filters.':'Add an item to organise its price and stock.'}</p><div className="mt-4 flex justify-center gap-2">{(search||category!=='All'||stock!=='all')&&<Button variant="secondary" size="sm" onClick={()=>{setSearch('');setCategory('All');setStock('all');}}>Clear filters</Button>}{manage&&!products.length&&<Button size="sm" onClick={create}><Plus size={15}/>Add product</Button>}</div></div>:<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{filtered.map(p=><ProductCard key={p._id} p={p} fmt={fmt} manage={manage} onEdit={edit} onHistory={setHistory} onDelete={setRemoving} pending={del.isPending}/>)}</div>}
+  </section>
+  {manage&&<Sheet open={formOpen} title={editing?'Edit product':'Add a product'} subtitle="Product details, pricing and opening stock" onClose={close} maxH="94dvh"><ProductForm key={editing?._id||'new'} product={editing} onClose={close} onSaved={async()=>{await qc.invalidateQueries({queryKey:['products']});close();}}/></Sheet>}
+  {manage&&<Sheet open={Boolean(history)} title="Stock movement history" subtitle={history?.name} onClose={()=>setHistory(null)} maxH="88dvh">{history&&<Movements productId={history._id}/>}</Sheet>}
+  {manage&&<Sheet open={Boolean(removing)} title="Remove product?" subtitle="This item will be hidden from the active catalogue." onClose={()=>setRemoving(null)} maxH="auto"><div className="space-y-4 p-5"><p className="rounded-xl bg-[#fff7f5] p-3 text-sm text-[var(--color-text-secondary)]"><strong>{removing?.name}</strong> will be soft-deleted. Existing invoice records are not deleted.</p><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="secondary" onClick={()=>setRemoving(null)}>Keep product</Button><Button variant="danger" loading={del.isPending} onClick={()=>removing&&del.mutate(removing._id)}><Trash2 size={15}/>Remove product</Button></div></div></Sheet>}
+ </main>;
 }
-
-function ProductForm({ product, onClose, onSaved }) {
-  const isEdit = !!product;
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
-    defaultValues: product || { lowStockThreshold: 5, quantity: 0, costPrice: 0 }
-  });
-  const onSubmit = async (data) => {
-    try {
-      if (isEdit) { await api.put(`/products/${product._id}`, data); toast.success('Product updated.'); }
-      else        { await api.post('/products', data);               toast.success('Product added.'); }
-      onSaved();
-    } catch (e) { toast.error(e?.response?.data?.message || 'Save failed.'); }
-  };
-  return (
-    <form id="prodForm" onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Product Name *</label>
-        <input
-          {...register('name', { required: 'Name required' })}
-          className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-          placeholder="e.g. Men's Polo Shirt"
-        />
-        {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Selling Price ($)*</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            {...register('price', { required: true, valueAsNumber: true })}
-            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-            placeholder="0.00"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Cost Price ($)</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            {...register('costPrice', { valueAsNumber: true })}
-            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-            placeholder="0.00"
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Quantity *</label>
-          <input
-            type="number"
-            min="0"
-            {...register('quantity', { required: true, valueAsNumber: true })}
-            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Low Stock Alert</label>
-          <input
-            type="number"
-            min="0"
-            {...register('lowStockThreshold', { valueAsNumber: true })}
-            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-            placeholder="5"
-          />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Category *</label>
-          <select
-            {...register('category', { required: true })}
-            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-          >
-            <option value="">— Select —</option>
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">SKU</label>
-          <input
-            {...register('sku')}
-            className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition font-mono uppercase"
-            placeholder="MEN-001"
-          />
-        </div>
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Barcode</label>
-        <input
-          {...register('barcode')}
-          className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition font-mono"
-          placeholder="6001234567890"
-        />
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Description</label>
-        <textarea
-          {...register('description')}
-          rows={2}
-          className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition resize-none"
-          placeholder="Optional…"
-        />
-      </div>
-      <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">
-        {isSubmitting && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />}
-        {isEdit ? 'Save Changes' : 'Add to Inventory'}
-      </Button>
-    </form>
-  );
+function ProductForm({product,onClose,onSaved}){
+ const editing=Boolean(product),{can}=useRole();
+ const{suppliers,isLoading:supplierLoading,isError:supplierError}=useQuery({queryKey:['suppliers'],queryFn:async()=>{const{data}=await api.get('/suppliers');return Array.isArray(data?.data)?data.data:[];},enabled:can.editProducts,staleTime:60000});
+ const{register,handleSubmit,setError,formState:{errors,isSubmitting}}=useForm({defaultValues:product?{...product,price:product.price??'',supplier:product.supplier?._id||product.supplier||''}:{name:'',category:'',price:'',costPrice:0,quantity:0,lowStockThreshold:5,sku:'',barcode:'',size:'',color:'',supplier:'',imageUrl:'',description:''}});
+ const submit=async values=>{try{const payload=normalizeProductPayload(values);if(editing){await api.put(\`/products/\${product._id}\`,payload);toast.success('Product updated.');}else{await api.post('/products',payload);toast.success('Product added.');}await onSaved?.();}catch(err){if(err?.fieldErrors){Object.entries(err.fieldErrors).forEach(([f,m])=>setError(f,{type:'validate',message:m}));return;}const field=err?.response?.data?.field,message=err?.response?.data?.message||'Could not save product.';if(field)setError(field,{type:'server',message});else toast.error(message);}};
+ const Field=({id,label,error,children,hint})=><div className="space-y-1.5"><label htmlFor={id} className="block text-xs font-semibold text-[var(--color-text-secondary)]">{label}</label>{children}{error&&<p className="text-xs text-[var(--color-danger)]">{error}</p>}{!error&&hint&&<p className="text-[11px] text-[var(--color-text-muted)]">{hint}</p>}</div>;
+ return <form onSubmit={handleSubmit(submit)} noValidate className="space-y-5 px-4 py-4 sm:px-5">
+  <section className="space-y-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-[#8a6a37]">01 · Product identity</p><Field id="p-name" label="Product name" error={errors.name?.message}><input id="p-name" autoFocus {...register('name',{required:'Enter a product name.',maxLength:{value:120,message:'Use 120 characters or fewer.'}})} maxLength={120} className={input} placeholder="e.g. Classic polo shirt"/></Field>
+   <div className="grid gap-3 sm:grid-cols-2"><Field id="p-category" label="Category" error={errors.category?.message}><select id="p-category" {...register('category',{required:'Choose a category.'})} className={input}><option value="">Select category</option>{PRODUCT_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></Field><Field id="p-sku" label="SKU"><input id="p-sku" {...register('sku')} className={input} placeholder="MEN-001"/></Field></div>
+   <div className="grid gap-3 sm:grid-cols-2"><Field id="p-barcode" label="Barcode" hint="Leading zeroes are preserved"><input id="p-barcode" {...register('barcode')} className={input} placeholder="Scan or enter barcode"/></Field><Field id="p-image" label="Image URL" error={errors.imageUrl?.message}><input id="p-image" type="url" {...register('imageUrl')} className={input} placeholder="https://…"/></Field></div>
+  </section>
+  <div className="h-px bg-[var(--color-border-light)]"/>
+  <section className="space-y-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-[#8a6a37]">02 · Pricing & stock</p><div className="grid gap-3 sm:grid-cols-2"><Field id="p-price" label="Selling price (USD)" error={errors.price?.message}><input id="p-price" type="number" min="0" step="0.01" inputMode="decimal" {...register('price',{valueAsNumber:true})} className={input} placeholder="0.00"/></Field><Field id="p-cost" label="Cost price (USD)" error={errors.costPrice?.message}><input id="p-cost" type="number" min="0" step="0.01" {...register('costPrice',{valueAsNumber:true})} className={input} placeholder="0.00"/></Field></div>
+   <div className="grid gap-3 sm:grid-cols-2"><Field id="p-qty" label={editing?'Current stock quantity':'Opening stock quantity'} error={errors.quantity?.message} hint="Whole units only."><input id="p-qty" type="number" min="0" step="1" {...register('quantity',{valueAsNumber:true})} className={input}/></Field><Field id="p-threshold" label="Low-stock alert level" error={errors.lowStockThreshold?.message} hint="Set 0 to disable the threshold."><input id="p-threshold" type="number" min="0" step="1" {...register('lowStockThreshold',{valueAsNumber:true})} className={input}/></Field></div>
+  </section>
+  <div className="h-px bg-[var(--color-border-light)]"/>
+  <section className="space-y-3"><p className="text-[10px] font-semibold uppercase tracking-wider text-[#8a6a37]">03 · Variants & sourcing</p><div className="grid gap-3 sm:grid-cols-2"><Field id="p-size" label="Size"><input id="p-size" {...register('size')} className={input} placeholder="S, M, L, XL"/></Field><Field id="p-color" label="Colour"><input id="p-color" {...register('color')} className={input} placeholder="Navy blue"/></Field></div>
+   <Field id="p-supplier" label="Supplier" error={supplierError?'Supplier list could not be loaded. Retry the page before assigning a supplier.':undefined}><select id="p-supplier" {...register('supplier')} className={input} disabled={supplierLoading||supplierError}><option value="">No supplier selected</option>{(suppliers||[]).map(s=><option key={s._id} value={s._id}>{s.name}</option>)}</select></Field>
+   <Field id="p-desc" label="Description" error={errors.description?.message}><textarea id="p-desc" rows={3} maxLength={500} {...register('description',{maxLength:{value:500,message:'Use 500 characters or fewer.'}})} className={\`\${input} min-h-24 resize-y\`} placeholder="Fabric, fit or collection notes…"/></Field>
+  </section>
+  <div className="sticky bottom-0 -mx-4 flex flex-col-reverse gap-2 border-t border-[var(--color-border)] bg-white/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:flex-row sm:justify-end"><Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>Cancel</Button><Button type="submit" loading={isSubmitting}>{editing?'Save changes':'Add to inventory'}</Button></div>
+ </form>;
 }
-
-function MovementsView({ productId }) {
-  const { data: movements = [], isLoading } = useQuery({
-    queryKey: ['movements', productId],
-    queryFn: async () => {
-      const { data } = await api.get(`/products/${productId}/movements`);
-      return data.data;
-    }
-  });
-  const TYPE_COLORS = {
-    sale: 'bg-red-50 text-red-700',
-    purchase: 'bg-emerald-50 text-emerald-700',
-    adjustment: 'bg-blue-50 text-blue-700',
-    return: 'bg-purple-50 text-purple-700',
-    damage: 'bg-orange-50 text-orange-700',
-    opening: 'bg-gray-100 text-gray-700'
-  };
-  return (
-    <div className="px-4 py-3 space-y-3">
-      {isLoading ? (
-        [...Array(5)].map((_, i) => <div key={i} className="h-14 bg-gray-200 rounded-lg animate-pulse" />)
-      ) : movements.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-8">No movements recorded yet.</p>
-      ) : (
-        movements.map((m, i) => (
-          <Card key={i}>
-            <CardBody className="p-3 flex items-start gap-3">
-              <Badge variant={m.type === 'sale' ? 'danger' : m.type === 'purchase' ? 'success' : 'info'} className="text-xs font-bold shrink-0 uppercase">
-                {m.type}
-              </Badge>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-gray-900">
-                  {m.quantity > 0 ? '+' : ''}{m.quantity} units{' '}
-                  <span className="text-gray-500 font-normal">
-                    {m.before} → {m.after}
-                  </span>
-                </p>
-                {m.note && <p className="text-xs text-gray-500 mt-1">{m.note}</p>}
-              </div>
-              <p className="text-xs text-gray-500 shrink-0 whitespace-nowrap">
-                {new Date(m.createdAt).toLocaleDateString()}
-              </p>
-            </CardBody>
-          </Card>
-        ))
-      )}
-    </div>
-  );
+function Movements({productId}){
+ const{data=[],isLoading,isError,error,refetch,isFetching}=useQuery({queryKey:['movements',productId],queryFn:async()=>{const{data}=await api.get(\`/products/\${productId}/movements\`);return Array.isArray(data?.data)?data.data:[];},enabled:Boolean(productId),staleTime:30000});
+ if(isLoading)return <div className="space-y-3 p-4">{[1,2,3,4].map(i=><div key={i} className="h-16 animate-pulse rounded-xl bg-[var(--color-bg-secondary)]"/>)}</div>;
+ if(isError)return <div className="p-6 text-center"><p className="text-sm">{error?.response?.data?.message||'Stock history is unavailable.'}</p><Button className="mt-3" size="sm" variant="secondary" onClick={()=>refetch()} loading={isFetching}>Retry</Button></div>;
+ if(!data.length)return <p className="px-5 py-12 text-center text-sm text-[var(--color-text-muted)]">No stock movements recorded yet.</p>;
+ return <div className="space-y-2.5 p-4">{data.map((m,i)=><Card key={m._id||i} variant="flat"><CardBody className="flex items-start gap-3 p-3.5"><Badge variant={m.type==='sale'?'danger':m.type==='purchase'?'success':m.type==='damage'?'warning':'info'}>{m.type}</Badge><div className="flex-1"><p className="text-sm font-semibold">{Number(m.quantity)>0?'+':''}{m.quantity} units <span className="font-normal text-[var(--color-text-muted)]">{m.before} → {m.after}</span></p>{m.note&&<p className="mt-1 text-xs text-[var(--color-text-muted)]">{m.note}</p>}</div><span className="text-xs text-[var(--color-text-muted)]">{m.createdAt?new Date(m.createdAt).toLocaleDateString():'—'}</span></CardBody></Card>)}</div>;
 }
