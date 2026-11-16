@@ -40,7 +40,7 @@ router.get('/', protect, async (req, res, next) => {
       .limit(pageSize);
 
     if (paginationRequested) {
-      findQuery.select('name sku barcode price quantity category description size color imageUrl lowStockThreshold supplier');
+      findQuery.select('name sku barcode price costPrice quantity category description size color imageUrl lowStockThreshold supplier');
     } else {
       findQuery.populate('supplier', 'name');
     }
