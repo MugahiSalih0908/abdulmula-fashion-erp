@@ -13,6 +13,7 @@ on:
       - ui/phase-12-responsive-accessibility
       - ui/phase-13-admin-settings-audit-polish
       - ui/phase-14-authentication-experience
+      - ui/phase-15-staff-cashbook-polish
   pull_request:
     branches:
       - ui/phase-5-premium-pos-products-cart-staff
@@ -26,6 +27,7 @@ on:
       - ui/phase-12-responsive-accessibility
       - ui/phase-13-admin-settings-audit-polish
       - ui/phase-14-authentication-experience
+      - ui/phase-15-staff-cashbook-polish
 
 jobs:
   backend:
