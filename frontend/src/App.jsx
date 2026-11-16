@@ -30,6 +30,7 @@ import CashClosingPage         from './pages/CashClosingPage';
 import StaffPage               from './pages/StaffPage';
 import SettingsPage            from './pages/SettingsPage';
 import AuditLogsPage           from './pages/AuditLogsPage';
+import EmailCenterPage          from './pages/EmailCenterPage';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry:1, staleTime:1000*60*2, refetchOnWindowFocus:false } }
@@ -84,6 +85,7 @@ useEffect(() => {
             {/* Admin only */}
             <Route path="/staff"           element={<ProtectedRoute roles={['admin']}><StaffPage /></ProtectedRoute>} />
             <Route path="/audit-logs"      element={<ProtectedRoute roles={['admin']}><AuditLogsPage /></ProtectedRoute>} />
+            <Route path="/email-center"     element={<ProtectedRoute roles={['admin']}><EmailCenterPage /></ProtectedRoute>} />
           </Route>
 
      <Route

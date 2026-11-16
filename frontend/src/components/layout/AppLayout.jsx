@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Activity, Archive, BarChart3, BookOpen, ChevronRight, ClipboardList,
+  Activity, Archive, BarChart3, BookOpen, ChevronRight, ClipboardList, Mail,
   LayoutDashboard, LogOut, Menu, Package, PanelLeftClose,
   PanelLeftOpen, Settings, ShieldCheck, ShoppingCart, Truck, UserCog, Users,
   Wallet, Wifi, WifiOff, X
@@ -26,6 +26,7 @@ const NAV_ITEMS = [
   { to: '/reports', label: 'Reports', icon: BarChart3, permission: 'viewReports' },
   { to: '/staff', label: 'Staff', icon: UserCog, permission: 'manageStaff' },
   { to: '/audit-logs', label: 'Audit Logs', icon: ShieldCheck, permission: 'viewAuditLogs' },
+  { to: '/email-center', label: 'Email Center', icon: Mail, permission: 'manageEmail' },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
