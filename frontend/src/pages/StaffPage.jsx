@@ -228,7 +228,7 @@ export default function StaffPage() {
                           <Badge variant={getStaffRoleTone(member.role)}>{member.role || 'staff'}</Badge>
                           <Badge variant={member.isActive ? 'success' : 'danger'}>{member.isActive ? 'Active' : 'Disabled'}</Badge>
                           {!member.isVerified && <Badge variant="warning"><Clock3 size={11} /> Pending activation</Badge>}
-                          {isSelf && <Badge variant="secondary">You</Badge>}
+                          {isSelf && <Badge variant="info">You</Badge>}
                         </div>
                         <p className="staff-member-email">{member.email}</p>
                         <div className="staff-member-meta">
