@@ -37,7 +37,7 @@ function emailStatusMeta(status) {
     unknown: { label: 'Delivery status unknown', variant: 'warning' },
     not_attempted: { label: 'Email not attempted', variant: 'secondary' }
   };
-  return known[status] || { label: 'Email status unavailable', variant: 'secondary' };
+  return known[status] || { label: 'Email status unavailable', variant: 'info' };
 }
 
 function getDeliveryMessage(result) {
