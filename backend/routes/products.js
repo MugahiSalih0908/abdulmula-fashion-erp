@@ -11,22 +11,98 @@ const { validateProductPayload } = require('../utils/productValidation');
 // GET – all authenticated users (staff need product list for POS)
 router.get('/', protect, async (req, res, next) => {
   try {
-    const { search, category, lowStock, outOfStock, page = 1, limit = 500 } = req.query;
+    const { search, category, lowStock, outOfStock, healthyStock, page = 1, limit = 500 } = req.query;
     const filter = { isDeleted: false };
     if (search) filter.$text = { $search: search };
-    if (category && category !== 'all') filter.category = category;
+    if (category && category !== 'all' && category !== 'All') filter.category = category;
     if (outOfStock === 'true') filter.quantity = 0;
-    if (lowStock === 'true') filter.$expr = { $and: [{ $gt: ['$quantity', 0] }, { $lte: ['$quantity', '$lowStockThreshold'] }] };
+    if (lowStock === 'true') {
+      filter.$expr = { $and: [{ $gt: ['$quantity', 0] }, { $lte: ['$quantity', '$lowStockThreshold'] }] };
+    }
+    if (healthyStock === 'true') {
+      filter.$expr = { $and: [{ $gt: ['$quantity', 0] }, { $gt: ['$quantity', '$lowStockThreshold'] }] };
+    }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const [products, total] = await Promise.all([
-      Product.find(filter)
-             .populate('supplier', 'name')
-             .sort(search ? { score: { $meta: 'textScore' } } : { name: 1 })
-             .skip(skip).limit(parseInt(limit)),
-      Product.countDocuments(filter)
+    // The management catalogue sends an explicit page parameter.
+    // Preserve the legacy full-list contract used by POS callers without "page".
+    const paginationRequested = Object.prototype.hasOwnProperty.call(req.query, 'page');
+    const parsedPage = Number.parseInt(page, 10);
+    const parsedLimit = Number.parseInt(limit, 10);
+    const pageNumber = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const pageSize = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? Math.min(parsedLimit, 500)
+      : 500;
+    const skip = (pageNumber - 1) * pageSize;
+
+    const findQuery = Product.find(filter)
+      .sort(search ? { score: { $meta: 'textScore' } } : { name: 1, _id: 1 })
+      .skip(skip)
+      .limit(pageSize);
+
+    if (paginationRequested) {
+      findQuery.select('name sku barcode price quantity category description size color imageUrl lowStockThreshold supplier');
+    } else {
+      findQuery.populate('supplier', 'name');
+    }
+
+    const [products, total, summaryRows] = await Promise.all([
+      findQuery,
+      Product.countDocuments(filter),
+      paginationRequested
+        ? Product.aggregate([
+            { $match: { isDeleted: false } },
+            {
+              $group: {
+                _id: null,
+                productCount: { $sum: 1 },
+                unitsOnHand: { $sum: { $ifNull: ['$quantity', 0] } },
+                lowStockCount: {
+                  $sum: {
+                    $cond: [
+                      { $and: [
+                        { $gt: [{ $ifNull: ['$quantity', 0] }, 0] },
+                        { $lte: ['$quantity', { $ifNull: ['$lowStockThreshold', 0] }] }
+                      ] },
+                      1,
+                      0
+                    ]
+                  }
+                },
+                outOfStockCount: {
+                  $sum: { $cond: [{ $eq: [{ $ifNull: ['$quantity', 0] }, 0] }, 1, 0] }
+                },
+                inventoryCostValue: {
+                  $sum: {
+                    $multiply: [
+                      { $ifNull: ['$costPrice', 0] },
+                      { $ifNull: ['$quantity', 0] }
+                    ]
+                  }
+                }
+              }
+            }
+          ])
+        : Promise.resolve([])
     ]);
-    res.json({ success: true, data: products, total, page: parseInt(page) });
+
+    const summary = summaryRows[0] || null;
+    res.json({
+      success: true,
+      data: products,
+      total,
+      page: pageNumber,
+      limit: pageSize,
+      ...(paginationRequested && {
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        summary: summary || {
+          productCount: 0,
+          unitsOnHand: 0,
+          lowStockCount: 0,
+          outOfStockCount: 0,
+          inventoryCostValue: 0
+        }
+      })
+    });
   } catch (err) { next(err); }
 });
 
