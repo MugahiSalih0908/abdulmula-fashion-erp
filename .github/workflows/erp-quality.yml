@@ -12,6 +12,7 @@ on:
       - ui/phase-11-reports-analytics
       - ui/phase-12-responsive-accessibility
       - ui/phase-13-admin-settings-audit-polish
+      - ui/phase-14-authentication-experience
   pull_request:
     branches:
       - ui/phase-5-premium-pos-products-cart-staff
@@ -24,6 +25,7 @@ on:
       - ui/phase-11-reports-analytics
       - ui/phase-12-responsive-accessibility
       - ui/phase-13-admin-settings-audit-polish
+      - ui/phase-14-authentication-experience
 
 jobs:
   backend:
