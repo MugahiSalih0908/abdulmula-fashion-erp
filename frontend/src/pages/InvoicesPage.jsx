@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertCircle,
@@ -111,6 +112,7 @@ export default function InvoicesPage() {
   const [paymentMethod, setPaymentMethod] = useState('all');
   const [paymentStatus, setPaymentStatus] = useState('all');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
   const [receiptInvoice, setReceiptInvoice] = useState(null);
   const fmt = useSettingsStore(state => state.fmt);
@@ -144,7 +146,7 @@ export default function InvoicesPage() {
   const totalRevenue = Number(data?.totalRevenue) || 0;
 
   const visibleInvoices = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
+    const query = debouncedSearch.trim().toLocaleLowerCase();
     if (!query) return invoices;
     return invoices.filter(invoice => [
       invoice.invoiceNumber,
@@ -153,7 +155,7 @@ export default function InvoicesPage() {
       invoice.soldByName,
       invoice.paymentMethod
     ].filter(Boolean).join(' ').toLocaleLowerCase().includes(query));
-  }, [invoices, search]);
+  }, [invoices, debouncedSearch]);
 
   const updateFilter = setter => value => {
     setter(value);
