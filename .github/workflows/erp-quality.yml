@@ -6,12 +6,14 @@ on:
       - feature/email-center-infrastructure
       - ui/phase-6-invoice-history
       - ui/phase-7-customer-management
+      - ui/phase-8-supplier-management
   pull_request:
     branches:
       - ui/phase-5-premium-pos-products-cart-staff
       - feature/email-center-infrastructure
       - ui/phase-6-invoice-history
       - ui/phase-7-customer-management
+      - ui/phase-8-supplier-management
 
 jobs:
   backend:
@@ -34,7 +36,7 @@ jobs:
         run: npm test
 
   frontend:
-    name: Frontend production build
+    name: Frontend tests and production build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +48,9 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: node --test src/pages/*.test.mjs src/store/*.test.js
       - name: Build frontend
         working-directory: frontend
         run: npm run build
