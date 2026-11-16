@@ -11,7 +11,7 @@ v6 introduces a full enterprise onboarding and security workflow:
 |---|---|
 | No public registration    | `POST /api/auth/register` removed entirely |
 | Admin-created accounts    | Admin creates via Staff Management page    |
-| Email invitation          | Nodemailer + Gmail SMTP → branded HTML     |
+| Transactional email       | Resend API with delivery tracking          |
 | Account activation        | Token link → `/activate/:token`            |
 | Verification required     | Login blocked until `isVerified = true`    |
 | Forgot password           | 15-min token → `/reset-password/:token`    |
@@ -48,7 +48,7 @@ v6 introduces a full enterprise onboarding and security workflow:
 - Node.js + Express.js
 - MongoDB Atlas + Mongoose (transactions)
 - JWT access (15m) + refresh (7d) with rotation
-- Nodemailer + Gmail SMTP for emails
+- Resend transactional email API with signed delivery webhooks
 - bcryptjs (12 rounds), validator.js, crypto
 - Helmet, CORS, rate limiting, mongo-sanitize
 
@@ -368,3 +368,26 @@ All emails are branded HTML with:
 - Disabled accounts (`isActive: false`) cannot log in and have all refresh tokens cleared
 - Rate limiting: 500 req/15min global, 20/15min on login route
 - Email enumeration prevented on forgot-password (always returns success)
+
+## Transactional email configuration
+
+Configure these values in the backend deployment environment (for example, Render)
+and in a local, untracked backend `.env` file:
+
+- `RESEND_API_KEY`: Resend sending API key.
+- `EMAIL_FROM`: sender identity on a domain verified in Resend.
+- `RESEND_WEBHOOK_SECRET`: signing secret from the Resend webhook endpoint.
+- `FRONTEND_URL`: public frontend origin used to construct activation and reset links.
+
+Never commit live credentials, raw activation URLs, reset tokens, email HTML, or
+temporary passwords. Staff activation emails use a one-time setup link; the
+system does not email a temporary password.
+
+The sender domain can be connected later. Until then, the email layer can be
+tested with mocked provider responses and Resend test recipients. Real staff
+delivery remains unavailable until Resend verifies the sender domain.
+
+Provider acceptance (`sent`) is not the same as recipient delivery
+(`delivered`). Signed Resend webhook events update the application delivery
+state. The same stable idempotency key is reused for retries of the same logical
+email to reduce duplicate sends.
