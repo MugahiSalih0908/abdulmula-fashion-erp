@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -423,6 +424,7 @@ function CustomerDetails({ customerId, fmt, onEdit }) {
 
 export default function CustomersPage() {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [hasCredit, setHasCredit] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -442,8 +444,8 @@ export default function CustomersPage() {
   });
 
   const filtered = useMemo(
-    () => filterCustomers(customers, search, hasCredit),
-    [customers, search, hasCredit]
+    () => filterCustomers(customers, debouncedSearch, hasCredit),
+    [customers, debouncedSearch, hasCredit]
   );
   const summary = useMemo(() => summarizeCustomers(customers), [customers]);
 
