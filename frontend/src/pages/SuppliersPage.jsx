@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -346,6 +347,7 @@ function SupplierDetails({ supplierId, fmt }) {
 
 export default function SuppliersPage() {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [hasDebt, setHasDebt] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -365,7 +367,7 @@ export default function SuppliersPage() {
     enabled: canManage
   });
 
-  const filtered = useMemo(() => filterSuppliers(suppliers, search, hasDebt), [suppliers, search, hasDebt]);
+  const filtered = useMemo(() => filterSuppliers(suppliers, debouncedSearch, hasDebt), [suppliers, debouncedSearch, hasDebt]);
   const summary = useMemo(() => summarizeSuppliers(suppliers), [suppliers]);
 
   const saveMutation = useMutation({
