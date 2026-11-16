@@ -7,6 +7,7 @@ on:
       - ui/phase-6-invoice-history
       - ui/phase-7-customer-management
       - ui/phase-8-supplier-management
+      - ui/phase-9-financial-management
   pull_request:
     branches:
       - ui/phase-5-premium-pos-products-cart-staff
@@ -14,6 +15,7 @@ on:
       - ui/phase-6-invoice-history
       - ui/phase-7-customer-management
       - ui/phase-8-supplier-management
+      - ui/phase-9-financial-management
 
 jobs:
   backend:
