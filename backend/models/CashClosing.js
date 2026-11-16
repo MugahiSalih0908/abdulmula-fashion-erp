@@ -11,6 +11,7 @@ const cashClosingSchema = new mongoose.Schema({
   excess:        { type: Number, default: 0 },       // positive = overage
   totalSales:    { type: Number, default: 0 },
   totalExpenses: { type: Number, default: 0 },
+  supplierCashPayments: { type: Number, default: 0, min: 0 },
   status: {
     type: String,
     enum: ['pending_approval', 'approved', 'disputed'],
