@@ -273,7 +273,7 @@ export default function StaffPage() {
         )}
       </section>
 
-      <Sheet open={showAdd} title="Add staff member" subtitle="An activation email will be sent when the account is created" onClose={() => setShowAdd(false)} maxH="94dvh">
+      <Sheet open={showAdd} title="Add staff member" subtitle="Creates a pending account and attempts to send its activation email" onClose={() => setShowAdd(false)} maxH="94dvh">
         <AddStaffForm onSaved={() => { queryClient.invalidateQueries({ queryKey: ['staff'] }); setShowAdd(false); }} />
       </Sheet>
 
@@ -303,7 +303,23 @@ function AddStaffForm({ onSaved }) {
         role: data.role,
         salary: Number(data.salary) || 0
       });
-      toast.success(response.data.message || 'Staff account created.');
+      if (response.data?.emailStatus === 'sent') {
+        toast.success(response.data.message || 'Staff account created and activation email accepted.');
+      } else if (response.data?.emailStatus === 'unknown') {
+        toast.error(
+          'Account created, but activation email delivery is uncertain. Check Email Center before retrying.',
+          { duration: 8000 }
+        );
+      } else {
+        toast.error(
+          response.data?.emailMessage
+            ? 'Account created, but activation email was not sent: ' + response.data.emailMessage
+            : (response.data?.message || 'Account created, but activation email was not sent.'),
+          { duration: 8000 }
+        );
+      }
+      // The account exists even when email delivery is blocked; refresh the list
+      // so the administrator can use Resend activation after fixing configuration.
       onSaved();
     } catch (error) {
       toast.error(error?.response?.data?.message || 'Staff account could not be created.');
@@ -312,7 +328,7 @@ function AddStaffForm({ onSaved }) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="staff-form" noValidate>
-      <div className="staff-form-callout"><Mail size={16} aria-hidden="true" /><p>A secure activation link will be sent to the staff member’s email address.</p></div>
+      <div className="staff-form-callout"><Mail size={16} aria-hidden="true" /><p>A pending account is created first. The activation email is attempted next; check Email Center and use Resend activation if delivery is blocked.</p></div>
 
       <div className="staff-field">
         <label htmlFor="staff-add-name">Full name <span>*</span></label>

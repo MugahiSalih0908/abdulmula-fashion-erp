@@ -1,8 +1,16 @@
 // middleware/errorHandler.js – centralised error handling
+const { getEmailDeliveryError } = require('../utils/emailDeliveryError');
 
 const errorHandler = (err, req, res, next) => {
   let statusCode = err.statusCode || 500;
   let message    = err.message    || 'Internal Server Error';
+  let responseCode;
+
+  if (typeof err.code === 'string' && err.code.startsWith('EMAIL_')) {
+    const safeEmailError = getEmailDeliveryError(err);
+    message = safeEmailError.message;
+    responseCode = safeEmailError.code;
+  }
 
   // Mongoose validation error
   if (err.name === 'ValidationError') {
@@ -34,6 +42,7 @@ const errorHandler = (err, req, res, next) => {
   res.status(statusCode).json({
     success: false,
     message,
+    ...(responseCode && { code: responseCode }),
     ...(typeof err.code === 'string' && err.code.startsWith('OFFLINE_') && { code: err.code }),
     ...(err.conflictDetails && { conflictDetails: err.conflictDetails }),
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })

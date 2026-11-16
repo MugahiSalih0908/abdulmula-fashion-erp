@@ -86,7 +86,10 @@ export default function EmailCenterPage() {
   const total = Number(query.data?.total || 0);
   const pages = Math.max(1, Math.ceil(total / 25));
   const deliveryConfig = query.data?.emailConfig || {};
-  const canSendTest = deliveryConfig.providerReady && (deliveryConfig.mode === 'test' || (deliveryConfig.mode === 'live' && deliveryConfig.domainVerified));
+  const canSendTest = deliveryConfig.providerReady && (
+    (deliveryConfig.mode === 'test' && deliveryConfig.testRecipientAllowed) ||
+    (deliveryConfig.mode === 'live' && deliveryConfig.domainVerified && deliveryConfig.senderDomainMatches)
+  );
   const cards = useMemo(() => [
     { label: 'Accepted by provider', value: summary.sent, icon: Send, tone: 'text-sky-700' },
     { label: 'Delivered', value: summary.delivered, icon: CheckCircle2, tone: 'text-emerald-700' },
@@ -115,14 +118,22 @@ export default function EmailCenterPage() {
             </div>
             <p className="mt-1 text-xs leading-5 text-[var(--color-text-secondary)]">
               {query.data?.emailConfig?.mode === 'live'
-                ? 'Live sending mode is enabled. The test button sends only to the signed-in administrator.'
+                ? 'Live sending mode is enabled after domain verification. The test button sends only to the signed-in administrator.'
                 : query.data?.emailConfig?.mode === 'test'
-                  ? 'Test mode is active. Messages can be sent only to the exact recipients in the backend test allow-list.'
-                  : 'Sending is disabled by default. No staff or customer email will be sent until test or verified live mode is deliberately enabled. The test button sends only to the signed-in administrator.'}
+                  ? 'Test mode is active. The signed-in administrator must be explicitly included in the backend test allow-list.'
+                  : 'Sending is disabled by default. No staff or customer email will be sent until test mode is configured or the verified sending domain is enabled for live delivery.'}
             </p>
             <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
               Resend credentials: {query.data?.emailConfig?.providerReady ? 'configured' : 'not configured'} · Sender: {query.data?.emailConfig?.senderConfigured ? 'configured' : 'not configured'} · Verified domain: {query.data?.emailConfig?.domainVerified ? 'confirmed in environment' : 'not confirmed'}
             </p>
+            {Array.isArray(query.data?.emailConfig?.issues) && query.data.emailConfig.issues.length > 0 && (
+              <ul className="mt-3 grid gap-1.5 text-xs text-amber-900" aria-label="Email configuration actions needed">
+                {query.data.emailConfig.issues.map(issue => <li key={issue} className="flex items-start gap-2"><AlertTriangle size={13} className="mt-0.5 shrink-0" aria-hidden="true" /><span>{issue}</span></li>)}
+              </ul>
+            )}
+            {deliveryConfig.mode === 'test' && !deliveryConfig.testRecipientAllowed && (
+              <p className="mt-2 text-xs font-semibold text-amber-900">The administrator's address is not allow-listed, so the test-send button is disabled.</p>
+            )}
           </div>
         </div>
       </div>
