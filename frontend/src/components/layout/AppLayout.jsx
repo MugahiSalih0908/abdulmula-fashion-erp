@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -12,6 +12,7 @@ import { useRole } from '../../hooks/useRole';
 import useAuthStore from '../../store/authStore';
 import BottomNav from './BottomNav';
 import Drawer from './Drawer';
+import PageLoadingFallback from '../PageLoadingFallback';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -257,7 +258,9 @@ export default function AppLayout() {
         </header>
 
         <div className="app-main-content" id="main-content" tabIndex={-1}>
-          <Outlet />
+          <Suspense fallback={<PageLoadingFallback />}>
+            <Outlet />
+          </Suspense>
         </div>
       </div>
 

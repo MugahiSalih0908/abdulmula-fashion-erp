@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import PaginationBar from '../components/ui/PaginationBar';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -17,7 +19,6 @@ import Badge from '../components/ui/Badge';
 import Sheet from '../components/ui/Sheet';
 import {
   EXPENSE_CATEGORIES,
-  filterExpenses,
   normalizeExpensePayload,
   summarizeExpenses
 } from './expenseManagement.mjs';
@@ -172,6 +173,8 @@ function ExpenseForm({ onSave, onClose, saving }) {
 
 export default function ExpensesPage() {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
+  const [page, setPage] = useState(1);
   const [category, setCategory] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -182,22 +185,29 @@ export default function ExpensesPage() {
 
   const dateRangeInvalid = Boolean(startDate && endDate && startDate > endDate);
 
+  useEffect(() => setPage(1), [debouncedSearch, category, startDate, endDate]);
+
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ['expenses', { category, startDate, endDate }],
+    queryKey: ['expenses', { page, search: debouncedSearch, category, startDate, endDate }],
     enabled: !dateRangeInvalid,
     queryFn: async () => {
-      const params = {};
+      const params = { page, limit: 25 };
+      if (debouncedSearch) params.search = debouncedSearch;
       if (category !== 'All') params.category = category;
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
       const response = await api.get('/expenses', { params });
       return response.data;
-    }
+    },
+    placeholderData: previousData => previousData,
+    staleTime: 30000
   });
 
   const expenses = Array.isArray(data?.data) ? data.data : [];
-  const filtered = useMemo(() => filterExpenses(expenses, search), [expenses, search]);
-  const summary = useMemo(() => summarizeExpenses(filtered), [filtered]);
+  const filtered = expenses;
+  const total = Number(data?.totalCount) || expenses.length;
+  const totalPages = Math.max(1, Number(data?.totalPages) || 1);
+  const summary = data?.summary || summarizeExpenses(expenses);
 
   const deleteMutation = useMutation({
     mutationFn: id => api.delete('/expenses/' + id),
@@ -221,6 +231,7 @@ export default function ExpensesPage() {
 
   const clearFilters = () => {
     setSearch('');
+    setPage(1);
     setCategory('All');
     setStartDate('');
     setEndDate('');
@@ -382,6 +393,8 @@ export default function ExpensesPage() {
           </div>
         </section>
       )}
+
+      <PaginationBar page={page} total={total} totalPages={totalPages} onPageChange={setPage} />
 
       <Sheet open={formOpen} title="Add expense" subtitle="Record a business cost with its category and date" onClose={() => saveMutation.isPending ? null : setFormOpen(false)} maxH="94dvh">
         <ExpenseForm onSave={values => saveMutation.mutate(values)} saving={saveMutation.isPending} onClose={() => setFormOpen(false)} />

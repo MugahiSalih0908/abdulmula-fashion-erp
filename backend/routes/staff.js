@@ -12,6 +12,7 @@ const { log }   = require('../utils/auditLogger');
 const { sendEmail, templates } = require('../utils/sendEmail');
 const { getEmailDeliveryError } = require('../utils/emailDeliveryError');
 const { isEmailDeliveryBlocked } = require('../utils/emailConfig');
+const { buildStaffSalesLookup } = require('../utils/staffSalesSummary');
 
 router.use(protect);
 
@@ -21,14 +22,33 @@ const generatePendingPassword = () => crypto.randomBytes(32).toString('hex');
 /* ── GET /api/staff ────────────────────── admin + manager ───── */
 router.get('/', authorize('admin','manager'), async (req, res, next) => {
   try {
-    const staff = await User.find({}).select('-password -refreshTokens').sort({ createdAt:-1 });
-    const withStats = await Promise.all(staff.map(async m => {
-      const [cnt, agg] = await Promise.all([
-        Invoice.countDocuments({ soldBy: m._id }),
-        Invoice.aggregate([{ $match:{ soldBy: m._id } }, { $group:{ _id:null, total:{ $sum:'$grandTotal' } } }])
-      ]);
-      return { ...m.toObject(), salesCount:cnt, salesTotal: agg[0]?.total||0 };
-    }));
+    // Fetch staff and all sales summaries in two independent queries.
+    // The previous per-member count + aggregate loop grew by two queries per staff member.
+    const [staff, salesRows] = await Promise.all([
+      User.find({}).select('-password -refreshTokens').sort({ createdAt:-1 }),
+      Invoice.aggregate([
+        { $match: { soldBy: { $ne: null } } },
+        {
+          $group: {
+            _id: '$soldBy',
+            salesCount: { $sum: 1 },
+            salesTotal: { $sum: '$grandTotal' }
+          }
+        }
+      ])
+    ]);
+
+    const salesByStaff = buildStaffSalesLookup(salesRows);
+
+    const withStats = staff.map(member => {
+      const stats = salesByStaff.get(String(member._id));
+      return {
+        ...member.toObject(),
+        salesCount: stats?.salesCount || 0,
+        salesTotal: stats?.salesTotal || 0
+      };
+    });
+
     res.json({ success:true, data: withStats });
   } catch (err) { next(err); }
 });

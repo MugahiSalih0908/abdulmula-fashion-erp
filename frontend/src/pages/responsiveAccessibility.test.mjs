@@ -115,3 +115,49 @@ test('audit logs clearly state that search is page-scoped and events are read-on
   assert.match(adminPageSources.audit, /aria-pressed=/);
   assert.match(adminPageSources.audit, /<details className="admin-audit-details">/);
 });
+
+
+test('phase 17 keeps route splitting, skeleton loading, and mobile-safe navigation', () => {
+  const app = read('src/App.jsx');
+  const fallback = read('src/components/PageLoadingFallback.jsx');
+  assert.ok(app.includes("const DashboardPage = lazy(() => import('./pages/DashboardPage'));"));
+  assert.ok(app.includes('<Suspense fallback={<PageLoadingFallback />}>'));
+  assert.ok(fallback.includes('page-loading-card'));
+  assert.ok(css.includes('.bottom-nav-item svg'));
+  assert.ok(css.includes('env(safe-area-inset-bottom'));
+  assert.equal(css.includes('fonts.googleapis.com'), false);
+});
+
+test('phase 17 directory screens use server-side pagination and debounced search', () => {
+  const pagination = read('src/components/ui/PaginationBar.jsx');
+  const hook = read('src/hooks/useDebouncedValue.js');
+  for (const [name, source] of Object.entries(pageSources)) {
+    if (['customers', 'suppliers', 'expenses'].includes(name)) {
+      assert.ok(source.includes('useDebouncedValue'), name + ' should debounce search');
+      assert.ok(source.includes('limit: 25'), name + ' should request a bounded page');
+      assert.ok(source.includes('<PaginationBar'), name + ' should expose page controls');
+    }
+  }
+  assert.ok(hook.includes('setTimeout'));
+  assert.ok(pagination.includes('onPageChange'));
+});
+
+test('authentication profile fetch shares a single in-flight request', () => {
+  const authStore = read('src/store/authStore.js');
+  assert.ok(authStore.includes('let fetchMeInFlight = null'));
+  assert.ok(authStore.includes('if (fetchMeInFlight) return fetchMeInFlight'));
+  assert.ok(authStore.includes('get().accessToken === token'));
+});
+
+
+test('product catalogue uses server pagination without changing legacy POS calls', () => {
+  const products = read('src/pages/ProductsPage.jsx');
+  const route = read('../backend/routes/products.js');
+  assert.ok(products.includes('limit:25'));
+  assert.ok(products.includes('<PaginationBar'));
+  assert.ok(products.includes('healthyStock'));
+  assert.ok(route.includes('paginationRequested'));
+  assert.ok(route.includes('totalPages: Math.max(1, Math.ceil(total / pageSize))'));
+  assert.ok(route.includes("findQuery.populate('supplier', 'name')"));
+  assert.ok(route.includes("findQuery.select('name sku barcode price costPrice quantity"));
+});

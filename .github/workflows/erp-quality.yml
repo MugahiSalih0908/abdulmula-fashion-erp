@@ -14,7 +14,9 @@ on:
       - ui/phase-13-admin-settings-audit-polish
       - ui/phase-14-authentication-experience
       - ui/phase-15-staff-cashbook-polish
+      - perf/phase-17-mobile-performance
       - fix/phase-16-email-invitation-delivery
+      - perf/phase-17-mobile-performance
   pull_request:
     branches:
       - ui/phase-5-premium-pos-products-cart-staff

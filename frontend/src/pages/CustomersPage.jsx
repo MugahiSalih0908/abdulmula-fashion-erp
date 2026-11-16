@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import PaginationBar from '../components/ui/PaginationBar';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -33,7 +35,6 @@ import Card from '../components/ui/Card';
 import CardBody from '../components/ui/CardBody';
 import Badge from '../components/ui/Badge';
 import {
-  filterCustomers,
   getCustomerInitials,
   normalizeCustomerPayload,
   summarizeCustomers
@@ -423,7 +424,10 @@ function CustomerDetails({ customerId, fmt, onEdit }) {
 
 export default function CustomersPage() {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
+  const [page, setPage] = useState(1);
   const [hasCredit, setHasCredit] = useState(false);
+  useEffect(() => setPage(1), [debouncedSearch, hasCredit]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -433,19 +437,24 @@ export default function CustomersPage() {
   const canDelete = isAdmin || isManager;
   const queryClient = useQueryClient();
 
-  const { data: customers = [], isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ['customers'],
+  const { data: customerResponse, isLoading, isError, error, refetch, isFetching } = useQuery({
+    queryKey: ['customers', { page, search: debouncedSearch, hasCredit }],
     queryFn: async () => {
-      const response = await api.get('/customers');
-      return Array.isArray(response.data?.data) ? response.data.data : [];
-    }
+      const params = { page, limit: 25 };
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (hasCredit) params.hasCredit = 'true';
+      const response = await api.get('/customers', { params });
+      return response.data;
+    },
+    placeholderData: previousData => previousData,
+    staleTime: 30000
   });
 
-  const filtered = useMemo(
-    () => filterCustomers(customers, search, hasCredit),
-    [customers, search, hasCredit]
-  );
-  const summary = useMemo(() => summarizeCustomers(customers), [customers]);
+  const customers = Array.isArray(customerResponse?.data) ? customerResponse.data : [];
+  const filtered = customers;
+  const total = Number(customerResponse?.total) || customers.length;
+  const totalPages = Math.max(1, Number(customerResponse?.totalPages) || 1);
+  const summary = customerResponse?.summary || summarizeCustomers(customers);
 
   const saveMutation = useMutation({
     mutationFn: ({ id, values }) => id
@@ -662,6 +671,8 @@ export default function CustomersPage() {
           </div>
         </section>
       )}
+
+      <PaginationBar page={page} total={total} totalPages={totalPages} onPageChange={setPage} />
 
       <Sheet
         open={formOpen}
