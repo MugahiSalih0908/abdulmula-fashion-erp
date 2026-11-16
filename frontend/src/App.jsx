@@ -31,6 +31,7 @@ import StaffPage               from './pages/StaffPage';
 import SettingsPage            from './pages/SettingsPage';
 import AuditLogsPage           from './pages/AuditLogsPage';
 import EmailCenterPage          from './pages/EmailCenterPage';
+import InvoicesPage              from './pages/InvoicesPage';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry:1, staleTime:1000*60*2, refetchOnWindowFocus:false } }
@@ -70,6 +71,7 @@ useEffect(() => {
             <Route index                   element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard"       element={<DashboardPage />} />
             <Route path="/pos"             element={<POSPage />} />
+            <Route path="/invoices"        element={<InvoicesPage />} />
             <Route path="/products"        element={<ProductsPage />} />
             <Route path="/out-of-stock"  element={<OutOfStockPage />} />
             <Route path="/customers"       element={<CustomersPage />} />
