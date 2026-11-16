@@ -1698,3 +1698,41 @@ a:focus:not(:focus-visible) {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Accessible skip link: visible only when reached by keyboard. */
+.app-skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 0.75rem;
+  left: 0.75rem;
+  transform: translateY(-160%);
+  border: 2px solid var(--color-gold);
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 0.75rem 1rem;
+  color: #171717;
+  font-size: 0.875rem;
+  font-weight: 700;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+}
+
+.app-skip-link:focus {
+  transform: translateY(0);
+}
+
+.app-main-content:focus {
+  outline: none;
+}
+
+@media (max-width: 359px) {
+  .app-main-content > main {
+    padding-right: 0.75rem;
+    padding-left: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-skip-link {
+    transition: none;
+  }
+}

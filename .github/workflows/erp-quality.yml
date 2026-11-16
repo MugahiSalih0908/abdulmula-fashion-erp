@@ -10,6 +10,8 @@ on:
       - ui/phase-9-financial-management
       - ui/phase-10-purchase-orders
       - ui/phase-11-reports-analytics
+      - ui/phase-12-responsive-accessibility
+      - ui/phase-12-responsive-accessibility
   pull_request:
     branches:
       - ui/phase-5-premium-pos-products-cart-staff
@@ -20,6 +22,7 @@ on:
       - ui/phase-9-financial-management
       - ui/phase-10-purchase-orders
       - ui/phase-11-reports-analytics
+      - ui/phase-12-responsive-accessibility
 
 jobs:
   backend:
