@@ -1,355 +1,604 @@
-// src/pages/ReportsPage.jsx – Refactored with Green Premium Mobile-First Design
-
-import { useState }   from 'react';
-import { useQuery }   from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, ResponsiveContainer
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
 } from 'recharts';
-import api             from '../services/api';
-import useSettingsStore from '../store/settingsStore';
-import PageHeader      from '../components/ui/PageHeader';
-import KpiCard from '../components/ui/KpiCard';
 import {
-  TrendingUp, TrendingDown, DollarSign, Package,
-  ShoppingCart, Star, BarChart3, AlertTriangle
+  AlertCircle,
+  BarChart3,
+  CalendarDays,
+  Download,
+  Package,
+  Printer,
+  RefreshCw,
+  ShoppingBag,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  Wallet
 } from 'lucide-react';
+import api from '../services/api';
+import useSettingsStore from '../store/settingsStore';
+import PageHeader from '../components/ui/PageHeader';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import CardBody from '../components/ui/CardBody';
+import Badge from '../components/ui/Badge';
+import {
+  buildMonthlySeries,
+  getRevenueLessExpenses,
+  isInvalidReportDateRange,
+  mergeDailySeries
+} from './reportCalculations.mjs';
 
-const COLORS = ['#16a34a','#111111','#ef4444','#22c55e','#3b82f6','#8b5cf6','#f97316','#06b6d4'];
-const MONTHS  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const TABS    = ['Overview','Daily','Monthly','Inventory','Staff','Categories'];
+const TABS = ['Overview', 'Daily', 'Monthly', 'Inventory', 'Staff', 'Categories'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const CHART_COLORS = ['#b58d4c', '#202020', '#4b8066', '#a64d4d', '#526c8d', '#8b7355', '#6e687c', '#6e8a8a'];
+const inputClass = 'input min-h-11 w-full rounded-xl border border-[var(--color-border)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-text)] focus:border-[var(--color-gold)] focus:outline-none focus:ring-2 focus:ring-[rgba(197,164,109,0.2)]';
 
-const dateStart = () => { const d=new Date(); d.setDate(1); return d.toISOString().split('T')[0]; };
-const dateToday = () => new Date().toISOString().split('T')[0];
+function toDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function dateStart() {
+  const date = new Date();
+  date.setDate(1);
+  return toDateInputValue(date);
+}
+
+function dateToday() {
+  return toDateInputValue(new Date());
+}
+
+function money(value, fmt) {
+  const amount = Number(value);
+  return fmt(Number.isFinite(amount) ? amount : 0);
+}
+
+function dateLabel(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function Metric({ label, value, detail, Icon, tone = 'gold' }) {
+  const tones = {
+    gold: 'bg-[#f4eee3] text-[#80622e]',
+    green: 'bg-[#eaf3ed] text-[#216442]',
+    red: 'bg-[#f8ecea] text-[#963b3b]',
+    slate: 'bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)]'
+  };
+  return (
+    <Card className="min-w-0">
+      <CardBody className="flex items-start gap-3 p-4 sm:p-5">
+        <span className={'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ' + tones[tone]}>
+          <Icon size={19} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">{label}</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--color-text)] sm:text-2xl">{value}</p>
+          <p className="mt-1 text-[11px] leading-4 text-[var(--color-text-muted)]">{detail}</p>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function LoadingCards({ count = 4 }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Loading report">
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className="h-28 animate-pulse rounded-2xl border border-[var(--color-border)] bg-white" />
+      ))}
+    </div>
+  );
+}
+
+function ReportError({ message, onRetry, retrying }) {
+  return (
+    <Card role="alert">
+      <CardBody className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2.5">
+          <AlertCircle size={18} className="mt-0.5 shrink-0 text-[var(--color-danger)]" />
+          <div>
+            <p className="text-sm font-semibold text-[var(--color-text)]">Report data could not be loaded</p>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">{message || 'Check your connection and try again.'}</p>
+          </div>
+        </div>
+        <Button variant="secondary" size="sm" onClick={onRetry} loading={retrying}><RefreshCw size={14} /> Try again</Button>
+      </CardBody>
+    </Card>
+  );
+}
+
+function EmptyReport({ title, description }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white px-5 py-12 text-center">
+      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f4eee3] text-[#80622e]"><BarChart3 size={22} /></span>
+      <h3 className="mt-3 text-sm font-semibold text-[var(--color-text)]">{title}</h3>
+      <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-[var(--color-text-muted)]">{description}</p>
+    </div>
+  );
+}
+
+function Table({ headings, rows, emptyLabel = 'No records to display.' }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white">
+      {rows.length === 0 ? (
+        <p className="p-6 text-center text-xs text-[var(--color-text-muted)]">{emptyLabel}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-left text-sm">
+            <thead className="bg-[var(--color-bg-secondary)] text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+              <tr>{headings.map(heading => <th scope="col" key={heading} className="px-4 py-3 font-semibold">{heading}</th>)}</tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--color-border-light)]">
+              {rows.map((row, index) => <tr key={row.key || index}>{row.cells.map((cell, cellIndex) => <td key={cellIndex} className="px-4 py-3 text-xs text-[var(--color-text-secondary)]">{cell}</td>)}</tr>)}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ReportsPage() {
-  const [tab, setTab]           = useState('Overview');
+  const [tab, setTab] = useState('Overview');
   const [startDate, setStartDate] = useState(dateStart);
-  const [endDate,   setEndDate]   = useState(dateToday);
-  const { fmt } = useSettingsStore();
+  const [endDate, setEndDate] = useState(dateToday);
+  const fmt = useSettingsStore(state => state.fmt);
+  const invalidRange = isInvalidReportDateRange(startDate, endDate);
 
-  const { data: summary, isLoading: sumLoading } = useQuery({
+  const summaryQuery = useQuery({
     queryKey: ['rpt-summary', startDate, endDate],
-    queryFn:  async () => { const { data } = await api.get(`/reports/summary?startDate=${startDate}&endDate=${endDate}`); return data.data; },
+    enabled: tab === 'Overview' && !invalidRange,
+    queryFn: async () => {
+      const response = await api.get('/reports/summary', { params: { startDate, endDate } });
+      return response.data.data;
+    }
   });
 
-  const { data: daily } = useQuery({
+  const dailyQuery = useQuery({
     queryKey: ['rpt-daily'],
-    queryFn:  async () => { const { data } = await api.get('/reports/daily'); return data.data; },
-    enabled:  tab === 'Daily',
+    queryFn: async () => {
+      const response = await api.get('/reports/daily');
+      return response.data.data;
+    },
+    enabled: tab === 'Daily'
   });
 
-  const { data: monthly } = useQuery({
+  const monthlyQuery = useQuery({
     queryKey: ['rpt-monthly'],
-    queryFn:  async () => { const { data } = await api.get('/reports/monthly'); return data.data; },
-    enabled:  tab === 'Monthly',
+    queryFn: async () => {
+      const response = await api.get('/reports/monthly');
+      return response.data.data;
+    },
+    enabled: tab === 'Monthly'
   });
 
-  const { data: inventory } = useQuery({
+  const inventoryQuery = useQuery({
     queryKey: ['rpt-inventory'],
-    queryFn:  async () => { const { data } = await api.get('/reports/inventory'); return data.data; },
-    enabled:  tab === 'Inventory',
+    queryFn: async () => {
+      const response = await api.get('/reports/inventory');
+      return response.data.data;
+    },
+    enabled: tab === 'Inventory'
   });
 
-  const { data: staffData } = useQuery({
+  const staffQuery = useQuery({
     queryKey: ['rpt-staff', startDate, endDate],
-    queryFn:  async () => { const { data } = await api.get(`/reports/staff-performance?startDate=${startDate}&endDate=${endDate}`); return data.data; },
-    enabled:  tab === 'Staff',
+    queryFn: async () => {
+      const response = await api.get('/reports/staff-performance', { params: { startDate, endDate } });
+      return response.data.data;
+    },
+    enabled: tab === 'Staff' && !invalidRange
   });
 
-  const { data: categories } = useQuery({
+  const categoriesQuery = useQuery({
     queryKey: ['rpt-categories', startDate, endDate],
-    queryFn:  async () => { const { data } = await api.get(`/reports/categories?startDate=${startDate}&endDate=${endDate}`); return data.data; },
-    enabled:  tab === 'Categories',
+    queryFn: async () => {
+      const response = await api.get('/reports/categories', { params: { startDate, endDate } });
+      return response.data.data;
+    },
+    enabled: tab === 'Categories' && !invalidRange
   });
 
-  const dailyChart = (daily?.salesByDay || []).map(d => {
-    const exp = (daily?.expByDay || []).find(e => e._id === d._id);
-    return { date: d._id.slice(5), revenue: d.revenue, expenses: exp?.total||0, profit: d.revenue-(exp?.total||0) };
-  });
+  const dailyChart = useMemo(
+    () => mergeDailySeries(dailyQuery.data?.salesByDay, dailyQuery.data?.expByDay),
+    [dailyQuery.data]
+  );
+  const monthlyChart = useMemo(
+    () => buildMonthlySeries(monthlyQuery.data, MONTHS),
+    [monthlyQuery.data]
+  );
 
-  const monthlyChart = (monthly||[]).map(m => ({
-    name: MONTHS[m._id.month-1], revenue: m.revenue, count: m.count
-  }));
-
-  const quickRange = (label) => {
-    const e = new Date(), s = new Date();
-    if (label === 'Today')  { const t=dateToday(); setStartDate(t); setEndDate(t); return; }
-    if (label === 'Week')   { s.setDate(s.getDate()-6); }
-    if (label === 'Month')  { s.setDate(1); }
-    if (label === 'Year')   { s.setMonth(0); s.setDate(1); }
-    setStartDate(s.toISOString().split('T')[0]);
-    setEndDate(e.toISOString().split('T')[0]);
+  const quickRange = label => {
+    const end = new Date();
+    const start = new Date();
+    if (label === 'Today') {
+      const today = toDateInputValue(end);
+      setStartDate(today);
+      setEndDate(today);
+      return;
+    }
+    if (label === 'Week') start.setDate(start.getDate() - 6);
+    if (label === 'Month') start.setDate(1);
+    if (label === 'Year') {
+      start.setMonth(0);
+      start.setDate(1);
+    }
+    setStartDate(toDateInputValue(start));
+    setEndDate(toDateInputValue(end));
   };
 
+  const rangeAffected = ['Overview', 'Staff', 'Categories'].includes(tab);
+
   return (
-    <div className="p-4 space-y-4">
-      <PageHeader title="Reports" sub="Business performance" />
+    <main className="space-y-5 p-4 pb-8 sm:space-y-6 sm:p-6 lg:p-7">
+      <PageHeader
+        title="Reports & analytics"
+        sub="Explore real sales, expenses, stock and team performance"
+        action={<Button variant="secondary" onClick={() => window.print()}><Printer size={15} /> Print report</Button>}
+      />
 
-      {/* Date range */}
-      <div className="bg-white rounded-2xl p-3 shadow-sm">
-        <div className="grid grid-cols-2 gap-2">
-          <div><label className="text-xs text-gray-400 block mb-0.5">From</label>
-            <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
-                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"/></div>
-          <div><label className="text-xs text-gray-400 block mb-0.5">To</label>
-            <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)}
-                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none"/></div>
-        </div>
-        <div className="flex gap-2 mt-2 overflow-x-auto pb-1 no-scrollbar">
-          {['Today','Week','Month','Year'].map(l => (
-            <button key={l} onClick={()=>quickRange(l)}
-                    className="shrink-0 px-3 py-1 bg-gray-100 rounded-full text-xs font-semibold text-gray-600">{l}</button>
-          ))}
-        </div>
-      </div>
+      <Card>
+        <CardBody className="space-y-3 p-3 sm:p-4">
+          <div className="flex items-center gap-2">
+            <CalendarDays size={16} className="text-[#80622e]" />
+            <div>
+              <p className="text-xs font-semibold text-[var(--color-text)]">Reporting period</p>
+              <p className="text-[11px] text-[var(--color-text-muted)]">
+                {rangeAffected ? 'Applies to this report.' : tab === 'Inventory' ? 'Inventory shows the current stock position.' : tab === 'Daily' ? 'Daily view always shows the most recent 30 days.' : 'Monthly view always shows the most recent 12 months.'}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="space-y-1.5">
+              <span className="text-xs font-semibold text-[var(--color-text-secondary)]">From date</span>
+              <input type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className={inputClass} aria-label="Report start date" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs font-semibold text-[var(--color-text-secondary)]">To date</span>
+              <input type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className={inputClass} aria-label="Report end date" />
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {['Today', 'Week', 'Month', 'Year'].map(label => (
+              <button key={label} type="button" onClick={() => quickRange(label)} className="min-h-9 rounded-full border border-[var(--color-border)] bg-white px-3.5 text-xs font-semibold text-[var(--color-text-secondary)] transition hover:border-[var(--color-gold-light)] hover:bg-[#fbf8f1]">
+                {label}
+              </button>
+            ))}
+          </div>
+          {invalidRange && <p className="text-xs font-medium text-[var(--color-danger)]" role="alert">The start date must be on or before the end date.</p>}
+        </CardBody>
+      </Card>
 
-      {/* Tabs */}
-      <div className="flex overflow-x-auto gap-2 pb-1 no-scrollbar">
-        {TABS.map(t => (
-          <button key={t} onClick={()=>setTab(t)}
-                  className={`shrink-0 px-4 py-2 rounded-xl text-sm font-semibold ${
-                    tab===t ? 'text-black' : 'bg-white text-gray-500 border border-gray-200'
-                  }`}
-                  style={tab===t ? { background:'#d4a017' } : {}}>
-            {t}
+      <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="Report sections">
+        {TABS.map(value => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setTab(value)}
+            aria-current={tab === value ? 'page' : undefined}
+            className={'min-h-10 shrink-0 rounded-xl border px-4 text-xs font-semibold transition ' + (tab === value
+              ? 'border-[#171717] bg-[#171717] text-white shadow-sm'
+              : 'border-[var(--color-border)] bg-white text-[var(--color-text-secondary)] hover:border-[var(--color-gold-light)]')}
+          >
+            {value}
           </button>
         ))}
-      </div>
+      </nav>
 
-      {/* OVERVIEW */}
       {tab === 'Overview' && (
-        <>
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCard icon={<TrendingUp size={18}/>}   label="Revenue"   loading={sumLoading} value={fmt(summary?.revenue||0)}   sub={`${summary?.salesCount||0} sales`} color="green"/>
-            <KpiCard icon={<TrendingDown size={18}/>}  label="Expenses"  loading={sumLoading} value={fmt(summary?.expenses||0)}  color="red"/>
-            <KpiCard icon={<DollarSign size={18}/>}   label="Profit"    loading={sumLoading} value={fmt(summary?.profit||0)}    color={summary?.profit>=0?'gold':'red'}/>
-            <KpiCard icon={<ShoppingCart size={18}/>} label="Avg Sale"  loading={sumLoading}
-                     value={fmt(summary?.salesCount>0 ? summary.revenue/summary.salesCount : 0)} color="blue"/>
-          </div>
-
-          {(summary?.byPayment||[]).length > 0 && (
-            <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="font-bold text-sm text-gray-700 mb-3">By Payment Method</p>
-              <ResponsiveContainer width="100%" height={180}>
-                <PieChart>
-                  <Pie data={summary.byPayment} dataKey="total" nameKey="_id" cx="50%" cy="50%" outerRadius={70}
-                       label={({_id,percent})=>`${_id} ${(percent*100).toFixed(0)}%`} labelLine={false}>
-                    {summary.byPayment.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-                  </Pie>
-                  <Tooltip formatter={v=>fmt(v)}/>
-                </PieChart>
-              </ResponsiveContainer>
+        invalidRange ? null : summaryQuery.isLoading ? (
+          <LoadingCards count={5} />
+        ) : summaryQuery.isError ? (
+          <ReportError message={summaryQuery.error?.response?.data?.message || summaryQuery.error?.message} onRetry={() => summaryQuery.refetch()} retrying={summaryQuery.isFetching} />
+        ) : summaryQuery.data ? (
+          <section className="space-y-4" aria-label="Business overview">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <Metric label="Revenue" value={money(summaryQuery.data.revenue, fmt)} detail={(summaryQuery.data.salesCount || 0) + ' recorded sales'} Icon={TrendingUp} tone="green" />
+              <Metric label="Recorded expenses" value={money(summaryQuery.data.expenses, fmt)} detail="Expenses in the selected period" Icon={TrendingDown} tone="red" />
+              <Metric label="Revenue less expenses" value={money(getRevenueLessExpenses(summaryQuery.data.revenue, summaryQuery.data.expenses), fmt)} detail="Before product cost / cost of goods sold" Icon={Wallet} tone="gold" />
+              <Metric label="Average sale" value={money(summaryQuery.data.salesCount ? summaryQuery.data.revenue / summaryQuery.data.salesCount : 0, fmt)} detail="Revenue divided by sales count" Icon={ShoppingBag} tone="slate" />
+              <Metric label="Sales count" value={Number(summaryQuery.data.salesCount || 0).toLocaleString('en-IN')} detail="Invoices in the selected period" Icon={BarChart3} tone="slate" />
             </div>
-          )}
 
-          {(summary?.topProducts||[]).length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-4 pt-4 pb-2 border-b flex items-center gap-2">
-                <Star size={15} style={{color:'#d4a017'}}/><p className="font-bold text-sm">Top Products</p>
-              </div>
-              {summary.topProducts.slice(0,8).map((p,i)=>(
-                <div key={i} className="flex items-center justify-between px-4 py-2.5 border-b border-gray-50 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-black text-gray-400 w-5">#{i+1}</span>
-                    <p className="text-sm font-semibold truncate max-w-[160px]">{p.name}</p>
+            <div className="rounded-2xl border border-[#ead8ad] bg-[#fbf8f1] p-3.5">
+              <p className="text-xs leading-5 text-[var(--color-text-secondary)]">
+                “Revenue less expenses” is not net profit. Current invoices do not preserve historical product cost, so this report cannot calculate cost of goods sold or true profit yet.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              <Card>
+                <CardBody className="space-y-3 p-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-[var(--color-text)]">Sales by payment method</h2>
+                    <p className="mt-1 text-xs text-[var(--color-text-muted)]">Invoice value in the selected period</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-green-600">{fmt(p.revenue)}</p>
-                    <p className="text-xs text-gray-400">{p.qty} sold</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                  {(summaryQuery.data.byPayment || []).length ? (
+                    <>
+                      <div role="img" aria-label="Pie chart showing sales value by payment method" className="h-56">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={summaryQuery.data.byPayment} dataKey="total" nameKey="_id" cx="50%" cy="50%" outerRadius={78} label={({ _id, percent }) => _id + ' ' + (percent * 100).toFixed(0) + '%'} labelLine={false}>
+                              {summaryQuery.data.byPayment.map((item, index) => <Cell key={item._id || index} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
+                            </Pie>
+                            <Tooltip formatter={value => money(value, fmt)} />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <Table
+                        headings={['Method', 'Sales', 'Value']}
+                        rows={summaryQuery.data.byPayment.map(item => ({
+                          key: item._id,
+                          cells: [item._id || 'Unspecified', item.count, money(item.total, fmt)]
+                        }))}
+                      />
+                    </>
+                  ) : <EmptyReport title="No payment data" description="Payment method totals will appear when invoices exist in this reporting period." />}
+                </CardBody>
+              </Card>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-red-50 border border-red-100 rounded-2xl p-3">
-              <p className="text-xs text-red-600 font-semibold uppercase">Customer Credit</p>
-              <p className="font-black text-lg text-red-600">{fmt(summary?.totalCreditOwed||0)}</p>
-              <p className="text-xs text-gray-400">customers owe you</p>
+              <Card>
+                <CardBody className="space-y-3 p-4">
+                  <div>
+                    <h2 className="text-sm font-semibold text-[var(--color-text)]">Top-selling products</h2>
+                    <p className="mt-1 text-xs text-[var(--color-text-muted)]">Ranked by units sold in the selected period</p>
+                  </div>
+                  {(summaryQuery.data.topProducts || []).length ? (
+                    <Table
+                      headings={['Product', 'Units', 'Revenue']}
+                      rows={summaryQuery.data.topProducts.slice(0, 8).map((product, index) => ({
+                        key: product._id || index,
+                        cells: [
+                          <span className="font-medium text-[var(--color-text)]">{product.name || 'Unknown product'}</span>,
+                          product.qty,
+                          <span className="font-semibold tabular-nums text-[var(--color-text)]">{money(product.revenue, fmt)}</span>
+                        ]
+                      }))}
+                    />
+                  ) : <EmptyReport title="No product sales" description="Top products appear after sales invoices are recorded." />}
+                </CardBody>
+              </Card>
             </div>
-            <div className="bg-orange-50 border border-orange-100 rounded-2xl p-3">
-              <p className="text-xs text-orange-600 font-semibold uppercase">Supplier Debt</p>
-              <p className="font-black text-lg text-orange-600">{fmt(summary?.totalSupplierDebt||0)}</p>
-              <p className="text-xs text-gray-400">you owe suppliers</p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Metric label="Customer credit balances" value={money(summaryQuery.data.totalCreditOwed, fmt)} detail="Current balance owed by customers · all dates" Icon={Users} tone="red" />
+              <Metric label="Supplier balances" value={money(summaryQuery.data.totalSupplierDebt, fmt)} detail="Current amount owed to suppliers · all dates" Icon={Package} tone="gold" />
             </div>
-          </div>
-        </>
+          </section>
+        ) : <EmptyReport title="No report summary available" description="No summary data was returned for this period." />
       )}
 
-      {/* DAILY */}
       {tab === 'Daily' && (
-        dailyChart.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">No data for last 30 days</div>
-        ) : (
-          <>
-            <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="font-bold text-sm text-gray-700 mb-3">Revenue vs Expenses (30d)</p>
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={dailyChart} margin={{top:5,right:5,bottom:0,left:-20}}>
-                  <defs>
-                    <linearGradient id="rg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#d4a017" stopOpacity={0.3}/><stop offset="95%" stopColor="#d4a017" stopOpacity={0}/></linearGradient>
-                    <linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/><stop offset="95%" stopColor="#ef4444" stopOpacity={0}/></linearGradient>
-                  </defs>
-                  <XAxis dataKey="date" tick={{fontSize:10}} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{fontSize:10}} axisLine={false} tickLine={false}/>
-                  <Tooltip formatter={(v,n)=>[fmt(v),n]}/>
-                  <Area type="monotone" dataKey="revenue"  name="Revenue"  stroke="#d4a017" strokeWidth={2} fill="url(#rg)"/>
-                  <Area type="monotone" dataKey="expenses" name="Expenses" stroke="#ef4444" strokeWidth={2} fill="url(#eg)"/>
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="font-bold text-sm text-gray-700 mb-3">Daily Profit</p>
-              <ResponsiveContainer width="100%" height={150}>
-                <BarChart data={dailyChart} margin={{top:5,right:5,bottom:0,left:-20}}>
-                  <XAxis dataKey="date" tick={{fontSize:10}} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{fontSize:10}} axisLine={false} tickLine={false}/>
-                  <Tooltip formatter={v=>fmt(v)}/>
-                  <Bar dataKey="profit" fill="#d4a017" radius={[4,4,0,0]}/>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </>
+        dailyQuery.isLoading ? <LoadingCards count={3} /> :
+        dailyQuery.isError ? <ReportError message={dailyQuery.error?.response?.data?.message || dailyQuery.error?.message} onRetry={() => dailyQuery.refetch()} retrying={dailyQuery.isFetching} /> :
+        dailyChart.length === 0 ? <EmptyReport title="No daily activity" description="Sales and recorded expenses for the last 30 days will appear here." /> : (
+          <section className="space-y-4">
+            <Card>
+              <CardBody className="space-y-3 p-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--color-text)]">Revenue vs recorded expenses</h2>
+                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">Last 30 days · expense-only dates are included</p>
+                </div>
+                <div role="img" aria-label="Area chart comparing daily revenue and recorded expenses for the last 30 days" className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={dailyChart} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e9e4da" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={value => value.slice(5)} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip labelFormatter={value => value} formatter={value => money(value, fmt)} />
+                      <Legend />
+                      <Area type="monotone" dataKey="revenue" name="Revenue" stroke="#b58d4c" fill="#b58d4c" fillOpacity={0.16} strokeWidth={2} />
+                      <Area type="monotone" dataKey="expenses" name="Recorded expenses" stroke="#a64d4d" fill="#a64d4d" fillOpacity={0.12} strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardBody className="space-y-3 p-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--color-text)]">Revenue less recorded expenses</h2>
+                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">This is before product cost / cost of goods sold, not net profit.</p>
+                </div>
+                <div role="img" aria-label="Bar chart showing daily revenue less recorded expenses before product cost" className="h-52">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={dailyChart} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e9e4da" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={value => value.slice(5)} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip formatter={value => money(value, fmt)} />
+                      <Bar dataKey="revenueLessExpenses" name="Revenue less expenses" fill="#b58d4c" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <Table
+                  headings={['Date', 'Revenue', 'Expenses', 'Difference']}
+                  rows={dailyChart.slice(-10).reverse().map(item => ({
+                    key: item.date,
+                    cells: [item.date, money(item.revenue, fmt), money(item.expenses, fmt), money(item.revenueLessExpenses, fmt)]
+                  }))}
+                  emptyLabel="No daily data."
+                />
+              </CardBody>
+            </Card>
+          </section>
         )
       )}
 
-      {/* MONTHLY */}
       {tab === 'Monthly' && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm">
-          <p className="font-bold text-sm text-gray-700 mb-3">Monthly Revenue (12m)</p>
-          {monthlyChart.length === 0 ? (
-            <div className="text-center py-10 text-gray-400">No monthly data yet</div>
-          ) : (
-            <>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={monthlyChart} margin={{top:5,right:5,bottom:0,left:-20}}>
-                  <XAxis dataKey="name" tick={{fontSize:11}} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{fontSize:11}} axisLine={false} tickLine={false}/>
-                  <Tooltip formatter={v=>fmt(v)}/>
-                  <Bar dataKey="revenue" fill="#d4a017" radius={[6,6,0,0]}/>
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="mt-3 space-y-1.5">
-                {monthlyChart.map(m=>(
-                  <div key={m.name} className="flex justify-between text-sm">
-                    <span className="text-gray-500 w-8">{m.name}</span>
-                    <div className="flex-1 mx-3 flex items-center">
-                      <div className="h-1.5 rounded-full" style={{background:'#d4a017', width:`${Math.max(4,(m.revenue/Math.max(...monthlyChart.map(x=>x.revenue)))*100)}%`}}/>
-                    </div>
-                    <span className="font-semibold">{fmt(m.revenue)}</span>
-                  </div>
-                ))}
+        monthlyQuery.isLoading ? <LoadingCards count={3} /> :
+        monthlyQuery.isError ? <ReportError message={monthlyQuery.error?.response?.data?.message || monthlyQuery.error?.message} onRetry={() => monthlyQuery.refetch()} retrying={monthlyQuery.isFetching} /> :
+        monthlyChart.length === 0 ? <EmptyReport title="No monthly sales yet" description="Monthly revenue appears after invoices are recorded." /> : (
+          <Card>
+            <CardBody className="space-y-3 p-4">
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--color-text)]">Monthly revenue</h2>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">Most recent 12 months · all payment methods</p>
               </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* INVENTORY */}
-      {tab === 'Inventory' && inventory && (
-        <>
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCard icon={<Package size={18}/>} label="Total Products" value={inventory.totalProducts} color="blue"/>
-            <KpiCard icon={<Package size={18}/>} label="Low Stock" value={inventory.lowStock?.length} color="red"/>
-            <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Value at Cost</p>
-              <p className="font-black text-lg" style={{color:'#d4a017'}}>{fmt(inventory.inventoryValue?.atCost||0)}</p>
-            </div>
-            <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs text-gray-500 uppercase font-semibold mb-1">Value at Retail</p>
-              <p className="font-black text-lg text-green-600">{fmt(inventory.inventoryValue?.atRetail||0)}</p>
-            </div>
-          </div>
-
-          {inventory.lowStock?.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-4 pt-4 pb-2 border-b"><p className="font-bold text-sm text-red-600">⚠ Low Stock</p></div>
-              {inventory.lowStock.map(p=>(
-                <div key={p._id} className="flex justify-between px-4 py-2.5 border-b border-gray-50 last:border-0">
-                  <div><p className="font-semibold text-sm">{p.name}</p><p className="text-xs text-gray-400">{p.category}</p></div>
-                  <span className="font-black text-red-500 text-sm">{p.quantity}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {inventory.deadStock?.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-4 pt-4 pb-2 border-b"><p className="font-bold text-sm text-gray-600">💀 Dead Stock</p></div>
-              {inventory.deadStock.map(p=>(
-                <div key={p._id} className="flex justify-between px-4 py-2.5 border-b border-gray-50 last:border-0">
-                  <div><p className="font-semibold text-sm">{p.name}</p><p className="text-xs text-gray-400">Cost: {fmt(p.costPrice)}</p></div>
-                  <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full text-gray-500">0 units</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* STAFF */}
-      {tab === 'Staff' && (
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-4 pt-4 pb-2 border-b flex items-center gap-2"><BarChart3 size={16} style={{color:'#d4a017'}}/><p className="font-bold text-sm">Staff Performance</p></div>
-          {!staffData?.length ? (
-            <div className="text-center py-10 text-gray-400 text-sm">No sales data for this period</div>
-          ) : staffData.map((s,i)=>(
-            <div key={s._id||i} className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-black shrink-0" style={{background:'#d4a017'}}>
-                {(s.name||'?').charAt(0).toUpperCase()}
+              <div role="img" aria-label="Bar chart of monthly revenue over the last 12 months" className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={monthlyChart} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e9e4da" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip formatter={value => money(value, fmt)} />
+                    <Bar dataKey="revenue" name="Revenue" fill="#b58d4c" radius={[5, 5, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm">{s.name||'Unknown'}</p>
-                <p className="text-xs text-gray-400">{s.count} sales · avg {fmt(s.avgSale||0)}</p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className="font-bold text-green-600 text-sm">{fmt(s.revenue)}</p>
-                <span className="text-xs text-gray-400">#{i+1}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* CATEGORIES */}
-      {tab === 'Categories' && (
-        categories?.length > 0 ? (
-          <>
-            <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="font-bold text-sm text-gray-700 mb-3">Revenue by Category</p>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie data={categories} dataKey="revenue" nameKey="_id" cx="50%" cy="50%" outerRadius={75}
-                       label={({_id,percent})=>percent>0.05?`${_id} ${(percent*100).toFixed(0)}%`:''} labelLine={false}>
-                    {categories.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-                  </Pie>
-                  <Tooltip formatter={v=>fmt(v)}/>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              {categories.map((c,i)=>(
-                <div key={c._id||i} className="flex justify-between px-4 py-3 border-b border-gray-50 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{background:COLORS[i%COLORS.length]}}/>
-                    <p className="font-semibold text-sm">{c._id||'Unknown'}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-sm text-green-600">{fmt(c.revenue)}</p>
-                    <p className="text-xs text-gray-400">{c.qty} items</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="text-center py-12 text-gray-400"><BarChart3 size={40} className="mx-auto mb-2 opacity-25"/><p>No category data for this period</p></div>
+              <Table
+                headings={['Month', 'Invoices', 'Revenue']}
+                rows={monthlyChart.slice().reverse().map(item => ({
+                  key: item.key,
+                  cells: [item.name, item.count, money(item.revenue, fmt)]
+                }))}
+              />
+            </CardBody>
+          </Card>
         )
       )}
 
-      <div className="h-4"/>
-    </div>
+      {tab === 'Inventory' && (
+        inventoryQuery.isLoading ? <LoadingCards count={4} /> :
+        inventoryQuery.isError ? <ReportError message={inventoryQuery.error?.response?.data?.message || inventoryQuery.error?.message} onRetry={() => inventoryQuery.refetch()} retrying={inventoryQuery.isFetching} /> :
+        inventoryQuery.data ? (
+          <section className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Metric label="Active products" value={Number(inventoryQuery.data.totalProducts || 0).toLocaleString('en-IN')} detail="Current catalogue" Icon={Package} tone="slate" />
+              <Metric label="Low stock" value={(inventoryQuery.data.lowStock || []).length} detail="Up to 20 lowest-stock items" Icon={AlertCircle} tone="red" />
+              <Metric label="Inventory at cost" value={money(inventoryQuery.data.inventoryValue?.atCost, fmt)} detail="Current quantity × current cost price" Icon={Wallet} tone="gold" />
+              <Metric label="Inventory at retail" value={money(inventoryQuery.data.inventoryValue?.atRetail, fmt)} detail="Current quantity × current selling price" Icon={ShoppingBag} tone="green" />
+            </div>
+
+            <Card>
+              <CardBody className="space-y-3 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-[var(--color-text)]">Low-stock items</h2>
+                  <Badge variant="warning">{(inventoryQuery.data.lowStock || []).length} shown</Badge>
+                </div>
+                <Table
+                  headings={['Product', 'Category', 'Available']}
+                  rows={(inventoryQuery.data.lowStock || []).map(item => ({
+                    key: item._id,
+                    cells: [item.name, item.category, <span className="font-semibold text-[var(--color-danger)]">{item.quantity}</span>]
+                  }))}
+                  emptyLabel="No low-stock items."
+                />
+              </CardBody>
+            </Card>
+
+            <Card>
+              <CardBody className="space-y-3 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-[var(--color-text)]">Out-of-stock items</h2>
+                  <Badge variant="danger">{(inventoryQuery.data.deadStock || []).length} shown</Badge>
+                </div>
+                <Table
+                  headings={['Product', 'Category', 'Last updated']}
+                  rows={(inventoryQuery.data.deadStock || []).map(item => ({
+                    key: item._id,
+                    cells: [item.name, item.category, dateLabel(item.updatedAt)]
+                  }))}
+                  emptyLabel="No out-of-stock items."
+                />
+              </CardBody>
+            </Card>
+          </section>
+        ) : <EmptyReport title="Inventory report unavailable" description="No inventory report data was returned." />
+      )}
+
+      {tab === 'Staff' && (
+        invalidRange ? null :
+        staffQuery.isLoading ? <LoadingCards count={3} /> :
+        staffQuery.isError ? <ReportError message={staffQuery.error?.response?.data?.message || staffQuery.error?.message} onRetry={() => staffQuery.refetch()} retrying={staffQuery.isFetching} /> :
+        !(staffQuery.data || []).length ? <EmptyReport title="No staff sales for this period" description="Staff performance is based on sales invoices in the selected date range." /> : (
+          <Card>
+            <CardBody className="space-y-3 p-4">
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--color-text)]">Staff sales performance</h2>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">Ranked by invoice revenue in the selected date range</p>
+              </div>
+              <Table
+                headings={['Staff member', 'Sales', 'Average sale', 'Revenue']}
+                rows={(staffQuery.data || []).map((item, index) => ({
+                  key: item._id || index,
+                  cells: [
+                    <span className="font-medium text-[var(--color-text)]">{item.name || 'Unknown staff'}</span>,
+                    item.count,
+                    money(item.avgSale, fmt),
+                    <span className="font-semibold text-[var(--color-text)]">{money(item.revenue, fmt)}</span>
+                  ]
+                }))}
+              />
+            </CardBody>
+          </Card>
+        )
+      )}
+
+      {tab === 'Categories' && (
+        invalidRange ? null :
+        categoriesQuery.isLoading ? <LoadingCards count={3} /> :
+        categoriesQuery.isError ? <ReportError message={categoriesQuery.error?.response?.data?.message || categoriesQuery.error?.message} onRetry={() => categoriesQuery.refetch()} retrying={categoriesQuery.isFetching} /> :
+        !(categoriesQuery.data || []).length ? <EmptyReport title="No category sales for this period" description="Category results are based on invoice items joined to the products' current category." /> : (
+          <section className="space-y-4">
+            <div className="rounded-2xl border border-[#ead8ad] bg-[#fbf8f1] p-3.5">
+              <p className="text-xs leading-5 text-[var(--color-text-secondary)]">
+                Category reporting uses each product's current catalogue category. If a product's category was changed, older sales may appear under the new category because invoice items do not store a category snapshot.
+              </p>
+            </div>
+            <Card>
+              <CardBody className="space-y-3 p-4">
+                <h2 className="text-sm font-semibold text-[var(--color-text)]">Revenue by category</h2>
+                <div role="img" aria-label="Pie chart of sales revenue grouped by current product category" className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={categoriesQuery.data} dataKey="revenue" nameKey="_id" cx="50%" cy="50%" outerRadius={84} label={({ _id, percent }) => (percent >= 0.06 ? (_id || 'Unknown') + ' ' + (percent * 100).toFixed(0) + '%' : '')} labelLine={false}>
+                        {categoriesQuery.data.map((item, index) => <Cell key={item._id || index} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip formatter={value => money(value, fmt)} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <Table
+                  headings={['Category', 'Units sold', 'Revenue']}
+                  rows={categoriesQuery.data.map((item, index) => ({
+                    key: item._id || index,
+                    cells: [item._id || 'Unknown', item.qty, money(item.revenue, fmt)]
+                  }))}
+                />
+              </CardBody>
+            </Card>
+          </section>
+        )
+      )}
+
+      <p className="text-[11px] leading-5 text-[var(--color-text-muted)]">
+        Reports are based on the records returned by the ERP API. Inventory and account balances are current snapshots; daily/monthly reports use their own fixed periods.
+      </p>
+    </main>
   );
 }
