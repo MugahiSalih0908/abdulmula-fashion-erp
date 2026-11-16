@@ -305,6 +305,11 @@ function AddStaffForm({ onSaved }) {
       });
       if (response.data?.emailStatus === 'sent') {
         toast.success(response.data.message || 'Staff account created and activation email accepted.');
+      } else if (response.data?.emailStatus === 'unknown') {
+        toast.error(
+          'Account created, but activation email delivery is uncertain. Check Email Center before retrying.',
+          { duration: 8000 }
+        );
       } else {
         toast.error(
           response.data?.emailMessage
