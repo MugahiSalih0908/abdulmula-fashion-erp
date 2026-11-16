@@ -14,10 +14,7 @@ const { sendEmail, templates } = require('../utils/sendEmail');
 router.use(protect);
 
 // ── Helper: generate secure temp password ─────────────────────
-const generateTempPassword = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-};
+const generatePendingPassword = () => crypto.randomBytes(32).toString('hex');
 
 /* ── GET /api/staff ────────────────────── admin + manager ───── */
 router.get('/', authorize('admin','manager'), async (req, res, next) => {
@@ -66,13 +63,13 @@ router.post('/', authorize('admin'), async (req, res, next) => {
     if (exists) return res.status(400).json({ success:false, message:'An account with this email already exists.' });
 
     // Generate temp password (will be shown in email; user must change on activation)
-    const tempPassword = generateTempPassword();
+    const pendingPassword = generatePendingPassword();
 
     // Create user (NOT yet verified)
     const member = new User({
       name:       name.trim(),
       email:      email.toLowerCase().trim(),
-      password:   tempPassword,
+      password:   pendingPassword,
       role:       role || 'staff',
       salary:     salary || 0,
       isVerified: false,
@@ -82,17 +79,22 @@ router.post('/', authorize('admin'), async (req, res, next) => {
     const rawToken = member.generateVerificationToken();
     await member.save();
 
-    // Build activation URL
     const activationUrl = `${process.env.FRONTEND_URL}/activate/${rawToken}`;
-    console.log('ACTIVATION URL:', activationUrl);
-    const tmpl          = templates.welcome({ name: member.name, role: member.role, tempPassword, activationUrl });
-
-    // Send welcome email
+    const tmpl = templates.welcome({ name: member.name, role: member.role, activationUrl });
+    let emailStatus = 'failed';
     try {
-     console.log('EMAIL WOULD SEND TO:', member.email);
+      const delivery = await sendEmail({
+        to: member.email,
+        ...tmpl,
+        category: 'staff_activation',
+        idempotencyKey: `staff-activation:${member._id}:${member.verificationToken}`,
+        createdBy: req.user._id,
+        relatedEntity: 'User',
+        relatedEntityId: member._id
+      });
+      emailStatus = delivery.status;
     } catch (emailErr) {
-      console.error('[EMAIL ERROR] Welcome email failed:', emailErr.message);
-      // Don't fail the creation — admin can resend
+      console.error('[STAFF ACTIVATION EMAIL ERROR]', emailErr.code || emailErr.message);
     }
 
     await log({ user: req.user, action:'USER_CREATE', entity:'User', entityId: member._id, details:{ name: member.name, role: member.role, email: member.email }, req });
@@ -100,7 +102,8 @@ router.post('/', authorize('admin'), async (req, res, next) => {
     res.status(201).json({
       success:true,
       data:    member,
-     message: `Account created successfully.`
+     message: emailStatus === 'sent' ? 'Account created and activation email accepted by the provider.' : 'Account created, but activation email was not submitted. Check Email Center and resend after configuration.',
+     emailStatus
     });
   } catch (err) { next(err); }
 });
@@ -114,17 +117,24 @@ router.post('/:id/resend-activation', authorize('admin'), async (req, res, next)
     if (member.isVerified)
       return res.status(400).json({ success:false, message:'Account is already activated.' });
 
-    const tempPassword = generateTempPassword();
-    member.password    = tempPassword;
+    const pendingPassword = generatePendingPassword();
+    member.password    = generatePendingPassword();
     const rawToken     = member.generateVerificationToken();
     await member.save();
 
     const activationUrl = `${process.env.FRONTEND_URL}/activate/${rawToken}`;
-    const tmpl          = templates.welcome({ name: member.name, role: member.role, tempPassword, activationUrl });
+    const tmpl = templates.welcome({ name: member.name, role: member.role, activationUrl });
+    const delivery = await sendEmail({
+      to: member.email,
+      ...tmpl,
+      category: 'staff_activation',
+      idempotencyKey: `staff-activation:${member._id}:${member.verificationToken}`,
+      createdBy: req.user._id,
+      relatedEntity: 'User',
+      relatedEntityId: member._id
+    });
 
-  console.log('EMAIL WOULD SEND TO:', member.email);
-
-    res.json({ success:true, message:`Activation email resent to ${member.email}.` });
+    res.json({ success:true, message:`Activation email accepted for ${member.email}.`, emailStatus: delivery.status });
   } catch (err) { next(err); }
 });
 

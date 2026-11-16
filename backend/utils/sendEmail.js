@@ -1,5 +1,8 @@
 // utils/sendEmail.js – Resend email utility with branded HTML templates
 const { Resend } = require('resend');
+const crypto = require('crypto');
+const validator = require('validator');
+const EmailLog = require('../models/EmailLog');
 
 // ── Initialize Resend with API key ───────────────────────────
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -75,23 +78,25 @@ const baseLayout = (content) => `
 // ─────────────────────────────────────────────────────────────
 // TEMPLATE: Welcome + Activation
 // ─────────────────────────────────────────────────────────────
-const welcomeTemplate = ({ name, role, tempPassword, activationUrl }) => ({
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', "'": '&#39;' }[char]));
+
+const welcomeTemplate = ({ name, role, activationUrl }) => ({
   subject: `Welcome to Abdulmula Fashion ERP — Activate Your Account`,
   html: baseLayout(`
-    <h1>Welcome, ${name}! 👋</h1>
+    <h1>Welcome, ${escapeHtml(name)}! 👋</h1>
     <p>Your staff account has been created on <strong>Abdulmula Fashion ERP</strong>.
-    You have been assigned the role of <strong style="text-transform:capitalize;">${role}</strong>.</p>
+    You have been assigned the role of <strong style="text-transform:capitalize;">${escapeHtml(role)}</strong>.</p>
 
     <p>Before you can log in, you need to activate your account and set your own password.</p>
 
     <div class="info-box">
-      <p><strong>Name:</strong> ${name}</p>
-      <p><strong>Role:</strong> <span style="text-transform:capitalize;">${role}</span></p>
-      <p><strong>Temporary Password:</strong> <code style="background:#e5e7eb;padding:2px 6px;border-radius:4px;font-family:monospace;">${tempPassword}</code></p>
+      <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+      <p><strong>Role:</strong> <span style="text-transform:capitalize;">${escapeHtml(role)}</span></p>
+      <p><strong>Next step:</strong> Create your own password using the secure activation link.</p>
     </div>
 
     <p style="text-align:center;margin:28px 0;">
-      <a class="btn" href="${activationUrl}">
+      <a class="btn" href="${escapeHtml(activationUrl)}">
         🔑 Activate My Account
       </a>
     </p>
@@ -114,12 +119,12 @@ const resetTemplate = ({ name, resetUrl }) => ({
   subject: `Abdulmula Fashion ERP — Password Reset Request`,
   html: baseLayout(`
     <h1>Password Reset Request</h1>
-    <p>Hello <strong>${name}</strong>,</p>
+    <p>Hello <strong>${escapeHtml(name)}</strong>,</p>
     <p>We received a request to reset your password for your Abdulmula Fashion ERP account.
     Click the button below to choose a new password.</p>
 
     <p style="text-align:center;margin:28px 0;">
-      <a class="btn" href="${resetUrl}">
+      <a class="btn" href="${escapeHtml(resetUrl)}">
         🔒 Reset My Password
       </a>
     </p>
@@ -145,7 +150,7 @@ const passwordChangedTemplate = ({ name }) => ({
     <h1>Password Changed ✅</h1>
     <p>Hello <strong>${name}</strong>,</p>
     <p>Your password has been changed successfully on <strong>Abdulmula Fashion ERP</strong>.</p>
-    <p>You can now <a href="${process.env.FRONTEND_URL}/login" style="color:${BRAND.gold};font-weight:700;">log in</a> with your new password.</p>
+    <p>You can now <a href="${escapeHtml(process.env.FRONTEND_URL)}/login" style="color:${BRAND.gold};font-weight:700;">log in</a> with your new password.</p>
     <div class="warn">
       <p>🔐 If you did not make this change, contact your administrator immediately.</p>
     </div>
@@ -159,14 +164,14 @@ const invitationTemplate = ({ email, role, inviteUrl, expiresIn = 24 }) => ({
   subject: `🎉 You're Invited to Abdulmula Fashion ERP`,
   html: baseLayout(`
     <h1>Welcome to Abdulmula Fashion! 🎉</h1>
-    <p>Hello <strong>${email}</strong>,</p>
-    <p>You have been invited to join <strong>Abdulmula Fashion ERP</strong> as a <span style="text-transform:capitalize;font-weight:700;color:${BRAND.gold};">${role}</span>.</p>
+    <p>Hello <strong>${escapeHtml(email)}</strong>,</p>
+    <p>You have been invited to join <strong>Abdulmula Fashion ERP</strong> as a <span style="text-transform:capitalize;font-weight:700;color:${BRAND.gold};">${escapeHtml(role)}</span>.</p>
 
     <p>Our Enterprise Resource Planning system helps us manage inventory, sales, suppliers, and more. You'll be part of our growing team!</p>
 
     <div class="info-box">
-      <p><strong>📧 Email:</strong> ${email}</p>
-      <p><strong>👤 Role:</strong> <span style="text-transform:capitalize;">${role}</span></p>
+      <p><strong>📧 Email:</strong> ${escapeHtml(email)}</p>
+      <p><strong>👤 Role:</strong> <span style="text-transform:capitalize;">${escapeHtml(role)}</span></p>
       <p><strong>🏢 Company:</strong> Abdulmula Fashion · Konyo-Konyo Market, Juba, South Sudan</p>
     </div>
 
@@ -175,7 +180,7 @@ const invitationTemplate = ({ email, role, inviteUrl, expiresIn = 24 }) => ({
     </p>
 
     <p style="text-align:center;margin:28px 0;">
-      <a class="btn" href="${inviteUrl}" style="display:inline-block;padding:16px 36px;font-size:16px;">
+      <a class="btn" href="${escapeHtml(inviteUrl)}" style="display:inline-block;padding:16px 36px;font-size:16px;">
         ✨ Accept Invitation & Create Account
       </a>
     </p>
@@ -202,40 +207,160 @@ const invitationTemplate = ({ email, role, inviteUrl, expiresIn = 24 }) => ({
 });
 
 // ─────────────────────────────────────────────────────────────
-// Main sendEmail function using Resend
+// Central Resend sender with persistent delivery tracking
 // ─────────────────────────────────────────────────────────────
-const sendEmail = async ({ to, subject, html }) => {
-  // Skip in test / CI environments
-  if (process.env.NODE_ENV === 'test') {
-    console.log(`[EMAIL SKIP – test mode] To: ${to} | Subject: ${subject}`);
-    return { id: 'test-mode', message: 'Test email skipped' };
-  }
+let resendClient;
 
-  // Check for required environment variables
+const getResendClient = () => {
   if (!process.env.RESEND_API_KEY) {
-    console.error('[EMAIL] RESEND_API_KEY is missing – cannot send email.');
-    console.log(`[EMAIL WOULD SEND] To: ${to} | Subject: ${subject}`);
-    throw new Error('Resend API key not configured');
+    const error = new Error('Email provider is not configured.');
+    error.code = 'EMAIL_CONFIGURATION_ERROR';
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY);
+  return resendClient;
+};
+
+const terminalStatuses = new Set(['sent', 'delivered', 'delivery_delayed', 'bounced', 'complained']);
+
+const sendEmail = async ({
+  to,
+  subject,
+  html,
+  category = 'system',
+  idempotencyKey,
+  createdBy,
+  relatedEntity,
+  relatedEntityId
+}) => {
+  if (process.env.NODE_ENV === 'test') {
+    return { id: 'test-mode', status: 'sent', skipped: true };
   }
 
-  if (!process.env.EMAIL_FROM) {
-    console.error('[EMAIL] EMAIL_FROM is missing – cannot send email.');
-    throw new Error('EMAIL_FROM not configured');
+  const recipient = String(to || '').trim().toLowerCase();
+  if (!validator.isEmail(recipient)) {
+    const error = new Error('A valid email recipient is required.');
+    error.code = 'EMAIL_INVALID_RECIPIENT';
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!subject || !html) {
+    const error = new Error('Email subject and HTML content are required.');
+    error.code = 'EMAIL_INVALID_MESSAGE';
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const stableKey = String(idempotencyKey || crypto.randomUUID()).trim();
+  if (!stableKey || stableKey.length > 256) {
+    const error = new Error('Email idempotency key must be 1–256 characters.');
+    error.code = 'EMAIL_INVALID_IDEMPOTENCY_KEY';
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const from = String(process.env.EMAIL_FROM || '').trim();
+  let logEntry;
+  try {
+    logEntry = await EmailLog.findOneAndUpdate(
+      { idempotencyKey: stableKey },
+      {
+        $setOnInsert: {
+          recipient,
+          sender: from || undefined,
+          subject: String(subject).slice(0, 240),
+          category,
+          provider: 'resend',
+          idempotencyKey: stableKey,
+          createdBy: createdBy || undefined,
+          relatedEntity: relatedEntity || undefined,
+          relatedEntityId: relatedEntityId ? String(relatedEntityId) : undefined,
+          status: 'queued',
+          attempts: 0
+        }
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+  } catch (error) {
+    if (error && error.code === 11000) {
+      logEntry = await EmailLog.findOne({ idempotencyKey: stableKey });
+    } else {
+      throw error;
+    }
+  }
+  if (!logEntry) throw new Error('Could not create email delivery record.');
+
+  if (terminalStatuses.has(logEntry.status) && logEntry.providerEmailId) {
+    return { id: logEntry.providerEmailId, status: logEntry.status, alreadyProcessed: true, logId: logEntry._id };
+  }
+  if (logEntry.status === 'unknown') {
+    const error = new Error('Email delivery is uncertain. Check delivery events before trying again.');
+    error.code = 'EMAIL_DELIVERY_UNKNOWN';
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const claim = await EmailLog.findOneAndUpdate(
+    { _id: logEntry._id, status: { $in: ['queued', 'failed'] } },
+    {
+      $set: {
+        status: 'sending',
+        lastAttemptAt: new Date(),
+        sender: from || undefined,
+        lastErrorCode: undefined,
+        lastErrorMessage: undefined
+      },
+      $inc: { attempts: 1 }
+    },
+    { new: true }
+  );
+  if (!claim) {
+    const error = new Error('This email is already being processed or has already been submitted.');
+    error.code = 'EMAIL_SEND_IN_PROGRESS';
+    error.statusCode = 409;
+    throw error;
   }
 
   try {
-    const data = await resend.emails.send({
-      from: process.env.EMAIL_FROM,
-      to,
-      subject,
-      html,
-    });
+    if (!from) {
+      const error = new Error('EMAIL_FROM is not configured.');
+      error.code = 'EMAIL_CONFIGURATION_ERROR';
+      error.statusCode = 400;
+      throw error;
+    }
 
-    console.log(`[EMAIL] Sent to ${to} | Subject: ${subject} | ID: ${data.id}`);
-    return data;
-  } catch (err) {
-    console.error('[RESEND EMAIL ERROR]', err);
-    throw err;
+    const { data, error: providerError } = await getResendClient().emails.send(
+      { from, to: [recipient], subject, html },
+      { idempotencyKey: stableKey }
+    );
+
+    if (providerError) {
+      const error = new Error(providerError.message || 'Resend rejected the email.');
+      error.code = providerError.name || 'RESEND_ERROR';
+      error.statusCode = providerError.statusCode || 400;
+      throw error;
+    }
+    if (!data || !data.id) {
+      const error = new Error('Resend did not return an email ID.');
+      error.code = 'RESEND_MISSING_EMAIL_ID';
+      error.statusCode = 503;
+      throw error;
+    }
+
+    claim.status = 'sent';
+    claim.providerEmailId = data.id;
+    claim.sentAt = new Date();
+    await claim.save();
+    return { id: data.id, status: 'sent', logId: claim._id };
+  } catch (error) {
+    const statusCode = Number(error && (error.statusCode || error.status) || 0);
+    const uncertain = !statusCode || statusCode === 408 || statusCode === 409 || statusCode === 429 || statusCode >= 500;
+    claim.status = uncertain ? 'unknown' : 'failed';
+    claim.lastErrorCode = String(error && error.code || 'EMAIL_SEND_ERROR').slice(0, 80);
+    claim.lastErrorMessage = String(error && error.message || 'Email send failed.').slice(0, 240);
+    await claim.save();
+    throw error;
   }
 };
 

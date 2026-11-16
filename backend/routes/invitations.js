@@ -67,7 +67,12 @@ router.post('/create', protect, authorize('admin'), async (req, res, next) => {
     try {
       await sendEmail({
         to: normalizedEmail,
-        ...emailTemplate
+        ...emailTemplate,
+        category: 'staff_invitation',
+        idempotencyKey: `invitation:${invitation._id}:initial`,
+        createdBy: req.user._id,
+        relatedEntity: 'Invitation',
+        relatedEntityId: invitation._id
       });
     } catch (emailErr) {
       console.error('[INVITATION EMAIL ERROR]', emailErr.message);
@@ -343,7 +348,12 @@ router.post('/resend', protect, authorize('admin'), async (req, res, next) => {
     try {
       await sendEmail({
         to: invitation.email,
-        ...emailTemplate
+        ...emailTemplate,
+        category: 'staff_invitation',
+        idempotencyKey: `invitation:${invitation._id}:resend:${invitation.resendCount}`,
+        createdBy: req.user._id,
+        relatedEntity: 'Invitation',
+        relatedEntityId: invitation._id
       });
     } catch (emailErr) {
       console.error('[RESEND EMAIL ERROR]', emailErr.message);
