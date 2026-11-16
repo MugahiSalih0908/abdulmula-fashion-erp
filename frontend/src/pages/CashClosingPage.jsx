@@ -71,7 +71,10 @@ function CloseDayForm({ openingCash, netCash, fmt, onSave, onClose, saving }) {
   const { register, handleSubmit, watch, formState: { errors } } = useForm({
     defaultValues: { actualCash: Number.isFinite(netCash) ? netCash.toFixed(2) : '', notes: '' }
   });
-  const actualCash = Number(watch('actualCash'));
+  const rawActualCash = watch('actualCash');
+  const actualCash = rawActualCash === '' || rawActualCash === null || rawActualCash === undefined
+    ? Number.NaN
+    : Number(rawActualCash);
   const diff = Number.isFinite(actualCash) ? actualCash - netCash : null;
 
   return (
@@ -366,7 +369,6 @@ export default function CashClosingPage() {
               <div><p className="text-xs text-[var(--color-text-muted)]">{Number(todayClosing.shortage) > 0 ? 'Shortage' : 'Excess'}</p><p className={'mt-1 text-base font-semibold tabular-nums ' + (Number(todayClosing.shortage) > 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]')}>{Number(todayClosing.shortage) > 0 ? '−' + money(todayClosing.shortage, fmt) : '+' + money(todayClosing.excess, fmt)}</p></div>
             </div>
             {todayClosing.notes && <p className="rounded-xl bg-[var(--color-bg-secondary)] p-3 text-xs text-[var(--color-text-secondary)]">{todayClosing.notes}</p>}
-            {isAdmin && todayClosing.status === 'pending_approval' && <div className="flex justify-end"><Button size="sm" onClick={() => approveMutation.mutate(todayClosing._id)} loading={approveMutation.isPending}><ShieldCheck size={15} /> Approve closing</Button></div>}
           </CardBody>
         </Card>
       )}
