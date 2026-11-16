@@ -35,7 +35,7 @@ export function getAuditActionTone(action) {
   if (SUCCESS_ACTIONS.has(action)) return 'success';
   if (DANGER_ACTIONS.has(action)) return 'danger';
   if (WARNING_ACTIONS.has(action)) return 'warning';
-  if (action === 'LOGOUT') return 'neutral';
+  if (action === 'LOGOUT') return 'primary';
   return 'info';
 }
 
