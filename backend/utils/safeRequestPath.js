@@ -1,8 +1,8 @@
 const SENSITIVE_PATHS = [
-  [/^\\/api\\/auth\\/activate\\/[^/]+(?:\\/|$)/, '/api/auth/activate/[REDACTED]'],
-  [/^\\/api\\/auth\\/reset-password\\/[^/]+(?:\\/|$)/, '/api/auth/reset-password/[REDACTED]'],
-  [/^\\/api\\/invitations\\/validate\\/[^/]+(?:\\/|$)/, '/api/invitations/validate/[REDACTED]'],
-  [/^\\/api\\/invitations\\/accept\\/[^/]+(?:\\/|$)/, '/api/invitations/accept/[REDACTED]']
+  [/^\/api\/auth\/activate\/[^/]+(?:\/|$)/, '/api/auth/activate/[REDACTED]'],
+  [/^\/api\/auth\/reset-password\/[^/]+(?:\/|$)/, '/api/auth/reset-password/[REDACTED]'],
+  [/^\/api\/invitations\/validate\/[^/]+(?:\/|$)/, '/api/invitations/validate/[REDACTED]'],
+  [/^\/api\/invitations\/accept\/[^/]+(?:\/|$)/, '/api/invitations/accept/[REDACTED]']
 ];
 
 function redactRequestPath(req) {
