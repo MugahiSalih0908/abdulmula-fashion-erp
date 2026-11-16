@@ -5,10 +5,13 @@ on:
     branches:
       - feature/email-center-infrastructure
       - ui/phase-6-invoice-history
+      - ui/phase-7-customer-management
   pull_request:
     branches:
       - ui/phase-5-premium-pos-products-cart-staff
       - feature/email-center-infrastructure
+      - ui/phase-6-invoice-history
+      - ui/phase-7-customer-management
 
 jobs:
   backend:
