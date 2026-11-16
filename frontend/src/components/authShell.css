@@ -76,6 +76,7 @@
 .auth-password-input { position: relative; }
 .auth-password-input input { padding-right: 3.25rem; }
 .auth-password-toggle { position: absolute; top: 50%; right: 0.4rem; display: grid; width: 2.3rem; height: 2.3rem; transform: translateY(-50%); place-items: center; border-radius: 0.6rem; color: #77736c; }
+.auth-field-trailing-icon { position: absolute; top: 50%; right: 0.8rem; display: grid; transform: translateY(-50%); place-items: center; color: #9b9386; pointer-events: none; }
 .auth-password-toggle:hover { background: #f1eee8; color: #282521; }
 .auth-password-toggle:focus-visible, .auth-link:focus-visible, .auth-submit:focus-visible { outline: 3px solid rgb(197 164 109 / 0.55); outline-offset: 2px; }
 .auth-link { color: #8d6d3f; font-size: 0.7rem; font-weight: 750; text-decoration: none; }
