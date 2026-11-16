@@ -8,6 +8,7 @@ on:
       - ui/phase-7-customer-management
       - ui/phase-8-supplier-management
       - ui/phase-9-financial-management
+      - ui/phase-10-purchase-orders
   pull_request:
     branches:
       - ui/phase-5-premium-pos-products-cart-staff
@@ -16,6 +17,7 @@ on:
       - ui/phase-7-customer-management
       - ui/phase-8-supplier-management
       - ui/phase-9-financial-management
+      - ui/phase-10-purchase-orders
 
 jobs:
   backend:
