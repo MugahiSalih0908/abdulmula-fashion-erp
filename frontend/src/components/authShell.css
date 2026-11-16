@@ -36,6 +36,7 @@
 .auth-shell-glow-one { top: -18rem; right: -8rem; background: rgb(197 164 109 / 0.14); }
 .auth-shell-glow-two { bottom: -22rem; left: -12rem; background: rgb(197 164 109 / 0.09); }
 .auth-shell-inner { width: 100%; max-width: 27rem; margin: auto; }
+.auth-shell-inner-wide { max-width: 34rem; }
 .auth-brand { display: flex; align-items: center; gap: 0.8rem; margin: 0 auto 1.5rem; }
 .auth-brand-mark { display: grid; width: 3.15rem; height: 3.15rem; flex: 0 0 auto; place-items: center; border: 1px solid rgb(223 193 143 / 0.58); border-radius: 1rem; background: linear-gradient(145deg, #e0c08a, #b18a50); color: #171717; font-size: 1.05rem; font-weight: 900; letter-spacing: -0.06em; box-shadow: 0 8px 24px rgb(0 0 0 / 0.24), inset 0 1px 0 rgb(255 255 255 / 0.55); }
 .auth-brand-copy { display: grid; gap: 0.18rem; min-width: 0; }
