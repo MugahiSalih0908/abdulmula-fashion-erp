@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -172,6 +173,7 @@ function ExpenseForm({ onSave, onClose, saving }) {
 
 export default function ExpensesPage() {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 250);
   const [category, setCategory] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -196,7 +198,7 @@ export default function ExpensesPage() {
   });
 
   const expenses = Array.isArray(data?.data) ? data.data : [];
-  const filtered = useMemo(() => filterExpenses(expenses, search), [expenses, search]);
+  const filtered = useMemo(() => filterExpenses(expenses, debouncedSearch), [expenses, debouncedSearch]);
   const summary = useMemo(() => summarizeExpenses(filtered), [filtered]);
 
   const deleteMutation = useMutation({
