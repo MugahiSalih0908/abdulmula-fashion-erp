@@ -30,7 +30,7 @@ export default function SettingsPage() {
   const logout = useAuthStore(state => state.logout);
   const navigate = useNavigate();
   const { isOnline, pendingCount, isSyncing } = useOnlineStatus();
-  const { isManager } = useRole();
+  const { isManager, isAdmin } = useRole();
   const { currency, setCurrency, usdToSsp, setRate } = useSettingsStore();
   const [sheet, setSheet] = useState(null);
   const [offlineSales, setOfflineSales] = useState([]);
@@ -135,14 +135,18 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-        <div className="admin-settings-profile-actions">
-          <Button variant="secondary" onClick={() => setSheet('profile')}>
-            <UserRound size={15} aria-hidden="true" /> Edit profile
-          </Button>
-          <Button variant="secondary" onClick={() => setSheet('password')}>
-            <LockKeyhole size={15} aria-hidden="true" /> Change password
-          </Button>
-        </div>
+        {isAdmin ? (
+          <div className="admin-settings-profile-actions">
+            <Button variant="secondary" onClick={() => setSheet('profile')}>
+              <UserRound size={15} aria-hidden="true" /> Edit profile
+            </Button>
+            <Button variant="secondary" onClick={() => setSheet('password')}>
+              <LockKeyhole size={15} aria-hidden="true" /> Change password
+            </Button>
+          </div>
+        ) : (
+          <p className="admin-settings-access-note"><ShieldCheck size={15} aria-hidden="true" /> Account profile and password changes are administrator-managed in this workspace.</p>
+        )}
       </section>
 
       <section className="admin-settings-summary" aria-label="Workspace status">
@@ -293,10 +297,14 @@ export default function SettingsPage() {
                 <span className="admin-settings-panel-icon"><ShieldCheck size={18} aria-hidden="true" /></span>
                 <div><h2>Account & security</h2><p>Personal profile and sign-in controls</p></div>
               </div>
-              <div className="admin-settings-actions-list">
-                <SettingsAction icon={<UserRound size={17} />} label="Edit profile" description="Update your name and email" onClick={() => setSheet('profile')} />
-                <SettingsAction icon={<LockKeyhole size={17} />} label="Change password" description="Use a new password for future sign-ins" onClick={() => setSheet('password')} />
-              </div>
+              {isAdmin ? (
+                <div className="admin-settings-actions-list">
+                  <SettingsAction icon={<UserRound size={17} />} label="Edit profile" description="Update your name and email" onClick={() => setSheet('profile')} />
+                  <SettingsAction icon={<LockKeyhole size={17} />} label="Change password" description="Use a new password for future sign-ins" onClick={() => setSheet('password')} />
+                </div>
+              ) : (
+                <p className="admin-settings-access-note"><ShieldCheck size={15} aria-hidden="true" /> Contact an administrator to update account details or reset your password. These actions use administrator-only endpoints.</p>
+              )}
             </CardBody>
           </Card>
 
