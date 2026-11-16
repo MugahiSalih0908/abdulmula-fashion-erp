@@ -8,6 +8,8 @@ const PurchaseOrder = require('../models/PurchaseOrder');
 const Product = require('../models/Product');
 const Supplier = require('../models/Supplier');
 const StockMovement = require('../models/StockMovement');
+const CashBook = require('../models/CashBook');
+const CashClosing = require('../models/CashClosing');
 const { protect, authorize } = require('../middleware/auth');
 const { log } = require('../utils/auditLogger');
 const {
@@ -357,6 +359,24 @@ router.patch('/:id/pay', async (req, res, next) => {
         balanceDue: po.balanceDue,
         status: po.status
       });
+
+      if (payment.paymentMethod === 'Cash') {
+        const paymentDate = payment.date.toISOString().slice(0, 10);
+        const cashbook = await CashBook.findOne({ date: paymentDate }).session(session);
+        if (!cashbook) {
+          throw Object.assign(new Error('Open the cashbook for this date before recording a cash supplier payment.'), { statusCode: 409 });
+        }
+        if (cashbook.isClosed) {
+          throw Object.assign(new Error('This cashbook day is already closed. Record the payment through an approved adjustment workflow.'), { statusCode: 409 });
+        }
+        const pendingClosing = await CashClosing.findOne({
+          date: paymentDate,
+          status: { $in: ['pending_approval', 'approved'] }
+        }).session(session);
+        if (pendingClosing) {
+          throw Object.assign(new Error('This cashbook day has a closing submitted or approved. Resolve the closing before recording another cash payment.'), { statusCode: 409 });
+        }
+      }
 
       const supplier = await Supplier.findById(po.supplier).session(session);
       if (!supplier) throw Object.assign(new Error('The supplier linked to this order no longer exists.'), { statusCode: 409 });
