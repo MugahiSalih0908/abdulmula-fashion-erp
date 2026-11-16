@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   TrendingDown,
   TrendingUp,
+  Truck,
   Wallet
 } from 'lucide-react';
 
@@ -67,7 +68,7 @@ function dateLabel(value) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-function CloseDayForm({ openingCash, netCash, fmt, onSave, onClose, saving }) {
+function CloseDayForm({ openingCash, netCash, supplierCashPayments, fmt, onSave, onClose, saving }) {
   const { register, handleSubmit, watch, formState: { errors } } = useForm({
     defaultValues: { actualCash: Number.isFinite(netCash) ? netCash.toFixed(2) : '', notes: '' }
   });
@@ -84,6 +85,10 @@ function CloseDayForm({ openingCash, netCash, fmt, onSave, onClose, saving }) {
           <div className="flex justify-between gap-3 text-sm">
             <span className="text-[var(--color-text-muted)]">Opening cash</span>
             <strong className="tabular-nums">{fmt(openingCash || 0)}</strong>
+          </div>
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-[var(--color-text-muted)]">Cash supplier payments</span>
+            <strong className="tabular-nums">{fmt(supplierCashPayments || 0)}</strong>
           </div>
           <div className="flex justify-between gap-3 text-sm">
             <span className="text-[var(--color-text-muted)]">Expected closing cash</span>
@@ -276,7 +281,8 @@ export default function CashClosingPage() {
   const today = todayQuery.data;
   const closings = closingsQuery.data || [];
   const history = historyQuery.data || [];
-  const netCash = (Number(today?.openingCash) || 0) + (Number(today?.livesCashSales) || 0) - (Number(today?.liveExpenses) || 0);
+  const supplierCashPayments = Number(today?.cashSupplierPayments) || 0;
+  const netCash = (Number(today?.openingCash) || 0) + (Number(today?.livesCashSales) || 0) - (Number(today?.liveExpenses) || 0) - supplierCashPayments;
   const todayString = today?.date || new Date().toISOString().slice(0, 10);
   const todayClosing = closings.find(item => item.date === todayString);
   const pendingApprovals = useMemo(() => closings.filter(item => item.status === 'pending_approval'), [closings]);
@@ -322,11 +328,12 @@ export default function CashClosingPage() {
         </Card>
       )}
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Today's cash position">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Today's cash position">
         <Metric label="Opening cash" value={money(today?.openingCash, fmt)} detail="Balance carried into the day" Icon={BookOpen} tone="slate" />
         <Metric label="Cash sales" value={money(today?.livesCashSales, fmt)} detail="Cash-paid invoices today" Icon={TrendingUp} tone="green" />
         <Metric label="Recorded expenses" value={money(today?.liveExpenses, fmt)} detail="All expenses recorded today" Icon={TrendingDown} tone="red" />
-        <Metric label="Expected cash" value={money(netCash, fmt)} detail="Opening + sales − expenses" Icon={Wallet} tone="gold" />
+        <Metric label="Cash supplier payments" value={money(today?.cashSupplierPayments, fmt)} detail="Payments marked as cash" Icon={Truck} tone="red" />
+        <Metric label="Expected cash" value={money(netCash, fmt)} detail="Opening + cash sales − outflows" Icon={Wallet} tone="gold" />
       </section>
 
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--color-border)] bg-white p-3">
@@ -428,6 +435,7 @@ export default function CashClosingPage() {
           key={today?.date || 'closing'}
           openingCash={today?.openingCash}
           netCash={netCash}
+          supplierCashPayments={supplierCashPayments}
           fmt={fmt}
           saving={closeMutation.isPending}
           onClose={() => setCloseOpen(false)}

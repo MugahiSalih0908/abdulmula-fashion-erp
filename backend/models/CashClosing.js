@@ -5,12 +5,13 @@ const mongoose = require('mongoose');
 const cashClosingSchema = new mongoose.Schema({
   date:          { type: String, required: true, unique: true }, // YYYY-MM-DD
   openingCash:   { type: Number, required: true, default: 0 },
-  expectedCash:  { type: Number, required: true },   // opening + cash sales - cash expenses
+  expectedCash:  { type: Number, required: true },   // opening + cash sales - recorded outflows
   actualCash:    { type: Number, required: true },   // what cashier counted
   shortage:      { type: Number, default: 0 },       // positive = shortage
   excess:        { type: Number, default: 0 },       // positive = overage
   totalSales:    { type: Number, default: 0 },
   totalExpenses: { type: Number, default: 0 },
+  supplierCashPayments: { type: Number, default: 0, min: 0 },
   status: {
     type: String,
     enum: ['pending_approval', 'approved', 'disputed'],

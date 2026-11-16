@@ -1,5 +1,5 @@
 // models/PurchaseOrder.js
-// Tracks goods purchased from suppliers — receiving, payment, debt
+// Tracks goods purchased from suppliers — ordering, receiving, payment and debt
 
 const mongoose = require('mongoose');
 
@@ -11,6 +11,15 @@ const poLineSchema = new mongoose.Schema({
   lineTotal:   { type: Number, required: true, min: 0 }
 }, { _id: false });
 
+const supplierPaymentSchema = new mongoose.Schema({
+  amount:       { type: Number, required: true, min: 0.01 },
+  paymentMethod:{ type: String, enum: ['Cash', 'Bank Transfer', 'Mobile Transfer', 'Other'], required: true, default: 'Cash' },
+  date:         { type: Date, required: true, default: Date.now },
+  reference:    { type: String, trim: true, maxlength: 100 },
+  note:         { type: String, trim: true, maxlength: 300 },
+  recordedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
+}, { timestamps: true });
+
 const purchaseOrderSchema = new mongoose.Schema({
   poNumber:    { type: String, unique: true },
   supplier:    { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', required: true },
@@ -21,6 +30,7 @@ const purchaseOrderSchema = new mongoose.Schema({
   grandTotal:  { type: Number, required: true, min: 0 },
   amountPaid:  { type: Number, default: 0, min: 0 },
   balanceDue:  { type: Number, default: 0, min: 0 },
+  payments:    { type: [supplierPaymentSchema], default: [] },
   status: {
     type: String,
     enum: ['draft','ordered','received','partial','paid'],
