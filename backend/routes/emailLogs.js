@@ -94,7 +94,19 @@ router.get('/', async (req, res, next) => {
       }
       return value;
     });
-    res.json({ success: true, data: safeRecords, total, page, limit, summary, emailConfig: getEmailConfig() });
+    const emailConfig = getEmailConfig();
+    const testRecipients = String(process.env.EMAIL_TEST_RECIPIENTS || '')
+      .split(',')
+      .map(value => value.trim().toLowerCase())
+      .filter(Boolean);
+    emailConfig.testRecipientAllowed = Boolean(
+      req.user.email && testRecipients.includes(String(req.user.email).trim().toLowerCase())
+    );
+    if (emailConfig.mode === 'test' && !emailConfig.testRecipientAllowed) {
+      emailConfig.issues.push('The signed-in administrator email is not included in EMAIL_TEST_RECIPIENTS.');
+    }
+
+    res.json({ success: true, data: safeRecords, total, page, limit, summary, emailConfig });
   } catch (error) {
     next(error);
   }
