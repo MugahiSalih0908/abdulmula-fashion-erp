@@ -10,6 +10,8 @@ const AuditLog  = require('../models/AuditLog');
 const { protect, authorize } = require('../middleware/auth');
 const { log }   = require('../utils/auditLogger');
 const { sendEmail, templates } = require('../utils/sendEmail');
+const { getEmailDeliveryError } = require('../utils/emailDeliveryError');
+const { isEmailDeliveryBlocked } = require('../utils/emailConfig');
 
 router.use(protect);
 
@@ -62,50 +64,75 @@ router.post('/', authorize('admin'), async (req, res, next) => {
     const exists = await User.findOne({ email: email.toLowerCase().trim() });
     if (exists) return res.status(400).json({ success:false, message:'An account with this email already exists.' });
 
-    // Store an unpredictable password hash until the user chooses their own during activation.
-    const pendingPassword = generatePendingPassword();
-
-    // Create user (NOT yet verified)
+    // Create a pending account; the staff member chooses their own password during activation.
     const member = new User({
-      name:       name.trim(),
-      email:      email.toLowerCase().trim(),
-      password:   pendingPassword,
-      role:       role || 'staff',
-      salary:     salary || 0,
-      isVerified: false,
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      password: generatePendingPassword(),
+      role: role || 'staff',
+      salary: salary || 0,
+      isVerified: false
     });
 
-    // Generate activation token
     const rawToken = member.generateVerificationToken();
     await member.save();
 
-    const activationUrl = `${process.env.FRONTEND_URL}/activate/${rawToken}`;
-    const tmpl = templates.welcome({ name: member.name, role: member.role, activationUrl });
+    const frontendUrl = String(process.env.FRONTEND_URL || '').replace(/\/+$/, '');
+    const activationUrl = frontendUrl + '/activate/' + rawToken;
+    const tmpl = templates.welcome({
+      name: member.name,
+      role: member.role,
+      activationUrl
+    });
+
     let emailStatus = 'failed';
+    let emailMessage = '';
+    let emailErrorCode = null;
+
     try {
       const delivery = await sendEmail({
         to: member.email,
         ...tmpl,
         category: 'staff_activation',
-        idempotencyKey: `staff-activation:${member._id}:${member.verificationToken}`,
+        idempotencyKey: 'staff-activation:' + member._id + ':' + member.verificationToken,
         createdBy: req.user._id,
         relatedEntity: 'User',
         relatedEntityId: member._id
       });
       emailStatus = delivery.status;
+      emailMessage = 'Activation email was accepted by the email provider.';
     } catch (emailErr) {
+      const safeError = getEmailDeliveryError(emailErr);
+      emailErrorCode = safeError.code;
+      emailMessage = safeError.message;
+      emailStatus = ['EMAIL_DELIVERY_UNKNOWN', 'EMAIL_SEND_IN_PROGRESS'].includes(emailErr.code)
+        ? 'unknown'
+        : isEmailDeliveryBlocked(emailErr) ? 'blocked' : 'failed';
       console.error('[STAFF ACTIVATION EMAIL ERROR]', emailErr.code || emailErr.message);
     }
 
-    await log({ user: req.user, action:'USER_CREATE', entity:'User', entityId: member._id, details:{ name: member.name, role: member.role, email: member.email }, req });
+    await log({
+      user: req.user,
+      action: 'USER_CREATE',
+      entity: 'User',
+      entityId: member._id,
+      details: { name: member.name, role: member.role, email: member.email, emailStatus },
+      req
+    });
 
     res.status(201).json({
-      success:true,
-      data:    member,
-     message: emailStatus === 'sent' ? 'Account created and activation email accepted by the provider.' : 'Account created, but activation email was not submitted. Check Email Center and resend after configuration.',
-     emailStatus
+      success: true,
+      data: member,
+      message: emailStatus === 'sent'
+        ? 'Staff account created and activation email accepted by the provider.'
+        : 'Staff account created, but the activation email was not sent. The account remains pending activation. Correct email settings and use Resend activation.',
+      emailStatus,
+      emailMessage,
+      emailErrorCode
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 /* ── POST /api/staff/:id/resend-activation ── admin ─────────── */
