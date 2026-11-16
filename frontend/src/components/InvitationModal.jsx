@@ -29,6 +29,22 @@ function formatExpiry(value) {
   return Number.isNaN(date.getTime()) ? 'Expiry unavailable' : 'Expires ' + date.toLocaleDateString();
 }
 
+function emailStatusMeta(status) {
+  const known = {
+    sent: { label: 'Email accepted by provider', variant: 'success' },
+    blocked: { label: 'Email blocked — not sent', variant: 'warning' },
+    failed: { label: 'Email failed', variant: 'danger' },
+    unknown: { label: 'Delivery status unknown', variant: 'warning' },
+    not_attempted: { label: 'Email not attempted', variant: 'secondary' }
+  };
+  return known[status] || { label: 'Email status unavailable', variant: 'secondary' };
+}
+
+function getDeliveryMessage(result) {
+  return result?.emailMessage || result?.data?.emailMessage
+    || 'The invitation was saved, but email delivery was not confirmed.';
+}
+
 export default function InvitationModal({ isOpen, onClose }) {
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm({
     defaultValues: { email: '', role: 'staff' }
@@ -102,7 +118,12 @@ export default function InvitationModal({ isOpen, onClose }) {
   const createMutation = useMutation({
     mutationFn: formData => createInvitation(formData.email, formData.role, accessToken),
     onSuccess: response => {
-      toast.success(response.message || 'Invitation created.');
+      const emailSent = response?.emailStatus === 'sent' || response?.data?.emailStatus === 'sent';
+      if (emailSent) {
+        toast.success(response.message || 'Invitation email accepted by provider.');
+      } else {
+        toast.error(getDeliveryMessage(response), { duration: 7000 });
+      }
       reset();
       queryClient.invalidateQueries({ queryKey: ['invitations'] });
       setTab('manage');
@@ -113,7 +134,11 @@ export default function InvitationModal({ isOpen, onClose }) {
   const resendMutation = useMutation({
     mutationFn: invitationId => resendInvitation(invitationId, accessToken),
     onSuccess: response => {
-      toast.success(response.message || 'Invitation email sent.');
+      if (response?.emailStatus === 'sent' || response?.data?.emailStatus === 'sent') {
+        toast.success(response.message || 'Invitation email accepted by provider.');
+      } else {
+        toast.error(getDeliveryMessage(response), { duration: 7000 });
+      }
       queryClient.invalidateQueries({ queryKey: ['invitations'] });
     },
     onError: error => toast.error(error.message || 'Could not resend invitation.')
@@ -218,9 +243,15 @@ export default function InvitationModal({ isOpen, onClose }) {
                     <article key={invitation._id} className="staff-invitation-card">
                       <div className="staff-invitation-card-top">
                         <div><strong>{invitation.email}</strong><p>Role: {invitation.role}</p></div>
-                        <Badge variant={statusVariant(invitation.status)}>{invitation.status}</Badge>
+                        <div className="staff-invitation-card-badges">
+                          <Badge variant={statusVariant(invitation.status)}>{invitation.status}</Badge>
+                          <Badge variant={emailStatusMeta(invitation.emailStatus).variant}>{emailStatusMeta(invitation.emailStatus).label}</Badge>
+                        </div>
                       </div>
                       <div className="staff-invitation-expires"><Clock3 size={13} aria-hidden="true" /> {formatExpiry(invitation.expiresAt)}</div>
+                      {invitation.emailErrorMessage && (
+                        <p className="staff-invitation-email-error" role="status">{invitation.emailErrorMessage}</p>
+                      )}
                       <div className="staff-invitation-actions">
                         {invitation.status === 'pending' && (
                           <>
