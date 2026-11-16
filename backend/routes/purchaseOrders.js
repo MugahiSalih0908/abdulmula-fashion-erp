@@ -367,7 +367,11 @@ router.patch('/:id/pay', async (req, res, next) => {
       po.status = po.balanceDue === 0 ? 'paid' : 'partial';
       await po.save({ session });
 
-      supplier.debtBalance = Math.max(0, roundMoney(Number(supplier.debtBalance || 0) - payment.amount));
+      const supplierDebt = Number(supplier.debtBalance || 0);
+      if (supplierDebt + 0.000001 < payment.amount) {
+        throw Object.assign(new Error('The supplier account balance is lower than this purchase order balance. Reconcile the supplier account before recording payment.'), { statusCode: 409 });
+      }
+      supplier.debtBalance = Math.max(0, roundMoney(supplierDebt - payment.amount));
       await supplier.save({ session });
       updatedOrder = po;
     });
