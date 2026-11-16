@@ -141,7 +141,7 @@ export default function StaffPage() {
         <MetricCard icon={TrendingUp} label="Recorded team sales" value={'$' + totalSales.toLocaleString('en-US', { maximumFractionDigits: 0 })} detail="Lifetime sales total" tone="dark" />
       </section>
 
-      <section className="staff-directory">
+      <section className="staff-directory" aria-label="Team directory">
         <div className="staff-directory-heading">
           <div><h2>Team directory</h2><p>Search team members and manage their account access</p></div>
           <Badge variant="primary">{filteredStaff.length} of {staff.length}</Badge>
