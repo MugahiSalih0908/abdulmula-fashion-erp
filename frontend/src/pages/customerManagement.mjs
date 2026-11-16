@@ -58,6 +58,6 @@ export function summarizeCustomers(customers = []) {
 }
 
 export function getCustomerInitials(name = '') {
-  const parts = String(name).trim().split(/\\s+/).filter(Boolean);
+  const parts = String(name).trim().split(/\s+/).filter(Boolean);
   return parts.slice(0, 2).map(part => part[0].toUpperCase()).join('') || 'CU';
 }
