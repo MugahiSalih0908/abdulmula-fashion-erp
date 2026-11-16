@@ -1,439 +1,430 @@
-// src/pages/StaffPage.jsx – v6 with activation status + resend button
-
-import { useState }                          from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm }                           from 'react-hook-form';
-import { motion, AnimatePresence }           from 'framer-motion';
-import toast                                 from 'react-hot-toast';
-import api                                   from '../services/api';
-import useAuthStore                          from '../store/authStore';
+import { useForm } from 'react-hook-form';
+import toast from 'react-hot-toast';
+import api from '../services/api';
+import useAuthStore from '../store/authStore';
 import PageHeader from '../components/ui/PageHeader';
-import Sheet      from '../components/ui/Sheet';
+import Sheet from '../components/ui/Sheet';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
-import CardHeader from '../components/ui/CardHeader';
 import CardBody from '../components/ui/CardBody';
 import Badge from '../components/ui/Badge';
-import Modal from '../components/ui/Modal';
 import InvitationModal from '../components/InvitationModal';
 import {
-  Plus, ChevronRight, X, UserCheck, UserX,
-  KeyRound, BarChart3, ShieldCheck, Eye, EyeOff,
-  Mail, RefreshCw, Clock, CheckCircle, Users, TrendingUp
+  AlertCircle, CheckCircle2, ChevronRight, Clock3, Eye, EyeOff,
+  KeyRound, Mail, Plus, RefreshCw, Search, ShieldCheck, TrendingUp,
+  UserCheck, UserRound, UserX, Users, X
 } from 'lucide-react';
+import { filterStaff, getStaffInitial, getStaffRoleTone } from './staffManagement.mjs';
+import './staffWorkspace.css';
 
-const ROLE_COLORS = {
-  admin:   'bg-red-100 text-red-700',
-  manager: 'bg-blue-100 text-blue-700',
-  staff:   'bg-emerald-50 text-emerald-700',
-};
+function getStrength(password) {
+  return [
+    password.length >= 8,
+    /[A-Z]/.test(password),
+    /[a-z]/.test(password),
+    /\d/.test(password),
+    /[^A-Za-z0-9]/.test(password)
+  ].filter(Boolean).length;
+}
 
-const getStrength = (pwd) => {
-  let s = 0;
-  if (pwd.length >= 8) s++;
-  if (/[A-Z]/.test(pwd)) s++;
-  if (/[a-z]/.test(pwd)) s++;
-  if (/\d/.test(pwd)) s++;
-  if (/[^A-Za-z0-9]/.test(pwd)) s++;
-  return s;
-};
+function MetricCard({ icon: Icon, label, value, detail, tone = 'gold' }) {
+  return (
+    <Card className="staff-metric-card">
+      <CardBody className="flex items-center gap-3 p-3.5 sm:p-4">
+        <span className={'staff-metric-icon is-' + tone}><Icon size={18} aria-hidden="true" /></span>
+        <div className="min-w-0">
+          <p>{label}</p>
+          <strong>{value}</strong>
+          <small>{detail}</small>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
 
 export default function StaffPage() {
-  const [showAdd,  setShowAdd]  = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [selected, setSelected] = useState(null);
   const [resetFor, setResetFor] = useState(null);
-  const currentUser = useAuthStore(s => s.user);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const currentUser = useAuthStore(state => state.user);
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const staffQuery = useQuery({
     queryKey: ['staff'],
-    queryFn:  async () => { const { data } = await api.get('/staff'); return data.data; },
+    queryFn: async () => {
+      const response = await api.get('/staff');
+      return Array.isArray(response.data?.data) ? response.data.data : [];
+    }
   });
 
   const toggleMutation = useMutation({
-    mutationFn: (id) => api.patch(`/staff/${id}/toggle`),
-    onSuccess:  (res) => { queryClient.invalidateQueries(['staff']); toast.success(res.data.message); },
-    onError:    (e)   => toast.error(e?.response?.data?.message || 'Failed.'),
+    mutationFn: id => api.patch('/staff/' + id + '/toggle'),
+    onSuccess: response => {
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      toast.success(response.data.message || 'Account status updated.');
+    },
+    onError: error => toast.error(error?.response?.data?.message || 'Account status could not be updated.')
   });
 
   const resendMutation = useMutation({
-    mutationFn: (id) => api.post(`/staff/${id}/resend-activation`),
-    onSuccess:  (res) => toast.success(res.data.message),
-    onError:    (e)   => toast.error(e?.response?.data?.message || 'Failed.'),
+    mutationFn: id => api.post('/staff/' + id + '/resend-activation'),
+    onSuccess: response => {
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      toast.success(response.data.message || 'Activation email sent.');
+    },
+    onError: error => toast.error(error?.response?.data?.message || 'Activation email could not be sent.')
   });
 
-  const staff       = data || [];
-  const activeCount = staff.filter(s => s.isActive).length;
-  const verifiedCnt = staff.filter(s => s.isVerified).length;
-  const totalSales  = staff.reduce((s, m) => s + (m.salesTotal||0), 0);
+  const staff = staffQuery.data || [];
+  const filteredStaff = useMemo(
+    () => filterStaff(staff, { search, role: roleFilter, status: statusFilter }),
+    [staff, search, roleFilter, statusFilter]
+  );
+
+  const activeCount = staff.filter(member => member.isActive).length;
+  const verifiedCount = staff.filter(member => member.isVerified).length;
+  const pendingCount = staff.filter(member => !member.isVerified).length;
+  const totalSales = staff.reduce((sum, member) => sum + (Number(member.salesTotal) || 0), 0);
+  const filtersActive = Boolean(search || roleFilter !== 'all' || statusFilter !== 'all');
+
+  const clearFilters = () => {
+    setSearch('');
+    setRoleFilter('all');
+    setStatusFilter('all');
+  };
+
+  const handleToggle = member => {
+    const action = member.isActive ? 'disable' : 'enable';
+    if (!window.confirm('Are you sure you want to ' + action + ' ' + member.name + '\'s account?')) return;
+    toggleMutation.mutate(member._id);
+  };
 
   return (
-    <div className="p-4 space-y-5">
+    <main className="admin-page staff-page">
       <PageHeader
         title="Staff Management"
-        sub={`${activeCount} active · ${verifiedCnt} verified`}
+        sub="Manage team access, account activation and staff performance"
         action={
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowInvite(true)}
-              className="flex items-center gap-1.5"
-            >
-              <Mail size={16} /> Send Invite
+          <div className="staff-page-actions">
+            <Button variant="secondary" size="sm" onClick={() => setShowInvite(true)}>
+              <Mail size={15} aria-hidden="true" /> Send invite
             </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1.5"
-            >
-              <Plus size={16} /> Add Staff
+            <Button size="sm" onClick={() => setShowAdd(true)}>
+              <Plus size={15} aria-hidden="true" /> Add staff
             </Button>
           </div>
         }
       />
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card>
-          <CardBody className="p-4 text-center">
-            <div className="text-2xl font-bold text-gray-900">{staff.length}</div>
-            <div className="text-xs text-gray-500 mt-1">Total Staff</div>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody className="p-4 text-center">
-            <div className="text-2xl font-bold text-emerald-600">{verifiedCnt}</div>
-            <div className="text-xs text-gray-500 mt-1">Verified</div>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody className="p-4 text-center">
-            <div className="text-2xl font-bold text-emerald-700">${totalSales.toFixed(0)}</div>
-            <div className="text-xs text-gray-500 mt-1">Team Sales</div>
-          </CardBody>
-        </Card>
-      </div>
-
-      {/* Staff list */}
-      {isLoading ? (
-        <div className="space-y-3">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-gray-200 rounded-xl animate-pulse" />
-          ))}
+      <section className="staff-hero" aria-label="Team management overview">
+        <div className="staff-hero-copy">
+          <span>PEOPLE & ACCESS</span>
+          <h2>Your team, in one place</h2>
+          <p>Manage staff accounts, verify access and review team activity from one workspace.</p>
         </div>
-      ) : staff.length === 0 ? (
-        <div className="text-center py-16">
-          <Users size={48} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-500 font-semibold">No staff accounts yet</p>
-          <p className="text-xs text-gray-400 mt-1">Add your first staff member to get started</p>
+        <div className="staff-hero-summary">
+          <Users size={19} aria-hidden="true" />
+          <div><strong>{staff.length.toLocaleString()}</strong><span>team members</span></div>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {staff.map(member => (
-            <motion.div
-              key={member._id}
-              layout
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              <Card className={!member.isActive ? 'opacity-60' : ''}>
-                <CardBody className="p-4">
-                  <div className="flex items-center gap-3">
-                    {/* Avatar */}
-                    <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-base shrink-0 text-white relative"
-                      style={{ background: member.isActive ? '#16a34a' : '#9ca3af' }}
-                    >
-                      {member.name?.charAt(0).toUpperCase()}
-                      {/* Verification dot */}
-                      <span
-                        className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${
-                          member.isVerified ? 'bg-emerald-500' : 'bg-amber-400'
-                        }`}
-                        title={member.isVerified ? 'Activated' : 'Pending activation'}
-                      />
-                    </div>
+      </section>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-gray-900">{member.name}</p>
-                        <Badge variant={member.role === 'admin' ? 'danger' : member.role === 'manager' ? 'info' : 'secondary'}>
-                          {member.role}
-                        </Badge>
-                        {!member.isActive && <Badge variant="danger">Disabled</Badge>}
-                        {!member.isVerified && (
-                          <Badge variant="warning" className="flex items-center gap-1">
-                            <Clock size={10} /> Pending
-                          </Badge>
+      <section className="staff-metrics" aria-label="Team metrics">
+        <MetricCard icon={Users} label="Team members" value={staff.length.toLocaleString()} detail="All staff accounts" tone="slate" />
+        <MetricCard icon={UserCheck} label="Active accounts" value={activeCount.toLocaleString()} detail="Currently enabled" tone="gold" />
+        <MetricCard icon={ShieldCheck} label="Verified accounts" value={verifiedCount.toLocaleString()} detail={pendingCount + ' awaiting activation'} tone="success" />
+        <MetricCard icon={TrendingUp} label="Recorded team sales" value={'$' + totalSales.toLocaleString('en-US', { maximumFractionDigits: 0 })} detail="Lifetime sales total" tone="dark" />
+      </section>
+
+      <section className="staff-directory" aria-label="Team directory">
+        <div className="staff-directory-heading">
+          <div><h2>Team directory</h2><p>Search team members and manage their account access</p></div>
+          <Badge variant="primary">{filteredStaff.length} of {staff.length}</Badge>
+        </div>
+
+        <div className="staff-toolbar">
+          <label className="staff-search">
+            <Search size={17} aria-hidden="true" />
+            <span className="sr-only">Search staff members</span>
+            <input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search by name, email or role…" />
+            {search && <button type="button" onClick={() => setSearch('')} aria-label="Clear search"><X size={15} /></button>}
+          </label>
+          <label className="staff-select">
+            <span>Role</span>
+            <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)}>
+              <option value="all">All roles</option>
+              <option value="admin">Admin</option>
+              <option value="manager">Manager</option>
+              <option value="staff">Staff</option>
+            </select>
+          </label>
+          <label className="staff-select">
+            <span>Account status</span>
+            <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
+              <option value="all">All accounts</option>
+              <option value="active">Active</option>
+              <option value="disabled">Disabled</option>
+              <option value="pending">Pending activation</option>
+            </select>
+          </label>
+          {filtersActive && <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button>}
+        </div>
+
+        {staffQuery.isLoading ? (
+          <div className="staff-list" aria-label="Loading staff accounts">
+            {[1,2,3,4].map(item => <div key={item} className="staff-skeleton" />)}
+          </div>
+        ) : staffQuery.isError ? (
+          <Card className="staff-empty-card">
+            <CardBody className="staff-empty-state">
+              <AlertCircle size={27} aria-hidden="true" />
+              <h3>Staff accounts could not be loaded</h3>
+              <p>{staffQuery.error?.response?.data?.message || staffQuery.error?.message || 'Check your connection and try again.'}</p>
+              <Button variant="secondary" onClick={() => staffQuery.refetch()} loading={staffQuery.isFetching}><RefreshCw size={14} /> Retry</Button>
+            </CardBody>
+          </Card>
+        ) : staff.length === 0 ? (
+          <Card className="staff-empty-card">
+            <CardBody className="staff-empty-state">
+              <Users size={30} aria-hidden="true" />
+              <h3>No staff accounts yet</h3>
+              <p>Add your first team member or send an invitation to get started.</p>
+              <div className="staff-empty-actions">
+                <Button variant="secondary" onClick={() => setShowInvite(true)}><Mail size={14} /> Send invite</Button>
+                <Button onClick={() => setShowAdd(true)}><Plus size={14} /> Add staff</Button>
+              </div>
+            </CardBody>
+          </Card>
+        ) : filteredStaff.length === 0 ? (
+          <Card className="staff-empty-card">
+            <CardBody className="staff-empty-state">
+              <Search size={27} aria-hidden="true" />
+              <h3>No team members match these filters</h3>
+              <p>Try a different name, email, role or account status.</p>
+              <Button variant="secondary" size="sm" onClick={clearFilters}>Clear filters</Button>
+            </CardBody>
+          </Card>
+        ) : (
+          <div className="staff-list">
+            {filteredStaff.map(member => {
+              const isSelf = member._id === currentUser?._id;
+              return (
+                <Card key={member._id} className={'staff-member-card' + (!member.isActive ? ' is-disabled' : '')}>
+                  <CardBody className="p-4 sm:p-5">
+                    <div className="staff-member-layout">
+                      <div className={'staff-avatar' + (!member.isActive ? ' is-disabled' : '')} aria-hidden="true">
+                        {getStaffInitial(member.name)}
+                        <span className={member.isVerified ? 'is-verified' : 'is-unverified'} />
+                      </div>
+
+                      <div className="staff-member-info">
+                        <div className="staff-member-title">
+                          <h3>{member.name || 'Unnamed user'}</h3>
+                          <Badge variant={getStaffRoleTone(member.role)}>{member.role || 'staff'}</Badge>
+                          <Badge variant={member.isActive ? 'success' : 'danger'}>{member.isActive ? 'Active' : 'Disabled'}</Badge>
+                          {!member.isVerified && <Badge variant="warning"><Clock3 size={11} /> Pending activation</Badge>}
+                          {isSelf && <Badge variant="info">You</Badge>}
+                        </div>
+                        <p className="staff-member-email">{member.email}</p>
+                        <div className="staff-member-meta">
+                          <span><TrendingUp size={13} aria-hidden="true" /> {Number(member.salesCount) || 0} sales</span>
+                          <span>{'$' + (Number(member.salesTotal) || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} total</span>
+                          {Number(member.salary) > 0 && <span>{'$' + Number(member.salary).toLocaleString('en-US') + '/month'}</span>}
+                        </div>
+                      </div>
+
+                      <div className="staff-member-actions" aria-label={'Actions for ' + member.name}>
+                        {!isSelf && (
+                          <>
+                            {!member.isVerified && (
+                              <button
+                                type="button"
+                                onClick={() => resendMutation.mutate(member._id)}
+                                disabled={resendMutation.isPending}
+                                aria-label={'Resend activation email to ' + member.name}
+                                title="Resend activation email"
+                              >
+                                <RefreshCw size={16} className={resendMutation.isPending ? 'staff-spin' : ''} aria-hidden="true" />
+                              </button>
+                            )}
+                            <button type="button" onClick={() => setResetFor(member)} aria-label={'Reset password for ' + member.name} title="Reset password">
+                              <KeyRound size={16} aria-hidden="true" />
+                            </button>
+                            <button type="button" onClick={() => handleToggle(member)} disabled={toggleMutation.isPending} aria-label={(member.isActive ? 'Disable ' : 'Enable ') + member.name} title={member.isActive ? 'Disable account' : 'Enable account'}>
+                              {member.isActive ? <UserX size={16} aria-hidden="true" /> : <UserCheck size={16} aria-hidden="true" />}
+                            </button>
+                          </>
                         )}
-                        {member._id === currentUser?._id && <span className="text-xs text-gray-400">(You)</span>}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">{member.email}</p>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-600">
-                        <span className="flex items-center gap-1">
-                          <TrendingUp size={14} />
-                          {member.salesCount || 0} sales
-                        </span>
-                        <span>${(member.salesTotal || 0).toFixed(0)}</span>
-                        {member.salary > 0 && <span>${member.salary}/mo</span>}
+                        <button type="button" onClick={() => setSelected(member)} aria-label={'View details for ' + member.name} title="View staff details">
+                          <ChevronRight size={17} aria-hidden="true" />
+                        </button>
                       </div>
                     </div>
-
-                    {/* Actions (not for self) */}
-                    {member._id !== currentUser?._id && (
-                      <div className="flex gap-1 shrink-0">
-                        {/* Resend activation for unverified */}
-                        {!member.isVerified && (
-                          <button
-                            onClick={() => resendMutation.mutate(member._id)}
-                            disabled={resendMutation.isPending}
-                            className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition disabled:opacity-50"
-                            title="Resend activation email"
-                          >
-                            <RefreshCw size={16} className={resendMutation.isPending ? 'animate-spin' : ''} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setResetFor(member)}
-                          className="p-2 text-gray-400 hover:text-emerald-600 rounded-lg transition"
-                          title="Reset password"
-                        >
-                          <KeyRound size={16} />
-                        </button>
-                        <button
-                          onClick={() => toggleMutation.mutate(member._id)}
-                          disabled={toggleMutation.isPending}
-                          className={`p-2 rounded-lg transition disabled:opacity-50 ${
-                            member.isActive ? 'text-gray-400 hover:text-red-500' : 'text-gray-400 hover:text-emerald-600'
-                          }`}
-                          title={member.isActive ? 'Disable account' : 'Enable account'}
-                        >
-                          {member.isActive ? <UserX size={16} /> : <UserCheck size={16} />}
-                        </button>
-                        <button
-                          onClick={() => setSelected(member)}
-                          className="p-2 text-gray-400 hover:text-gray-700 rounded-lg transition"
-                        >
-                          <ChevronRight size={16} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </CardBody>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-      )}
-
-      <div className="h-4" />
-
-      {/* Add Staff Sheet */}
-      <Sheet open={showAdd} title="Add Staff Member" subtitle="System will send activation email automatically"
-             onClose={() => setShowAdd(false)}>
-        <AddStaffForm
-          onClose={() => setShowAdd(false)}
-          onSaved={() => { queryClient.invalidateQueries(['staff']); setShowAdd(false); }}
-        />
-      </Sheet>
-
-      {/* Reset Password Sheet */}
-      <Sheet open={!!resetFor} title="Reset Password" subtitle={resetFor?.name} onClose={() => setResetFor(null)}>
-        {resetFor && (
-          <ResetPwdForm member={resetFor}
-                        onClose={() => setResetFor(null)}
-                        onSaved={() => { setResetFor(null); toast.success('Password reset successfully.'); }}/>
+                  </CardBody>
+                </Card>
+              );
+            })}
+          </div>
         )}
+      </section>
+
+      <Sheet open={showAdd} title="Add staff member" subtitle="An activation email will be sent when the account is created" onClose={() => setShowAdd(false)} maxH="94dvh">
+        <AddStaffForm onSaved={() => { queryClient.invalidateQueries({ queryKey: ['staff'] }); setShowAdd(false); }} />
       </Sheet>
 
-      {/* Staff Detail Sheet */}
-      <Sheet open={!!selected} title={selected?.name} subtitle={selected?.email} onClose={() => setSelected(null)}>
-        {selected && <StaffDetail memberId={selected._id}/>}
+      <Sheet open={Boolean(resetFor)} title="Reset password" subtitle={resetFor?.name || ''} onClose={() => setResetFor(null)} maxH="94dvh">
+        {resetFor && <ResetPwdForm member={resetFor} onSaved={() => { setResetFor(null); toast.success('Password reset successfully.'); }} />}
       </Sheet>
 
-      {/* Invitation Modal */}
+      <Sheet open={Boolean(selected)} title={selected?.name || 'Staff details'} subtitle={selected?.email || ''} onClose={() => setSelected(null)} maxH="94dvh">
+        {selected && <StaffDetail memberId={selected._id} />}
+      </Sheet>
+
       <InvitationModal isOpen={showInvite} onClose={() => setShowInvite(false)} />
-    </div>
+    </main>
   );
 }
 
-/* ── Add Staff Form ─────────────────────────────────────────── */
-function AddStaffForm({ onClose, onSaved }) {
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({ defaultValues:{ role:'staff' } });
+function AddStaffForm({ onSaved }) {
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+    defaultValues: { role: 'staff', salary: 0 }
+  });
 
-  const onSubmit = async (data) => {
+  const onSubmit = async data => {
     try {
-      const res = await api.post('/staff', { name:data.name, email:data.email, role:data.role, salary:data.salary });
-      toast.success(res.data.message);
+      const response = await api.post('/staff', {
+        name: data.name.trim(),
+        email: data.email.trim(),
+        role: data.role,
+        salary: Number(data.salary) || 0
+      });
+      toast.success(response.data.message || 'Staff account created.');
       onSaved();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || 'Failed to create account.');
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Staff account could not be created.');
     }
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5 flex items-start gap-2">
-        <Mail size={15} className="text-emerald-600 shrink-0 mt-0.5"/>
-        <p className="text-xs text-emerald-700">
-          A welcome email with activation link will be sent automatically to the staff member.
-        </p>
+    <form onSubmit={handleSubmit(onSubmit)} className="staff-form" noValidate>
+      <div className="staff-form-callout"><Mail size={16} aria-hidden="true" /><p>A secure activation link will be sent to the staff member’s email address.</p></div>
+
+      <div className="staff-field">
+        <label htmlFor="staff-add-name">Full name <span>*</span></label>
+        <input id="staff-add-name" autoComplete="name" placeholder="e.g. Hassan Ahmed" aria-invalid={!!errors.name} aria-describedby={errors.name ? 'staff-add-name-error' : undefined} {...register('name', { required: 'Enter the staff member’s name.', minLength: { value: 2, message: 'Name must be at least 2 characters.' } })} />
+        {errors.name && <p id="staff-add-name-error" role="alert">{errors.name.message}</p>}
       </div>
 
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Full Name *</label>
-        <input {...register('name',{ required:'Name is required' })}
-               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="e.g. Hassan Ahmed"/>
-        {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name.message}</p>}
+      <div className="staff-field">
+        <label htmlFor="staff-add-email">Email address <span>*</span></label>
+        <input id="staff-add-email" type="email" autoComplete="email" placeholder="staff@example.com" aria-invalid={!!errors.email} aria-describedby={errors.email ? 'staff-add-email-error' : undefined} {...register('email', { required: 'Enter an email address.', pattern: { value: /^\S+@\S+\.\S+$/, message: 'Enter a valid email address.' } })} />
+        {errors.email && <p id="staff-add-email-error" role="alert">{errors.email.message}</p>}
       </div>
 
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Email Address * <span className="text-gray-400 font-normal">(activation email sent here)</span></label>
-        <input type="email" {...register('email',{ required:'Email is required', pattern:{ value:/^\S+@\S+\.\S+$/, message:'Enter a valid email' } })}
-               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="staff@example.com"/>
-        {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Role</label>
-          <select {...register('role')} className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition">
-            <option value="staff">Staff</option>
-            <option value="manager">Manager</option>
-            <option value="admin">Admin</option>
-          </select>
+      <div className="staff-form-grid">
+        <div className="staff-field">
+          <label htmlFor="staff-add-role">Role</label>
+          <select id="staff-add-role" {...register('role')}><option value="staff">Staff</option><option value="manager">Manager</option><option value="admin">Admin</option></select>
         </div>
-        <div>
-          <label className="text-xs font-semibold text-gray-600 block mb-1.5">Monthly Salary ($)</label>
-          <input type="number" min="0" {...register('salary',{ valueAsNumber:true })}
-                 className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="0"/>
+        <div className="staff-field">
+          <label htmlFor="staff-add-salary">Monthly salary (USD)</label>
+          <input id="staff-add-salary" type="number" min="0" step="0.01" inputMode="decimal" aria-invalid={!!errors.salary} {...register('salary', { valueAsNumber: true, min: { value: 0, message: 'Salary cannot be negative.' } })} />
+          {errors.salary && <p role="alert">{errors.salary.message}</p>}
         </div>
       </div>
 
-      <Button
-        type="submit"
-        variant="primary"
-        disabled={isSubmitting}
-        className="w-full"
-      >
-        {isSubmitting && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"/>}
-        Create & Send Invitation
-      </Button>
+      <Button type="submit" className="w-full" loading={isSubmitting}><Plus size={15} /> Create staff account</Button>
     </form>
   );
 }
 
-/* ── Reset Password Form ────────────────────────────────────── */
-function ResetPwdForm({ member, onClose, onSaved }) {
+function ResetPwdForm({ member, onSaved }) {
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm();
   const [show, setShow] = useState(false);
-  const pwd = watch('newPassword','');
+  const password = watch('newPassword', '');
+  const strength = getStrength(password);
 
   const onSubmit = async ({ newPassword }) => {
     try {
-      await api.patch(`/staff/${member._id}/reset-password`, { newPassword });
+      await api.patch('/staff/' + member._id + '/reset-password', { newPassword });
       onSaved();
-    } catch (e) { toast.error(e?.response?.data?.message||'Failed.'); }
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Password reset failed.');
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">New Password * (min 8 chars)</label>
-        <div className="relative">
-          <input type={show?'text':'password'} {...register('newPassword',{required:true,minLength:{value:8,message:'Min 8 chars'}})}
-                 className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition pr-10" placeholder="Min. 8 characters"/>
-          <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-            {show ? <EyeOff size={16}/> : <Eye size={16}/>}
+    <form onSubmit={handleSubmit(onSubmit)} className="staff-form" noValidate>
+      <div className="staff-field">
+        <label htmlFor="staff-reset-password">New password <span>*</span></label>
+        <div className="staff-password-input">
+          <input id="staff-reset-password" type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="At least 8 characters" aria-invalid={!!errors.newPassword} aria-describedby={errors.newPassword ? 'staff-reset-password-error' : 'staff-reset-password-strength'} {...register('newPassword', { required: 'Enter a new password.', minLength: { value: 8, message: 'Use at least 8 characters.' } })} />
+          <button type="button" onClick={() => setShow(value => !value)} aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show}>
+            {show ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
           </button>
         </div>
-        {errors.newPassword && <p className="text-red-500 text-xs mt-1">{errors.newPassword.message}</p>}
-        {pwd.length > 0 && (
-          <div className="flex gap-1 h-1.5 mt-2">
-            {[1,2,3,4,5].map(i => {
-              const s = getStrength(pwd);
-              const colors = ['','bg-red-400','bg-orange-400','bg-yellow-400','bg-emerald-400','bg-emerald-600'];
-              return <div key={i} className={`flex-1 rounded-full ${i<=s ? colors[Math.min(s,5)] : 'bg-gray-200'}`}/>;
-            })}
-          </div>
-        )}
+        {errors.newPassword && <p id="staff-reset-password-error" role="alert">{errors.newPassword.message}</p>}
+        {password && <div id="staff-reset-password-strength"><div className="staff-password-meter" data-score={strength}>{[1,2,3,4,5].map(item => <span key={item} />)}</div><small>Password strength: {['','Very weak','Weak','Fair','Strong','Very strong'][strength]}</small></div>}
       </div>
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700 flex items-start gap-2">
-        <Clock size={14} className="shrink-0 mt-0.5"/>
-        <p>This will log the staff member out of all devices immediately.</p>
-      </div>
-      <Button
-        type="submit"
-        variant="primary"
-        disabled={isSubmitting}
-        className="w-full"
-      >
-        {isSubmitting && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"/>}
-        Reset Password
-      </Button>
+
+      <div className="staff-form-callout is-warning"><ShieldCheck size={16} aria-hidden="true" /><p>Resetting this password will sign the staff member out of all devices.</p></div>
+      <Button type="submit" className="w-full" loading={isSubmitting}><KeyRound size={15} /> Reset password</Button>
     </form>
   );
 }
 
-/* ── Staff Detail Sheet ─────────────────────────────────────── */
 function StaffDetail({ memberId }) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['staff-detail', memberId],
-    queryFn:  async () => { const { data } = await api.get(`/staff/${memberId}`); return data.data; }
+    queryFn: async () => {
+      const response = await api.get('/staff/' + memberId);
+      return response.data.data;
+    }
   });
-  const m = data?.member; const sales = data?.recentSales||[]; const ms = data?.monthStats;
+
+  const member = data?.member;
+  const sales = data?.recentSales || [];
+  const monthlyStats = data?.monthStats;
+
+  if (isLoading) {
+    return <div className="staff-detail-skeletons" aria-label="Loading staff details">{[1,2,3].map(item => <div key={item} />)}</div>;
+  }
+
+  if (isError || !data) {
+    return <div className="staff-detail-error" role="alert"><AlertCircle size={18} /><p>{error?.response?.data?.message || error?.message || 'Staff details could not be loaded.'}</p></div>;
+  }
+
   return (
-    <div className="px-5 py-4 space-y-4">
-      {isLoading ? [...Array(4)].map((_,i)=><div key={i} className="h-12 bg-gray-200 rounded-lg animate-pulse"/>) : (
-        <>
-          {m && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {m.isVerified
-                ? <Badge variant="success" className="flex items-center gap-1"><CheckCircle size={12}/> Activated</Badge>
-                : <Badge variant="warning" className="flex items-center gap-1"><Clock size={12}/> Pending Activation</Badge>
-              }
-              {m.lastLogin && <span className="text-xs text-gray-500">Last login: {new Date(m.lastLogin).toLocaleDateString()}</span>}
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-3">
-            <Card>
-              <CardBody className="p-4 text-center">
-                <div className="text-2xl font-bold text-emerald-600">${(ms?.total||0).toFixed(0)}</div>
-                <div className="text-xs text-gray-500 mt-1">This Month</div>
-              </CardBody>
-            </Card>
-            <Card>
-              <CardBody className="p-4 text-center">
-                <div className="text-2xl font-bold text-emerald-700">{ms?.count||0}</div>
-                <div className="text-xs text-gray-500 mt-1">Sales</div>
-              </CardBody>
-            </Card>
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-gray-600 uppercase mb-3 tracking-wide">Recent Sales</p>
-            {sales.length===0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">No sales yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {sales.map(inv => (
-                  <Card key={inv._id}>
-                    <CardBody className="p-3 flex justify-between items-center">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-900">{inv.invoiceNumber}</p>
-                        <p className="text-xs text-gray-400">{new Date(inv.date).toLocaleDateString()}</p>
-                      </div>
-                      <p className="font-bold text-sm text-emerald-600">${inv.grandTotal.toFixed(2)}</p>
-                    </CardBody>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
+    <div className="staff-detail-content">
+      {member && (
+        <div className="staff-detail-status">
+          <Badge variant={member.isVerified ? 'success' : 'warning'}>{member.isVerified ? 'Activated' : 'Pending activation'}</Badge>
+          <Badge variant={member.isActive ? 'success' : 'danger'}>{member.isActive ? 'Active account' : 'Disabled account'}</Badge>
+          {member.lastLogin && <span>Last login {new Date(member.lastLogin).toLocaleDateString()}</span>}
+        </div>
       )}
+
+      <div className="staff-detail-metrics">
+        <MetricCard icon={TrendingUp} label="Sales this month" value={'$' + (Number(monthlyStats?.total) || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })} detail="Recorded invoice total" />
+        <MetricCard icon={CheckCircle2} label="Transactions" value={(Number(monthlyStats?.count) || 0).toLocaleString()} detail="Sales this month" tone="slate" />
+      </div>
+
+      <section className="staff-detail-sales">
+        <div className="staff-directory-heading"><div><h2>Recent sales</h2><p>Latest recorded invoices for this staff member</p></div></div>
+        {sales.length === 0 ? (
+          <p className="staff-detail-empty">No sales have been recorded yet.</p>
+        ) : sales.map(invoice => (
+          <div key={invoice._id} className="staff-detail-sale">
+            <div><strong>{invoice.invoiceNumber}</strong><span>{new Date(invoice.date).toLocaleDateString()}</span></div>
+            <strong>{'$' + (Number(invoice.grandTotal) || 0).toFixed(2)}</strong>
+          </div>
+        ))}
+      </section>
     </div>
   );
 }
