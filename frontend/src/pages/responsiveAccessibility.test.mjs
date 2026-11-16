@@ -115,3 +115,36 @@ test('audit logs clearly state that search is page-scoped and events are read-on
   assert.match(adminPageSources.audit, /aria-pressed=/);
   assert.match(adminPageSources.audit, /<details className="admin-audit-details">/);
 });
+
+
+test('phase 17 keeps route splitting, skeleton loading, and mobile-safe navigation', () => {
+  const app = read('src/App.jsx');
+  const fallback = read('src/components/PageLoadingFallback.jsx');
+  assert.match(app, /lazy\\(\\(\\) => import\\('\\.\\/pages\\/DashboardPage'\\)\\)/);
+  assert.match(app, /<Suspense fallback={<PageLoadingFallback \\/>} >|<Suspense fallback={<PageLoadingFallback \\/>}>/);
+  assert.match(fallback, /page-loading-card/);
+  assert.match(css, /\\.bottom-nav-item svg/);
+  assert.match(css, /env\\(safe-area-inset-bottom/);
+  assert.doesNotMatch(css, /fonts\\.googleapis\\.com/);
+});
+
+test('phase 17 directory screens use server-side pagination and debounced search', () => {
+  const pagination = read('src/components/ui/PaginationBar.jsx');
+  const hook = read('src/hooks/useDebouncedValue.js');
+  for (const [name, source] of Object.entries(pageSources)) {
+    if (['customers', 'suppliers', 'expenses'].includes(name)) {
+      assert.match(source, /useDebouncedValue/);
+      assert.match(source, /limit: 25/);
+      assert.match(source, /<PaginationBar/);
+    }
+  }
+  assert.match(hook, /setTimeout/);
+  assert.match(pagination, /onPageChange/);
+});
+
+test('authentication profile fetch shares a single in-flight request', () => {
+  const authStore = read('src/store/authStore.js');
+  assert.match(authStore, /let fetchMeInFlight = null/);
+  assert.match(authStore, /if \\(fetchMeInFlight\\) return fetchMeInFlight/);
+  assert.match(authStore, /get\\(\\)\\.accessToken === token/);
+});
