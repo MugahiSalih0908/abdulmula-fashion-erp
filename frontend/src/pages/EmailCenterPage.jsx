@@ -84,9 +84,23 @@ export default function EmailCenterPage() {
       <div className="rounded-2xl border border-[var(--color-gold-light)] bg-[#fbf8f1] p-4">
         <div className="flex items-start gap-3">
           <ShieldCheck size={19} className="mt-0.5 shrink-0 text-[#8b6b35]" aria-hidden="true" />
-          <div>
-            <p className="text-sm font-semibold text-[var(--color-text)]">Provider status is not the same as inbox delivery</p>
-            <p className="mt-1 text-xs leading-5 text-[var(--color-text-secondary)]">“Accepted by provider” means Resend accepted the request. “Delivered” is shown only after a verified delivery webhook is received. Real sending from your business domain will be enabled after the domain is purchased and verified.</p>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-[var(--color-text)]">Email delivery configuration</p>
+              <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${query.data?.emailConfig?.mode === 'live' ? 'bg-emerald-100 text-emerald-800' : query.data?.emailConfig?.mode === 'test' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}>
+                {String(query.data?.emailConfig?.mode || 'loading').toUpperCase()}
+              </span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-[var(--color-text-secondary)]">
+              {query.data?.emailConfig?.mode === 'live'
+                ? 'Live sending mode is enabled. Resend must show your sender domain as verified.'
+                : query.data?.emailConfig?.mode === 'test'
+                  ? 'Test mode is active. Messages can be sent only to the exact recipients in the backend test allow-list.'
+                  : 'Sending is disabled by default. No staff or customer email will be sent until test or verified live mode is deliberately enabled.'}
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+              Resend credentials: {query.data?.emailConfig?.providerReady ? 'configured' : 'not configured'} · Sender: {query.data?.emailConfig?.senderConfigured ? 'configured' : 'not configured'} · Verified domain: {query.data?.emailConfig?.domainVerified ? 'confirmed in environment' : 'not confirmed'}
+            </p>
           </div>
         </div>
       </div>
