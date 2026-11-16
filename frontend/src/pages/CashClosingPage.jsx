@@ -1,230 +1,391 @@
-// src/pages/CashClosingPage.jsx – daily cash closing with approval workflow
-
-import { useState }                    from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm }                     from 'react-hook-form';
-import toast                           from 'react-hot-toast';
-import api                             from '../services/api';
-import { useRole }                     from '../hooks/useRole';
-import useSettingsStore                from '../store/settingsStore';
-import PageHeader  from '../components/ui/PageHeader';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import toast from 'react-hot-toast';
+import api from '../services/api';
+import { useRole } from '../hooks/useRole';
+import useSettingsStore from '../store/settingsStore';
+import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import CardBody from '../components/ui/CardBody';
 import Badge from '../components/ui/Badge';
-import Sheet       from '../components/ui/Sheet';
-import KpiCard     from '../components/ui/KpiCard';
+import Sheet from '../components/ui/Sheet';
 import {
-  BookOpen, CheckCircle, Clock, AlertTriangle,
-  Lock, TrendingUp, TrendingDown, DollarSign
+  AlertCircle,
+  ArrowLeftRight,
+  BookOpen,
+  CheckCircle2,
+  Clock3,
+  LockKeyhole,
+  RefreshCw,
+  ShieldCheck,
+  TrendingDown,
+  TrendingUp,
+  Wallet
 } from 'lucide-react';
 
+const inputClass = 'input min-h-11 w-full rounded-xl border border-[var(--color-border)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-gold)] focus:outline-none focus:ring-2 focus:ring-[rgba(197,164,109,0.2)]';
+
 const STATUS_STYLES = {
-  pending_approval: { badge: 'warning', label: 'Pending Approval' },
-  approved:         { badge: 'success', label: 'Approved' },
-  disputed:         { badge: 'danger', label: 'Disputed' },
+  pending_approval: { badge: 'warning', label: 'Pending approval' },
+  approved: { badge: 'success', label: 'Approved' },
+  disputed: { badge: 'danger', label: 'Disputed' }
 };
 
+function money(value, fmt) {
+  const amount = Number(value);
+  return fmt(Number.isFinite(amount) ? amount : 0);
+}
+
+function Metric({ label, value, detail, Icon, tone = 'gold' }) {
+  const tones = {
+    gold: 'bg-[#f4eee3] text-[#80622e]',
+    green: 'bg-[#eaf3ed] text-[#216442]',
+    red: 'bg-[#f8ecea] text-[#963b3b]',
+    slate: 'bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)]'
+  };
+  return (
+    <Card className="min-w-0">
+      <CardBody className="flex items-start gap-3 p-4 sm:p-5">
+        <span className={'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ' + tones[tone]}>
+          <Icon size={19} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">{label}</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--color-text)] sm:text-2xl">{value}</p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">{detail}</p>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function dateLabel(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function CloseDayForm({ openingCash, netCash, fmt, onSave, onClose, saving }) {
+  const { register, handleSubmit, watch, formState: { errors } } = useForm({
+    defaultValues: { actualCash: Number.isFinite(netCash) ? netCash.toFixed(2) : '', notes: '' }
+  });
+  const actualCash = Number(watch('actualCash'));
+  const diff = Number.isFinite(actualCash) ? actualCash - netCash : null;
+
+  return (
+    <form onSubmit={handleSubmit(onSave)} className="space-y-4 p-4 sm:p-5" noValidate>
+      <Card>
+        <CardBody className="space-y-2 p-3">
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-[var(--color-text-muted)]">Opening cash</span>
+            <strong className="tabular-nums">{fmt(openingCash || 0)}</strong>
+          </div>
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-[var(--color-text-muted)]">Expected closing cash</span>
+            <strong className="tabular-nums">{fmt(netCash || 0)}</strong>
+          </div>
+        </CardBody>
+      </Card>
+
+      <div>
+        <label htmlFor="actual-cash" className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">
+          Actual cash counted <span className="text-[var(--color-danger)]">*</span>
+        </label>
+        <input
+          id="actual-cash"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.01"
+          className={inputClass + (errors.actualCash ? ' border-[var(--color-danger)]' : '')}
+          aria-invalid={Boolean(errors.actualCash)}
+          aria-describedby={errors.actualCash ? 'actual-cash-error' : undefined}
+          {...register('actualCash', {
+            required: 'Enter the actual cash count.',
+            valueAsNumber: true,
+            min: { value: 0, message: 'Cash count cannot be negative.' },
+            validate: value => Number.isFinite(value) || 'Enter a valid cash amount.'
+          })}
+        />
+        {errors.actualCash && <p id="actual-cash-error" role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{errors.actualCash.message}</p>}
+      </div>
+
+      {diff !== null && (
+        <Card>
+          <CardBody className="flex items-center justify-between gap-3 p-3">
+            <span className="text-sm font-semibold text-[var(--color-text)]">
+              {Math.abs(diff) < 0.01 ? 'Balanced' : diff < 0 ? 'Cash shortage' : 'Cash excess'}
+            </span>
+            <strong className={'text-lg tabular-nums ' + (Math.abs(diff) < 0.01 ? 'text-[var(--color-success)]' : diff < 0 ? 'text-[var(--color-danger)]' : 'text-[#80622e]')}>
+              {diff >= 0 ? '+' : '−'}{fmt(Math.abs(diff))}
+            </strong>
+          </CardBody>
+        </Card>
+      )}
+
+      <div>
+        <label htmlFor="closing-notes" className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">Notes for the approving admin</label>
+        <textarea id="closing-notes" rows={3} maxLength={500} className={inputClass + ' min-h-24 resize-y'} placeholder="Explain any shortage or excess…" {...register('notes')} />
+      </div>
+
+      <div className="rounded-xl border border-[#ead8ad] bg-[#fbf8f1] p-3">
+        <p className="text-xs leading-5 text-[var(--color-text-secondary)]">The closing is submitted for review. The day is marked closed only after an admin approves it.</p>
+      </div>
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+        <Button type="submit" loading={saving} className="w-full sm:w-auto"><LockKeyhole size={15} /> Submit closing</Button>
+      </div>
+    </form>
+  );
+}
+
+function RateForm({ currentRate, onSave, onClose, saving }) {
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    defaultValues: { usdToSsp: currentRate }
+  });
+  return (
+    <form onSubmit={handleSubmit(values => onSave(Number(values.usdToSsp)))} className="space-y-4 p-4 sm:p-5" noValidate>
+      <Card>
+        <CardBody className="p-3">
+          <p className="text-xs text-[var(--color-text-muted)]">Current exchange rate</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums">1 USD = {Number(currentRate).toLocaleString('en-US')} SSP</p>
+        </CardBody>
+      </Card>
+      <div>
+        <label htmlFor="usd-to-ssp" className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">New rate (SSP per 1 USD)</label>
+        <input
+          id="usd-to-ssp"
+          type="number"
+          min="1"
+          step="1"
+          inputMode="numeric"
+          className={inputClass + (errors.usdToSsp ? ' border-[var(--color-danger)]' : '')}
+          aria-invalid={Boolean(errors.usdToSsp)}
+          {...register('usdToSsp', {
+            required: 'Enter the exchange rate.',
+            valueAsNumber: true,
+            min: { value: 1, message: 'Exchange rate must be at least 1.' },
+            validate: value => Number.isFinite(value) || 'Enter a valid rate.'
+          })}
+        />
+        {errors.usdToSsp && <p role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{errors.usdToSsp.message}</p>}
+      </div>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+        <Button type="submit" loading={saving} className="w-full sm:w-auto"><ArrowLeftRight size={15} /> Update rate</Button>
+      </div>
+    </form>
+  );
+}
+
 export default function CashClosingPage() {
-  const [showClose,  setShowClose]  = useState(false);
-  const [showRate,   setShowRate]   = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [rateOpen, setRateOpen] = useState(false);
   const { can, isAdmin } = useRole();
   const { fmt, setCurrency, currency, usdToSsp, setRate } = useSettingsStore();
   const queryClient = useQueryClient();
 
-  const { data: today, isLoading, isError, refetch } = useQuery({
+  const todayQuery = useQuery({
     queryKey: ['cashbook-today'],
-    queryFn:  async () => { const { data } = await api.get('/cashbook/today'); return data.data; },
-    refetchInterval: 30000,
+    queryFn: async () => {
+      const response = await api.get('/cashbook/today');
+      return response.data.data;
+    },
+    refetchInterval: 30000
   });
-
-  const { data: closings = [] } = useQuery({
+  const closingsQuery = useQuery({
     queryKey: ['cash-closings'],
-    queryFn:  async () => { const { data } = await api.get('/cashbook/closings'); return data.data; },
+    queryFn: async () => {
+      const response = await api.get('/cashbook/closings');
+      return Array.isArray(response.data?.data) ? response.data.data : [];
+    }
   });
-
-  const { data: rateData } = useQuery({
+  const historyQuery = useQuery({
+    queryKey: ['cashbook-history'],
+    queryFn: async () => {
+      const response = await api.get('/cashbook/history');
+      return Array.isArray(response.data?.data) ? response.data.data : [];
+    }
+  });
+  const rateQuery = useQuery({
     queryKey: ['exchange-rate'],
-    queryFn:  async () => { const { data } = await api.get('/cashbook/rate'); return data.data; },
-    onSuccess: (d) => { if (d?.usdToSsp) setRate(d.usdToSsp); },
+    queryFn: async () => {
+      const response = await api.get('/cashbook/rate');
+      return response.data.data;
+    }
   });
 
-  const approveMutation = useMutation({
-    mutationFn: (id) => api.post(`/cashbook/approve/${id}`),
-    onSuccess:  (res) => { queryClient.invalidateQueries({ queryKey: ['cash-closings'] }); queryClient.invalidateQueries({ queryKey: ['cashbook-today'] }); toast.success(res.data.message); },
-    onError:    (e)   => toast.error(e?.response?.data?.message || 'Approval failed.'),
-  });
+  useEffect(() => {
+    if (rateQuery.data?.usdToSsp && Number(rateQuery.data.usdToSsp) !== usdToSsp) {
+      setRate(Number(rateQuery.data.usdToSsp));
+    }
+  }, [rateQuery.data?.usdToSsp, usdToSsp, setRate]);
 
   const openMutation = useMutation({
     mutationFn: () => api.post('/cashbook/open'),
-    onSuccess: (res) => {
-      queryClient.setQueryData(['cashbook-today'], res.data.data);
-      queryClient.invalidateQueries({ queryKey: ['cashbook-history'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-cashbook-today'] });
-      toast.success(res.data.message);
+    onSuccess: async response => {
+      queryClient.setQueryData(['cashbook-today'], response.data.data);
+      await queryClient.invalidateQueries({ queryKey: ['cashbook-history'] });
+      toast.success(response.data.message || 'Cashbook opened.');
     },
-    onError: (e) => toast.error(e?.response?.data?.message || 'Failed to open cashbook.'),
+    onError: error => toast.error(error?.response?.data?.message || 'Cashbook could not be opened.')
+  });
+  const closeMutation = useMutation({
+    mutationFn: values => api.post('/cashbook/close', values),
+    onSuccess: async response => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['cashbook-today'] }),
+        queryClient.invalidateQueries({ queryKey: ['cash-closings'] }),
+        queryClient.invalidateQueries({ queryKey: ['cashbook-history'] })
+      ]);
+      toast.success(response.data.message || 'Closing submitted for approval.');
+      setCloseOpen(false);
+    },
+    onError: error => toast.error(error?.response?.data?.message || 'Cash closing could not be submitted.')
+  });
+  const approveMutation = useMutation({
+    mutationFn: id => api.post('/cashbook/approve/' + id),
+    onSuccess: async response => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['cash-closings'] }),
+        queryClient.invalidateQueries({ queryKey: ['cashbook-today'] }),
+        queryClient.invalidateQueries({ queryKey: ['cashbook-history'] })
+      ]);
+      toast.success(response.data.message || 'Cash closing approved.');
+    },
+    onError: error => toast.error(error?.response?.data?.message || 'Closing approval failed.')
+  });
+  const rateMutation = useMutation({
+    mutationFn: usdToSsp => api.post('/cashbook/rate', { usdToSsp }),
+    onSuccess: async response => {
+      const savedRate = Number(response.data?.data?.usdToSsp);
+      if (savedRate > 0) setRate(savedRate);
+      await queryClient.invalidateQueries({ queryKey: ['exchange-rate'] });
+      toast.success(response.data.message || 'Exchange rate updated.');
+      setRateOpen(false);
+    },
+    onError: error => toast.error(error?.response?.data?.message || 'Exchange rate could not be updated.')
   });
 
-  const netCash = (today?.openingCash||0) + (today?.livesCashSales||0) - (today?.liveExpenses||0);
-  const todayClosing = closings.find(c => c.date === new Date().toISOString().split('T')[0]);
+  const today = todayQuery.data;
+  const closings = closingsQuery.data || [];
+  const history = historyQuery.data || [];
+  const netCash = (Number(today?.openingCash) || 0) + (Number(today?.livesCashSales) || 0) - (Number(today?.liveExpenses) || 0);
+  const todayString = today?.date || new Date().toISOString().slice(0, 10);
+  const todayClosing = closings.find(item => item.date === todayString);
+  const pendingApprovals = useMemo(() => closings.filter(item => item.status === 'pending_approval'), [closings]);
+  const loading = todayQuery.isLoading;
+  const hasError = todayQuery.isError || closingsQuery.isError || historyQuery.isError || rateQuery.isError;
 
   return (
-    <div className="p-4 space-y-4">
+    <main className="space-y-5 p-4 pb-8 sm:space-y-6 sm:p-6 lg:p-7">
       <PageHeader
         title="Cashbook"
-        sub={new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}
+        sub={new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         action={
-          <div className="flex gap-2">
-            <button onClick={() => setShowRate(true)}
-                    className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600">
-              Rate: 1 USD = {usdToSsp?.toLocaleString()} SSP
-            </button>
-            {can.closeCashbook && !isLoading && !isError && !today && (
-              <Button
-                variant="primary"
-                size="sm"
-                loading={openMutation.isPending}
-                onClick={() => openMutation.mutate()}
-              >
-                Open Today&apos;s Cashbook
-              </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setRateOpen(true)}><ArrowLeftRight size={15} /> Rate: {Number(usdToSsp).toLocaleString('en-US')} SSP</Button>
+            {can.closeCashbook && !loading && !today && !todayQuery.isError && (
+              <Button size="sm" onClick={() => openMutation.mutate()} loading={openMutation.isPending}><BookOpen size={15} /> Open today</Button>
             )}
-            {can.closeCashbook && today && !today.isClosed && (
-              <button onClick={() => setShowClose(true)}
-                      className="flex items-center gap-1.5 text-white px-3 py-2.5 rounded-xl font-semibold text-sm"
-                      style={{ background:'#111' }}>
-                <Lock size={14}/> Close Day
-              </button>
+            {can.closeCashbook && today && !today.isClosed && todayClosing?.status !== 'pending_approval' && (
+              <Button size="sm" onClick={() => setCloseOpen(true)}><LockKeyhole size={15} /> Close day</Button>
             )}
           </div>
         }
       />
 
-      {/* Currency toggle */}
-      <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
-        {['USD','SSP'].map(c => (
-          <button key={c} onClick={() => setCurrency(c)}
-                  className={`flex-1 py-2 rounded-md text-sm font-semibold transition-all ${currency===c?'bg-white text-emerald-600 shadow-md':'text-gray-600'}`}>
-            {c}
-          </button>
-        ))}
+      <div className="flex items-start gap-2.5 rounded-2xl border border-[#ead8ad] bg-[#fbf8f1] p-3.5">
+        <AlertCircle size={17} className="mt-0.5 shrink-0 text-[#80622e]" />
+        <p className="text-xs leading-5 text-[var(--color-text-secondary)]">
+          Cashbook expected cash currently subtracts all recorded expenses from cash sales. Expense records do not store a payment method, so this figure should be reviewed against the actual cash count before approval.
+        </p>
       </div>
 
-      {isError ? (
+      {hasError && (
         <Card role="alert">
-          <CardBody className="p-4 flex items-center justify-between gap-3">
-            <p className="text-sm text-gray-700">Today&apos;s cashbook could not be loaded.</p>
-            <Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>
+          <CardBody className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-[var(--color-danger)]">Some cashbook information could not be loaded. Refresh the affected sections to try again.</p>
+            <Button size="sm" variant="secondary" onClick={() => {
+              todayQuery.refetch();
+              closingsQuery.refetch();
+              historyQuery.refetch();
+              rateQuery.refetch();
+            }}><RefreshCw size={14} /> Retry</Button>
           </CardBody>
         </Card>
-      ) : today ? (
-        <div className="grid grid-cols-2 gap-3">
-          <KpiCard icon={<BookOpen size={18}/>}     label="Opening Cash"   loading={isLoading} value={fmt(today.openingCash)}     color="blue"/>
-          <KpiCard icon={<TrendingUp size={18}/>}   label="Cash Sales"     loading={isLoading} value={fmt(today.livesCashSales)}  color="green"/>
-          <KpiCard icon={<TrendingDown size={18}/>} label="Expenses"       loading={isLoading} value={fmt(today.liveExpenses)}    color="red"/>
-          <KpiCard icon={<DollarSign size={18}/>}   label="Expected Close" loading={isLoading} value={fmt(netCash)}              color="gold"/>
+      )}
+
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Today's cash position">
+        <Metric label="Opening cash" value={money(today?.openingCash, fmt)} detail="Balance carried into the day" Icon={BookOpen} tone="slate" />
+        <Metric label="Cash sales" value={money(today?.livesCashSales, fmt)} detail="Cash-paid invoices today" Icon={TrendingUp} tone="green" />
+        <Metric label="Recorded expenses" value={money(today?.liveExpenses, fmt)} detail="All expenses recorded today" Icon={TrendingDown} tone="red" />
+        <Metric label="Expected cash" value={money(netCash, fmt)} detail="Opening + sales − expenses" Icon={Wallet} tone="gold" />
+      </section>
+
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--color-border)] bg-white p-3">
+        <div>
+          <p className="text-xs font-semibold text-[var(--color-text)]">Display currency</p>
+          <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">Stored amounts remain in USD base values</p>
         </div>
-      ) : !isLoading ? (
+        <div className="flex rounded-xl border border-[var(--color-border)] bg-[var(--color-bg-secondary)] p-1" role="group" aria-label="Display currency">
+          {['USD', 'SSP'].map(value => (
+            <button key={value} type="button" aria-pressed={currency === value} onClick={() => setCurrency(value)} className={'min-h-9 rounded-lg px-4 text-xs font-semibold ' + (currency === value ? 'bg-white text-[#80622e] shadow-sm' : 'text-[var(--color-text-secondary)]')}>{value}</button>
+          ))}
+        </div>
+      </section>
+
+      {!loading && !today && !todayQuery.isError && (
         <Card>
-          <CardBody className="p-4">
-            <p className="font-semibold text-sm text-gray-900">No cashbook is open for today.</p>
-            <p className="text-sm text-gray-600 mt-1">Open today&apos;s cashbook to begin recording the daily cash position.</p>
+          <CardBody className="flex flex-col items-start gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[var(--color-text)]">No cashbook is open for today</p>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">Open today’s cashbook before recording the daily cash position.</p>
+            </div>
+            {can.closeCashbook && <Button onClick={() => openMutation.mutate()} loading={openMutation.isPending}><BookOpen size={15} /> Open cashbook</Button>}
           </CardBody>
         </Card>
-      ) : (
-        <div className="grid grid-cols-2 gap-3">
-          {[0, 1, 2, 3].map(key => <KpiCard key={key} label="Loading cashbook" loading />)}
-        </div>
       )}
 
-      {/* Today's closing status */}
       {today && todayClosing && (
-        <Card className={`border-l-4 ${
-          todayClosing.status==='approved' ? 'border-l-emerald-500 bg-emerald-50' :
-          todayClosing.status==='disputed' ? 'border-l-red-500 bg-red-50' :
-                                              'border-l-amber-500 bg-amber-50'
-        }`}>
-          <CardBody className="p-4">
-            <div className="flex items-center justify-between mb-4">
+        <Card>
+          <CardBody className="space-y-4 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                {todayClosing.status==='approved'         ? <CheckCircle size={18} className="text-emerald-600"/> :
-                 todayClosing.status==='pending_approval' ? <Clock size={18} className="text-amber-600"/> :
-                                                            <AlertTriangle size={18} className="text-red-600"/>}
-                <p className="font-bold text-sm text-gray-900">
-                  {todayClosing.status==='approved' ? 'Day Closed & Approved' :
-                   todayClosing.status==='pending_approval' ? 'Pending Admin Approval' : 'Disputed'}
-                </p>
+                {todayClosing.status === 'approved' ? <CheckCircle2 size={18} className="text-[var(--color-success)]" /> : <Clock3 size={18} className="text-[#80622e]" />}
+                <h2 className="text-sm font-semibold text-[var(--color-text)]">Today's closing status</h2>
               </div>
-              {isAdmin && todayClosing.status==='pending_approval' && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => approveMutation.mutate(todayClosing._id)}
-                  disabled={approveMutation.isPending}
-                >
-                  Approve
-                </Button>
-              )}
+              <Badge variant={STATUS_STYLES[todayClosing.status]?.badge || 'info'}>{STATUS_STYLES[todayClosing.status]?.label || todayClosing.status}</Badge>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="text-center">
-                <p className="text-xs text-gray-600 mb-1">Expected</p>
-                <p className="font-bold text-sm text-gray-900">{fmt(todayClosing.expectedCash)}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-gray-600 mb-1">Actual</p>
-                <p className="font-bold text-sm text-gray-900">{fmt(todayClosing.actualCash)}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-gray-600 mb-1">{todayClosing.shortage>0?'Shortage':'Excess'}</p>
-                <p className={`font-bold text-sm ${todayClosing.shortage>0?'text-red-600':'text-emerald-600'}`}>
-                  {todayClosing.shortage>0 ? `-${fmt(todayClosing.shortage)}` : `+${fmt(todayClosing.excess)}`}
-                </p>
-              </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div><p className="text-xs text-[var(--color-text-muted)]">Expected</p><p className="mt-1 text-base font-semibold tabular-nums">{money(todayClosing.expectedCash, fmt)}</p></div>
+              <div><p className="text-xs text-[var(--color-text-muted)]">Counted</p><p className="mt-1 text-base font-semibold tabular-nums">{money(todayClosing.actualCash, fmt)}</p></div>
+              <div><p className="text-xs text-[var(--color-text-muted)]">{Number(todayClosing.shortage) > 0 ? 'Shortage' : 'Excess'}</p><p className={'mt-1 text-base font-semibold tabular-nums ' + (Number(todayClosing.shortage) > 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-success)]')}>{Number(todayClosing.shortage) > 0 ? '−' + money(todayClosing.shortage, fmt) : '+' + money(todayClosing.excess, fmt)}</p></div>
             </div>
-            {todayClosing.notes && <p className="text-xs text-gray-600 mt-3 italic">{todayClosing.notes}</p>}
+            {todayClosing.notes && <p className="rounded-xl bg-[var(--color-bg-secondary)] p-3 text-xs text-[var(--color-text-secondary)]">{todayClosing.notes}</p>}
+            {isAdmin && todayClosing.status === 'pending_approval' && <div className="flex justify-end"><Button size="sm" onClick={() => approveMutation.mutate(todayClosing._id)} loading={approveMutation.isPending}><ShieldCheck size={15} /> Approve closing</Button></div>}
           </CardBody>
         </Card>
       )}
 
-      {/* Pending approvals (admin only) */}
       {isAdmin && (
         <Card>
-          <CardBody className="p-0">
-            <div className="px-4 pt-4 pb-2 border-b border-gray-100 flex items-center gap-2">
-              <Clock size={16} className="text-amber-600"/>
-              <p className="font-semibold text-sm text-gray-900">All Closing Records</p>
+          <CardBody className="space-y-3 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div><h2 className="text-sm font-semibold text-[var(--color-text)]">Pending closing approvals</h2><p className="mt-0.5 text-xs text-[var(--color-text-muted)]">Manager submissions requiring admin review</p></div>
+              <Badge variant={pendingApprovals.length ? 'warning' : 'success'}>{pendingApprovals.length} pending</Badge>
             </div>
-            {closings.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">No closing records yet</div>
+            {pendingApprovals.length === 0 ? (
+              <p className="rounded-xl bg-[var(--color-bg-secondary)] p-4 text-center text-xs text-[var(--color-text-muted)]">No pending approvals.</p>
             ) : (
-              <div className="divide-y divide-gray-50">
-                {closings.map(c => (
-                  <div key={c._id} className="px-4 py-3 flex items-center justify-between gap-3 hover:bg-gray-50 transition">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-sm text-gray-900">{c.date}</p>
-                        <Badge variant={STATUS_STYLES[c.status]?.badge || 'secondary'}>
-                          {STATUS_STYLES[c.status]?.label || c.status.replace('_',' ')}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-1">
-                        By: {c.closedByName}
-                        {c.shortage>0 && <span className="text-red-600 ml-2">Shortage: {fmt(c.shortage)}</span>}
-                        {c.excess>0   && <span className="text-emerald-700 ml-2">Excess: {fmt(c.excess)}</span>}
-                      </p>
-                    </div>
-                    {isAdmin && c.status === 'pending_approval' && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => approveMutation.mutate(c._id)}
-                        disabled={approveMutation.isPending}
-                      >
-                        Approve
-                      </Button>
-                    )}
+              <div className="divide-y divide-[var(--color-border-light)]">
+                {pendingApprovals.map(item => (
+                  <div key={item._id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                    <div className="min-w-0"><p className="text-sm font-semibold text-[var(--color-text)]">{item.date} · {item.closedByName || 'Manager'}</p><p className="mt-1 text-xs text-[var(--color-text-muted)]">Expected {money(item.expectedCash, fmt)} · Counted {money(item.actualCash, fmt)}</p></div>
+                    <Button size="sm" onClick={() => approveMutation.mutate(item._id)} loading={approveMutation.isPending}><CheckCircle2 size={14} /> Approve</Button>
                   </div>
                 ))}
               </div>
@@ -233,113 +394,48 @@ export default function CashClosingPage() {
         </Card>
       )}
 
-      <div className="h-4"/>
+      <Card>
+        <CardBody className="space-y-3 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><h2 className="text-sm font-semibold text-[var(--color-text)]">Daily cashbook history</h2><p className="mt-0.5 text-xs text-[var(--color-text-muted)]">Most recent 30 business days</p></div>
+            {historyQuery.isFetching && <span className="text-[11px] text-[var(--color-text-muted)]">Updating…</span>}
+          </div>
+          {history.length === 0 ? (
+            <p className="rounded-xl bg-[var(--color-bg-secondary)] p-4 text-center text-xs text-[var(--color-text-muted)]">No cashbook history yet.</p>
+          ) : (
+            <div className="divide-y divide-[var(--color-border-light)]">
+              {history.map(entry => (
+                <div key={entry._id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)]"><BookOpen size={17} /></span>
+                    <div><p className="text-sm font-semibold text-[var(--color-text)]">{entry.date}</p><p className="mt-0.5 text-xs text-[var(--color-text-muted)]">Opening balance {money(entry.openingCash, fmt)}</p></div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {entry.isClosed ? <Badge variant="success">Closed</Badge> : <Badge variant="warning">Open</Badge>}
+                    <div className="text-right"><p className="text-xs font-semibold tabular-nums text-[var(--color-text)]">{entry.isClosed ? money(entry.closingCash, fmt) : '—'}</p><p className="text-[10px] text-[var(--color-text-muted)]">Closing balance</p></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardBody>
+      </Card>
 
-      {/* Close Day Sheet */}
-      <Sheet open={showClose && Boolean(today)} title="Close Day" subtitle="Enter actual cash in register" onClose={() => setShowClose(false)}>
-        <CloseDayForm netCash={netCash} fmt={fmt} openingCash={today?.openingCash}
-                      onClose={() => setShowClose(false)}
-                      onSaved={() => { queryClient.invalidateQueries(['cashbook-today']); queryClient.invalidateQueries(['cash-closings']); setShowClose(false); }} />
+      <Sheet open={closeOpen && Boolean(today)} title="Close the day" subtitle="Enter the actual cash count in the register" onClose={() => closeMutation.isPending ? null : setCloseOpen(false)} maxH="94dvh">
+        <CloseDayForm
+          key={today?.date || 'closing'}
+          openingCash={today?.openingCash}
+          netCash={netCash}
+          fmt={fmt}
+          saving={closeMutation.isPending}
+          onClose={() => setCloseOpen(false)}
+          onSave={values => closeMutation.mutate(values)}
+        />
       </Sheet>
 
-      {/* Rate Sheet */}
-      <Sheet open={showRate} title="Exchange Rate" subtitle="Set today's USD to SSP rate" onClose={() => setShowRate(false)}>
-        <RateForm currentRate={usdToSsp} onClose={() => setShowRate(false)}
-                  onSaved={(rate) => { setRate(rate); queryClient.invalidateQueries(['exchange-rate']); setShowRate(false); }} />
+      <Sheet open={rateOpen} title="Update exchange rate" subtitle="Set the display conversion from USD to SSP" onClose={() => rateMutation.isPending ? null : setRateOpen(false)} maxH="auto">
+        <RateForm currentRate={usdToSsp} saving={rateMutation.isPending} onClose={() => setRateOpen(false)} onSave={value => rateMutation.mutate(value)} />
       </Sheet>
-    </div>
-  );
-}
-
-function CloseDayForm({ netCash, fmt, openingCash, onClose, onSaved }) {
-  const { register, handleSubmit, watch, formState:{isSubmitting} } = useForm({ defaultValues:{ actualCash: netCash?.toFixed(2)||'' } });
-  const actualVal  = parseFloat(watch('actualCash')) || 0;
-  const diff       = actualVal - netCash;
-
-  const onSubmit = async (data) => {
-    try {
-      await api.post('/cashbook/close', { actualCash: parseFloat(data.actualCash), notes: data.notes });
-      toast.success('Cash closing submitted for approval.');
-      onSaved();
-    } catch (e) { toast.error(e?.response?.data?.message || 'Failed.'); }
-  };
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <Card className="bg-gray-50">
-        <CardBody className="p-3 space-y-1">
-          <div className="flex justify-between text-sm"><span className="text-gray-600">Opening Cash</span><span className="font-semibold text-gray-900">{fmt(openingCash||0)}</span></div>
-          <div className="flex justify-between text-sm"><span className="text-gray-600">Expected Closing</span><span className="font-bold text-emerald-700">{fmt(netCash||0)}</span></div>
-        </CardBody>
-      </Card>
-
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Actual Cash Count ($) *</label>
-        <input type="number" step="0.01" min="0"
-               {...register('actualCash',{required:'Required',valueAsNumber:true})}
-               className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-lg font-bold focus:outline-none transition"
-               style={{ borderColor: Math.abs(diff) < 1 ? '#06b6d4' : diff < 0 ? '#ef4444' : '#22c55e' }}
-               placeholder={netCash?.toFixed(2)}/>
-      </div>
-
-      {!isNaN(diff) && (
-        <Card className={`${
-          Math.abs(diff) < 0.01 ? 'bg-emerald-50' : diff < 0 ? 'bg-red-50' : 'bg-amber-50'
-        }`}>
-          <CardBody className="p-3 flex justify-between items-center">
-            <span className="text-sm font-semibold text-gray-900">{diff < 0 ? '⚠ Shortage' : diff > 0 ? '✓ Excess' : '✓ Balanced'}</span>
-            <span className={`font-bold text-lg ${diff<0?'text-red-600':diff>0?'text-emerald-600':'text-emerald-600'}`}>
-              {diff >= 0 ? '+' : ''}{fmt(diff)}
-            </span>
-          </CardBody>
-        </Card>
-      )}
-
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Notes</label>
-        <textarea {...register('notes')} rows={2}
-                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition resize-none"
-                  placeholder="Any notes for the admin…"/>
-      </div>
-
-      <Card className="bg-amber-50">
-        <CardBody className="p-2.5">
-          <p className="text-xs text-amber-700 font-medium">⚠ Submission requires admin approval before the day is officially closed.</p>
-        </CardBody>
-      </Card>
-
-      <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">
-        {isSubmitting && <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"/>}
-        Submit for Approval
-      </Button>
-    </form>
-  );
-}
-
-function RateForm({ currentRate, onClose, onSaved }) {
-  const { register, handleSubmit, formState:{isSubmitting} } = useForm({ defaultValues:{ usdToSsp: currentRate } });
-  const onSubmit = async ({ usdToSsp }) => {
-    try {
-      await api.post('/cashbook/rate', { usdToSsp });
-      toast.success('Exchange rate updated.');
-      onSaved(parseFloat(usdToSsp));
-    } catch (e) { toast.error(e?.response?.data?.message||'Failed.'); }
-  };
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <Card className="bg-amber-50">
-        <CardBody className="p-3 text-sm text-amber-700 font-medium">
-          Current: 1 USD = {currentRate?.toLocaleString()} SSP
-        </CardBody>
-      </Card>
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">New Rate: 1 USD = ? SSP</label>
-        <input type="number" step="1" min="1" {...register('usdToSsp',{required:true,valueAsNumber:true})}
-               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="e.g. 1300"/>
-      </div>
-      <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">
-        Set Rate
-      </Button>
-    </form>
+    </main>
   );
 }
