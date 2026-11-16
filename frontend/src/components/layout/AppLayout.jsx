@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Activity, Archive, BarChart3, BookOpen, ChevronRight, ClipboardList, Mail,
+  Activity, Archive, BarChart3, BookOpen, ChevronRight, ClipboardList, Mail, Receipt,
   LayoutDashboard, LogOut, Menu, Package, PanelLeftClose,
   PanelLeftOpen, Settings, ShieldCheck, ShoppingCart, Truck, UserCog, Users,
   Wallet, Wifi, WifiOff, X
@@ -16,6 +16,7 @@ import Drawer from './Drawer';
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/pos', label: 'POS', icon: ShoppingCart },
+  { to: '/invoices', label: 'Invoices', icon: Receipt, permission: 'viewInvoices' },
   { to: '/products', label: 'Products', icon: Package, permission: 'viewProducts' },
   { to: '/out-of-stock', label: 'Out of Stock', icon: Archive, permission: 'viewProducts' },
   { to: '/customers', label: 'Customers', icon: Users },
