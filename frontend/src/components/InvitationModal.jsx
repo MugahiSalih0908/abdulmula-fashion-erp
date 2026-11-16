@@ -38,6 +38,8 @@ export default function InvitationModal({ isOpen, onClose }) {
   const email = watch('email');
   const [tab, setTab] = useState('create');
   const panelRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -55,7 +57,7 @@ export default function InvitationModal({ isOpen, onClose }) {
     const handleKeyDown = event => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -86,7 +88,7 @@ export default function InvitationModal({ isOpen, onClose }) {
       document.body.style.overflow = previousOverflow;
       if (previouslyFocused && typeof previouslyFocused.focus === 'function') previouslyFocused.focus();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   const invitationQuery = useQuery({
     queryKey: ['invitations'],
