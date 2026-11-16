@@ -1,5 +1,10 @@
 const VALID_MODES = new Set(['disabled', 'test', 'live']);
 
+function getSenderAddress(sender) {
+  const bracketed = String(sender || '').match(/<([^<>]+)>/);
+  return String(bracketed ? bracketed[1] : sender || '').trim().toLowerCase();
+}
+
 function getEmailConfig(env = process.env) {
   const configuredMode = String(env.EMAIL_DELIVERY_MODE || 'disabled').trim().toLowerCase();
   const mode = VALID_MODES.has(configuredMode) ? configuredMode : 'disabled';
@@ -10,19 +15,42 @@ function getEmailConfig(env = process.env) {
     .split(',')
     .map(value => value.trim().toLowerCase())
     .filter(Boolean);
+
+  const senderAddress = getSenderAddress(sender);
+  const senderDomain = senderAddress.includes('@') ? senderAddress.split('@').pop() : '';
+  const configuredDomain = String(env.EMAIL_SENDING_DOMAIN || '').trim().toLowerCase();
+  const senderDomainMatches = Boolean(
+    senderDomain &&
+    senderDomain !== 'resend.dev' &&
+    (!configuredDomain || senderDomain === configuredDomain)
+  );
+
+  const issues = [];
+  if (mode === 'disabled') {
+    issues.push('Email delivery mode is disabled. Use test mode for an allow-listed test inbox, or live mode after verifying the sending domain.');
+  }
+  if (!hasApiKey) issues.push('RESEND_API_KEY is missing from the backend environment.');
+  if (!sender) issues.push('EMAIL_FROM is missing from the backend environment.');
+  if (mode === 'test' && testRecipients.length === 0) {
+    issues.push('EMAIL_TEST_RECIPIENTS is empty. Add the exact test inboxes that may receive test messages.');
+  }
+  if (mode === 'live' && !domainVerified) {
+    issues.push('The sending domain is not marked as verified. Verify it with Resend before enabling live delivery.');
+  }
+  if (mode === 'live' && !senderDomainMatches) {
+    issues.push('EMAIL_FROM must use an address on the verified EMAIL_SENDING_DOMAIN.');
+  }
+
   return {
     mode,
     enabled: mode !== 'disabled',
     providerReady: hasApiKey && Boolean(sender),
     senderConfigured: Boolean(sender),
     domainVerified,
-    testRecipientCount: testRecipients.length
+    senderDomainMatches,
+    testRecipientCount: testRecipients.length,
+    issues
   };
-}
-
-function getSenderAddress(sender) {
-  const bracketed = String(sender || '').match(/<([^<>]+)>/);
-  return String(bracketed ? bracketed[1] : sender || '').trim().toLowerCase();
 }
 
 function validateEmailDelivery({ recipient, env = process.env }) {
@@ -58,11 +86,7 @@ function validateEmailDelivery({ recipient, env = process.env }) {
     error.statusCode = 403;
     throw error;
   }
-  const senderAddress = getSenderAddress(env.EMAIL_FROM);
-  const senderDomain = senderAddress.split('@').pop();
-  const configuredDomain = String(env.EMAIL_SENDING_DOMAIN || '').trim().toLowerCase();
-  if (!senderAddress.includes('@') || !senderDomain || senderDomain === 'resend.dev' ||
-      (configuredDomain && senderDomain !== configuredDomain)) {
+  if (!config.senderDomainMatches) {
     const error = new Error('EMAIL_FROM must use the verified EMAIL_SENDING_DOMAIN in live mode.');
     error.code = 'EMAIL_SENDER_DOMAIN_MISMATCH';
     error.statusCode = 400;
@@ -71,11 +95,22 @@ function validateEmailDelivery({ recipient, env = process.env }) {
   return config;
 }
 
-const BLOCKED_EMAIL_CODES = Object.freeze(["EMAIL_DELIVERY_DISABLED","EMAIL_CONFIGURATION_ERROR","EMAIL_TEST_RECIPIENT_NOT_ALLOWED","EMAIL_DOMAIN_NOT_VERIFIED","EMAIL_SENDER_DOMAIN_MISMATCH"]);
+const BLOCKED_EMAIL_CODES = Object.freeze([
+  'EMAIL_DELIVERY_DISABLED',
+  'EMAIL_CONFIGURATION_ERROR',
+  'EMAIL_TEST_RECIPIENT_NOT_ALLOWED',
+  'EMAIL_DOMAIN_NOT_VERIFIED',
+  'EMAIL_SENDER_DOMAIN_MISMATCH'
+]);
 
 function isEmailDeliveryBlocked(error) {
   return Boolean(error && BLOCKED_EMAIL_CODES.includes(error.code));
 }
 
-module.exports = { getEmailConfig, validateEmailDelivery, getSenderAddress, BLOCKED_EMAIL_CODES, isEmailDeliveryBlocked };
-
+module.exports = {
+  getEmailConfig,
+  validateEmailDelivery,
+  getSenderAddress,
+  BLOCKED_EMAIL_CODES,
+  isEmailDeliveryBlocked
+};
