@@ -130,7 +130,7 @@ export default function SettingsPage() {
             <h2>{user?.name || 'Account'}</h2>
             <p>{user?.email || 'Email not available'}</p>
             <div className="admin-settings-profile-badges">
-              <Badge variant="gold">{String(user?.role || 'user').toUpperCase()}</Badge>
+              <Badge variant="primary">{String(user?.role || 'user').toUpperCase()}</Badge>
               <span className="admin-settings-profile-status"><span /> Active session</span>
             </div>
           </div>
