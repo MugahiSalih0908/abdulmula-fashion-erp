@@ -120,12 +120,12 @@ test('audit logs clearly state that search is page-scoped and events are read-on
 test('phase 17 keeps route splitting, skeleton loading, and mobile-safe navigation', () => {
   const app = read('src/App.jsx');
   const fallback = read('src/components/PageLoadingFallback.jsx');
-  assert.match(app, /lazy\\(\\(\\) => import\\('\\.\\/pages\\/DashboardPage'\\)\\)/);
-  assert.match(app, /<Suspense fallback={<PageLoadingFallback \\/>} >|<Suspense fallback={<PageLoadingFallback \\/>}>/);
-  assert.match(fallback, /page-loading-card/);
-  assert.match(css, /\\.bottom-nav-item svg/);
-  assert.match(css, /env\\(safe-area-inset-bottom/);
-  assert.doesNotMatch(css, /fonts\\.googleapis\\.com/);
+  assert.ok(app.includes("const DashboardPage = lazy(() => import('./pages/DashboardPage'));"));
+  assert.ok(app.includes('<Suspense fallback={<PageLoadingFallback />}>'));
+  assert.ok(fallback.includes('page-loading-card'));
+  assert.ok(css.includes('.bottom-nav-item svg'));
+  assert.ok(css.includes('env(safe-area-inset-bottom'));
+  assert.equal(css.includes('fonts.googleapis.com'), false);
 });
 
 test('phase 17 directory screens use server-side pagination and debounced search', () => {
@@ -133,18 +133,18 @@ test('phase 17 directory screens use server-side pagination and debounced search
   const hook = read('src/hooks/useDebouncedValue.js');
   for (const [name, source] of Object.entries(pageSources)) {
     if (['customers', 'suppliers', 'expenses'].includes(name)) {
-      assert.match(source, /useDebouncedValue/);
-      assert.match(source, /limit: 25/);
-      assert.match(source, /<PaginationBar/);
+      assert.ok(source.includes('useDebouncedValue'), name + ' should debounce search');
+      assert.ok(source.includes('limit: 25'), name + ' should request a bounded page');
+      assert.ok(source.includes('<PaginationBar'), name + ' should expose page controls');
     }
   }
-  assert.match(hook, /setTimeout/);
-  assert.match(pagination, /onPageChange/);
+  assert.ok(hook.includes('setTimeout'));
+  assert.ok(pagination.includes('onPageChange'));
 });
 
 test('authentication profile fetch shares a single in-flight request', () => {
   const authStore = read('src/store/authStore.js');
-  assert.match(authStore, /let fetchMeInFlight = null/);
-  assert.match(authStore, /if \\(fetchMeInFlight\\) return fetchMeInFlight/);
-  assert.match(authStore, /get\\(\\)\\.accessToken === token/);
+  assert.ok(authStore.includes('let fetchMeInFlight = null'));
+  assert.ok(authStore.includes('if (fetchMeInFlight) return fetchMeInFlight'));
+  assert.ok(authStore.includes('get().accessToken === token'));
 });
