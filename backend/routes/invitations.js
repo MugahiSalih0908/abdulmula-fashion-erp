@@ -75,15 +75,17 @@ router.post('/create', protect, authorize('admin'), async (req, res, next) => {
         relatedEntityId: invitation._id
       });
     } catch (emailErr) {
-      console.error('[INVITATION EMAIL ERROR]', emailErr.message);
-      // Delete the invitation if email fails
-      await Invitation.findByIdAndDelete(invitation._id);
+      console.error('[INVITATION EMAIL ERROR]', emailErr.code || emailErr.message);
+      if (!['EMAIL_DELIVERY_UNKNOWN', 'EMAIL_SEND_IN_PROGRESS'].includes(emailErr.code)) {
+        await Invitation.findByIdAndDelete(invitation._id);
+      }
       return res.status(500).json({
         success: false,
-        message: 'Could not send invitation email. Please try again.'
+        message: ['EMAIL_DELIVERY_UNKNOWN', 'EMAIL_SEND_IN_PROGRESS'].includes(emailErr.code)
+          ? 'The email provider response is uncertain. The invitation is being preserved; check Email Center before retrying.'
+          : 'Could not send invitation email. Please try again.'
       });
     }
-
     // ── Audit log ──────────────────────────────────────────────
     await log({
       user: req.user,
