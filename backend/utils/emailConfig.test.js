@@ -42,6 +42,16 @@ test('live mode rejects sender domains that do not match the verified domain', (
   assert.throws(() => validateEmailDelivery({ recipient: 'qa@example.com', env }), { code: 'EMAIL_SENDER_DOMAIN_MISMATCH' });
 });
 
+test('live mode requires the explicitly configured sending domain', () => {
+  const env = {
+    EMAIL_DELIVERY_MODE: 'live',
+    RESEND_API_KEY: 're_live_key',
+    EMAIL_FROM: 'Abdulmula Fashion <no-reply@abdulmulafashion.com>',
+    EMAIL_DOMAIN_VERIFIED: 'true'
+  };
+  assert.throws(() => validateEmailDelivery({ recipient: 'qa@example.com', env }), { code: 'EMAIL_SENDER_DOMAIN_MISMATCH' });
+});
+
 test('live mode accepts only the explicitly verified sender domain', () => {
   const env = {
     EMAIL_DELIVERY_MODE: 'live',
