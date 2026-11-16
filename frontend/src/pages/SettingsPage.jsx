@@ -1,12 +1,9 @@
-// src/pages/SettingsPage.jsx – v3 with currency selector
-
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm }     from 'react-hook-form';
-import { motion, AnimatePresence } from 'framer-motion';
-import toast           from 'react-hot-toast';
-import api             from '../services/api';
-import useAuthStore    from '../store/authStore';
+import { useForm } from 'react-hook-form';
+import toast from 'react-hot-toast';
+import api from '../services/api';
+import useAuthStore from '../store/authStore';
 import useSettingsStore from '../store/settingsStore';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { useRole } from '../hooks/useRole';
@@ -22,58 +19,86 @@ import CardBody from '../components/ui/CardBody';
 import Badge from '../components/ui/Badge';
 import Sheet from '../components/ui/Sheet';
 import {
-  User, Lock, Wifi, WifiOff, ChevronRight, X, AlertTriangle, CheckCircle,
-  Eye, EyeOff, AlertCircle, LogOut, RefreshCw,
-  DollarSign, ArrowLeftRight, Info
+  UserRound, LockKeyhole, Wifi, WifiOff, ChevronRight, AlertTriangle,
+  CheckCircle2, Eye, EyeOff, AlertCircle, LogOut, RefreshCw,
+  DollarSign, ArrowLeftRight, Info, ShieldCheck, SlidersHorizontal
 } from 'lucide-react';
+import './adminWorkspace.css';
 
 export default function SettingsPage() {
-  const user     = useAuthStore(s => s.user);
-  const logout   = useAuthStore(s => s.logout);
+  const user = useAuthStore(state => state.user);
+  const logout = useAuthStore(state => state.logout);
   const navigate = useNavigate();
   const { isOnline, pendingCount, isSyncing } = useOnlineStatus();
   const { isManager } = useRole();
-  const { currency, setCurrency, usdToSsp, fmt } = useSettingsStore();
+  const { currency, setCurrency, usdToSsp, setRate } = useSettingsStore();
   const [sheet, setSheet] = useState(null);
   const [offlineSales, setOfflineSales] = useState([]);
+  const [offlineLoadError, setOfflineLoadError] = useState('');
   const [resolvingSaleId, setResolvingSaleId] = useState(null);
 
   useEffect(() => {
-    getOfflineSales().then(setOfflineSales);
+    let active = true;
+    getOfflineSales()
+      .then(sales => {
+        if (!active) return;
+        setOfflineSales(Array.isArray(sales) ? sales : []);
+        setOfflineLoadError('');
+      })
+      .catch(error => {
+        if (active) setOfflineLoadError(error?.message || 'Offline sales could not be loaded.');
+      });
+    return () => { active = false; };
   }, [pendingCount]);
 
-  const handleApproveOfflineSale = async (saleId) => {
+  const reviewSales = offlineSales.filter(sale => ['blocked', 'rejected'].includes(sale.syncStatus));
+
+  const refreshOfflineSales = async () => {
+    const sales = await getOfflineSales();
+    setOfflineSales(Array.isArray(sales) ? sales : []);
+    setOfflineLoadError('');
+  };
+
+  const handleApproveOfflineSale = async saleId => {
     const sale = offlineSales.find(item => item.id === saleId);
     const priceLines = (sale?.syncConflict?.items || []).map(item =>
-      `${item.productName || item.productId} — qty ${item.quantity}, offline quote ${formatPrice(item.offlineQuotedUnitPrice)}, current catalog ${formatPrice(item.currentUnitPriceAtConflict)}`
+      (item.productName || item.productId) + ' — qty ' + item.quantity
+        + ', offline quote ' + formatPrice(item.offlineQuotedUnitPrice)
+        + ', current catalog ' + formatPrice(item.currentUnitPriceAtConflict)
     ).join('\n');
+
     if (!window.confirm(
-      `Approve this sale at its offline quoted prices?\n\n${priceLines}\n\nThe server will re-check current catalog prices before saving.`
+      'Approve this sale at its offline quoted prices?\n\n' + priceLines
+      + '\n\nThe server will re-check current catalog prices before saving.'
     )) return;
+
     setResolvingSaleId(saleId);
     try {
       const invoice = await approveOfflinePriceConflict(saleId);
-      toast.success(`Offline sale ${invoice.invoiceNumber} approved and synced.`);
-      setOfflineSales(await getOfflineSales());
+      toast.success('Offline sale ' + invoice.invoiceNumber + ' approved and synced.');
+      await refreshOfflineSales();
     } catch (error) {
-      getOfflineSales().then(setOfflineSales);
+      refreshOfflineSales().catch(() => {});
       toast.error(error?.response?.data?.message || error.message || 'Could not resolve offline sale.');
     } finally {
       setResolvingSaleId(null);
     }
   };
 
-  const handleRejectOfflineSale = async (saleId) => {
+  const handleRejectOfflineSale = async saleId => {
     if (!isOnline) {
       toast.error('Connect to the internet to record a manager rejection.');
       return;
     }
-    if (!window.confirm('Reject this offline sale? It will be marked terminal on this device and will never sync automatically.')) return;
+    if (!window.confirm(
+      'Reject this offline sale? It will be marked terminal on this device and will never sync automatically.'
+    )) return;
+
     setResolvingSaleId(saleId);
     try {
       const resolution = await rejectOfflinePriceConflict(saleId);
-      toast.success(`Offline sale rejected by ${resolution.decidedBy}.`);
-      setOfflineSales(await getOfflineSales());
+      toast.success('Offline sale rejected by ' + resolution.decidedBy + '.');
+      await refreshOfflineSales();
     } catch (error) {
       toast.error(error?.response?.data?.message || error.message || 'Could not reject offline sale.');
     } finally {
@@ -87,170 +112,235 @@ export default function SettingsPage() {
     navigate('/login');
   };
 
+  const initials = user?.name?.trim()?.charAt(0)?.toUpperCase() || 'U';
+
   return (
-    <div className="p-4 space-y-5">
-      <PageHeader title="Settings" sub="Account & app configuration"/>
+    <main className="admin-page admin-settings-page">
+      <PageHeader
+        title="Settings"
+        sub="Manage your account, workspace preferences and connection status"
+        action={<Badge variant="info"><SlidersHorizontal size={13} aria-hidden="true" /> Preferences</Badge>}
+      />
 
-      {/* Profile */}
-      <Card>
-        <CardBody className="p-4 flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-xl shrink-0 text-white bg-emerald-600">
-            {user?.name?.charAt(0).toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-gray-900">{user?.name}</p>
-            <p className="text-sm text-gray-600 truncate">{user?.email}</p>
-            <Badge variant="info" className="mt-1">
-              {user?.role}
-            </Badge>
-          </div>
-        </CardBody>
-      </Card>
-
-      {/* Currency toggle */}
-      <Card>
-        <CardBody className="p-4">
-          <p className="text-xs font-semibold text-gray-600 uppercase mb-3 flex items-center gap-1.5">
-            <DollarSign size={14}/> Currency Display
-          </p>
-          <div className="flex bg-gray-100 rounded-lg p-1 gap-1 mb-3">
-            {['USD','SSP'].map(c => (
-              <button key={c} onClick={() => setCurrency(c)}
-                      className={`flex-1 py-2 rounded-md text-sm font-semibold transition-all ${
-                        currency===c ? 'text-white bg-emerald-600 shadow-md' : 'text-gray-600'
-                      }`}>{c}</button>
-            ))}
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">Rate: 1 USD = <strong className="text-gray-900">{usdToSsp?.toLocaleString()} SSP</strong></span>
-            <button onClick={() => setSheet('rate')} className="text-xs font-bold text-emerald-700 hover:text-emerald-800">
-              Change
-            </button>
-          </div>
-        </CardBody>
-      </Card>
-
-      {/* Connection */}
-      <Card className={`border-l-4 ${isOnline ? 'border-l-emerald-500 bg-emerald-50' : 'border-l-red-500 bg-red-50'}`}>
-        <CardBody className="p-4 flex items-center gap-3">
-          {isOnline ? <Wifi size={20} className="text-emerald-600 shrink-0"/> : <WifiOff size={20} className="text-red-600 shrink-0"/>}
-          <div className="flex-1">
-            <p className={`font-semibold text-sm ${isOnline ? 'text-emerald-900' : 'text-red-900'}`}>
-              {isOnline ? 'Connected' : 'Offline Mode'}
-            </p>
-            <p className="text-xs text-gray-600">
-              {isOnline ? 'Data syncing in real-time' : 'Sales saved locally, sync on reconnect'}
-            </p>
-          </div>
-          {isSyncing && <RefreshCw size={16} className="animate-spin text-emerald-600 shrink-0"/>}
-        </CardBody>
-      </Card>
-
-      {pendingCount > 0 && (
-        <Card className="bg-amber-50">
-          <CardBody className="p-3">
-            <p className="text-amber-700 text-sm font-semibold">{pendingCount} sale(s) awaiting sync</p>
-          </CardBody>
-        </Card>
-      )}
-
-      {offlineSales.some(sale => ['blocked', 'rejected'].includes(sale.syncStatus)) && (
-        <Card className="border-amber-300">
-          <CardBody className="p-4 space-y-3">
-            <div className="flex items-start gap-2">
-              <AlertTriangle size={18} className="text-amber-600 mt-0.5 shrink-0" />
-              <div>
-                <p className="font-semibold text-gray-900">Offline sales needing review</p>
-                <p className="text-xs text-gray-600">
-                  Pending conflicts do not retry automatically. Rejected conflicts remain visible here and are terminal.
-                </p>
-              </div>
+      <section className="admin-settings-profile" aria-label="Signed-in account">
+        <div className="admin-settings-identity">
+          <span className="admin-settings-avatar" aria-hidden="true">{initials}</span>
+          <div className="admin-settings-identity-copy">
+            <span className="admin-settings-eyebrow">SIGNED IN AS</span>
+            <h2>{user?.name || 'Account'}</h2>
+            <p>{user?.email || 'Email not available'}</p>
+            <div className="admin-settings-profile-badges">
+              <Badge variant="gold">{String(user?.role || 'user').toUpperCase()}</Badge>
+              <span className="admin-settings-profile-status"><span /> Active session</span>
             </div>
-            {offlineSales.filter(sale => ['blocked', 'rejected'].includes(sale.syncStatus)).map(sale => (
-              <div key={sale.id} className="border-t border-amber-200 pt-3 space-y-2">
-                <p className="text-sm font-semibold text-gray-900">
-                  {sale.syncStatus === 'rejected' ? 'Rejected offline sale' : 'Price conflict'} · {sale.offlineId}
-                </p>
-                {sale.syncStatus === 'rejected' ? (
-                  <>
-                    <p className="text-xs text-gray-700">
-                      Rejected by {sale.resolution?.decidedBy || 'manager/admin'} on {formatDate(sale.resolution?.decidedAt)}.
-                      This sale is retained for audit visibility and will not sync.
-                    </p>
-                    <p className="text-xs text-gray-600">
-                      Client-reported saved time (unverified): {formatDate(sale.createdAt)}
-                    </p>
-                    <OfflineConflictPrices sale={sale} />
-                  </>
-                ) : (
-                  <>
-                    <p className="text-xs text-amber-800">{sale.syncError}</p>
-                    <p className="text-xs text-gray-600">
-                      Client-reported saved time (unverified): {formatDate(sale.createdAt)}
-                    </p>
-                    <OfflineConflictPrices sale={sale} />
-                    {isManager && sale.syncConflict?.items?.length > 0 && (
-                      <div className="space-y-2">
-                        <Button
-                          onClick={() => handleApproveOfflineSale(sale.id)}
-                          disabled={resolvingSaleId === sale.id || !isOnline}
-                          className="w-full"
-                        >
-                          <CheckCircle size={16} className="mr-2" />
-                          {resolvingSaleId === sale.id ? 'Approving…' : 'Approve offline prices & sync'}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => handleRejectOfflineSale(sale.id)}
-                          disabled={resolvingSaleId === sale.id || !isOnline}
-                          className="w-full"
-                        >
-                          {resolvingSaleId === sale.id ? 'Recording…' : 'Reject & keep as terminal record'}
-                        </Button>
-                      </div>
-                    )}
-                  </>
+          </div>
+        </div>
+        <div className="admin-settings-profile-actions">
+          <Button variant="secondary" onClick={() => setSheet('profile')}>
+            <UserRound size={15} aria-hidden="true" /> Edit profile
+          </Button>
+          <Button variant="secondary" onClick={() => setSheet('password')}>
+            <LockKeyhole size={15} aria-hidden="true" /> Change password
+          </Button>
+        </div>
+      </section>
+
+      <section className="admin-settings-summary" aria-label="Workspace status">
+        <article className="admin-settings-summary-card">
+          <span className="admin-settings-summary-icon"><Wifi size={17} aria-hidden="true" /></span>
+          <div><span>Connection</span><strong>{isOnline ? 'Online' : 'Offline mode'}</strong></div>
+          <span className={'admin-settings-dot ' + (isOnline ? 'is-online' : 'is-offline')} />
+        </article>
+        <article className="admin-settings-summary-card">
+          <span className="admin-settings-summary-icon"><RefreshCw size={17} aria-hidden="true" /></span>
+          <div><span>Pending sync</span><strong>{pendingCount.toLocaleString()} sale(s)</strong></div>
+        </article>
+        <article className="admin-settings-summary-card">
+          <span className="admin-settings-summary-icon"><DollarSign size={17} aria-hidden="true" /></span>
+          <div><span>Display currency</span><strong>{currency}</strong></div>
+        </article>
+        <article className="admin-settings-summary-card">
+          <span className="admin-settings-summary-icon"><ArrowLeftRight size={17} aria-hidden="true" /></span>
+          <div><span>Exchange rate</span><strong>1 USD = {Number(usdToSsp || 0).toLocaleString()} SSP</strong></div>
+        </article>
+      </section>
+
+      <div className="admin-settings-grid">
+        <div className="admin-settings-main-column">
+          <Card className="admin-settings-panel">
+            <CardBody className="p-4 sm:p-5">
+              <div className="admin-settings-panel-heading">
+                <span className="admin-settings-panel-icon"><DollarSign size={18} aria-hidden="true" /></span>
+                <div>
+                  <h2>Display & currency</h2>
+                  <p>Choose how monetary values appear across your workspace</p>
+                </div>
+              </div>
+              <div className="admin-settings-currency-block">
+                <div>
+                  <p className="admin-settings-field-label">Preferred display currency</p>
+                  <p className="admin-settings-field-help">This changes display formatting, not stored transaction values.</p>
+                </div>
+                <div className="admin-settings-segmented" role="group" aria-label="Display currency">
+                  {['USD', 'SSP'].map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={currency === option}
+                      onClick={() => setCurrency(option)}
+                      className={currency === option ? 'is-active' : ''}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="admin-settings-rate-row">
+                <div>
+                  <span className="admin-settings-field-label">Current exchange rate</span>
+                  <strong>1 USD = {Number(usdToSsp || 0).toLocaleString()} SSP</strong>
+                </div>
+                {isManager && (
+                  <Button variant="secondary" size="sm" onClick={() => setSheet('rate')}>
+                    <ArrowLeftRight size={14} aria-hidden="true" /> Update rate
+                  </Button>
                 )}
               </div>
-            ))}
-          </CardBody>
-        </Card>
-      )}
+              {!isManager && (
+                <p className="admin-settings-inline-note"><Info size={14} aria-hidden="true" /> Ask a manager or administrator to update the business exchange rate.</p>
+              )}
+            </CardBody>
+          </Card>
 
-      {/* Account settings */}
-      <Card>
-        <CardBody className="p-0">
-          <SettingRow icon={<User size={18} className="text-emerald-600"/>} label="Edit Profile" sub="Name and email" onClick={() => setSheet('profile')}/>
-          <SettingRow icon={<Lock size={18} className="text-blue-600"/>} label="Change Password" sub="Update your password" onClick={() => setSheet('password')}/>
-          <SettingRow icon={<Info size={18} className="text-gray-500"/>} label="About" sub="Version & business" onClick={() => setSheet('about')}/>
-        </CardBody>
-      </Card>
+          <Card className="admin-settings-panel">
+            <CardBody className="p-4 sm:p-5">
+              <div className="admin-settings-panel-heading">
+                <span className="admin-settings-panel-icon"><Wifi size={18} aria-hidden="true" /></span>
+                <div>
+                  <h2>Connection & offline activity</h2>
+                  <p>See whether this device can reach the server and whether sales are waiting to sync</p>
+                </div>
+              </div>
+              <div className={'admin-settings-connection ' + (isOnline ? 'is-online' : 'is-offline')}>
+                <span className="admin-settings-connection-icon">
+                  {isOnline ? <Wifi size={19} aria-hidden="true" /> : <WifiOff size={19} aria-hidden="true" />}
+                </span>
+                <div>
+                  <strong>{isOnline ? 'Connected to the workspace' : 'Working offline'}</strong>
+                  <p>{isOnline ? 'The application can communicate with the server.' : 'Sales can be saved on this device and synchronized when the connection returns.'}</p>
+                </div>
+                {isSyncing && <RefreshCw className="admin-settings-sync-icon" size={18} aria-label="Synchronizing offline sales" />}
+              </div>
+              {pendingCount > 0 && (
+                <div className="admin-settings-pending">
+                  <div><strong>{pendingCount.toLocaleString()} sale(s) awaiting synchronization</strong><p>Keep this device online until the queue has been processed.</p></div>
+                  <Badge variant="warning">Pending</Badge>
+                </div>
+              )}
+              {offlineLoadError && (
+                <p className="admin-settings-inline-note is-warning"><AlertCircle size={14} aria-hidden="true" /> {offlineLoadError}</p>
+              )}
+              {reviewSales.length > 0 && (
+                <div className="admin-settings-conflicts">
+                  <div className="admin-settings-conflicts-heading">
+                    <AlertTriangle size={18} aria-hidden="true" />
+                    <div><strong>Offline sales requiring review</strong><p>Price conflicts do not retry automatically. Rejected records remain available for audit visibility.</p></div>
+                  </div>
+                  {reviewSales.map(sale => (
+                    <article key={sale.id} className="admin-settings-conflict-item">
+                      <div className="admin-settings-conflict-title">
+                        <div><strong>{sale.syncStatus === 'rejected' ? 'Rejected offline sale' : 'Price conflict'}</strong><span>{sale.offlineId}</span></div>
+                        <Badge variant={sale.syncStatus === 'rejected' ? 'danger' : 'warning'}>{sale.syncStatus}</Badge>
+                      </div>
+                      {sale.syncStatus === 'rejected' ? (
+                        <>
+                          <p className="admin-settings-conflict-copy">Rejected by {sale.resolution?.decidedBy || 'manager/admin'} on {formatDate(sale.resolution?.decidedAt)}. This sale is retained for audit visibility and will not sync.</p>
+                          <p className="admin-settings-conflict-meta">Client-reported saved time (unverified): {formatDate(sale.createdAt)}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="admin-settings-conflict-copy">{sale.syncError || 'The saved offline prices differ from the current product catalogue.'}</p>
+                          <p className="admin-settings-conflict-meta">Client-reported saved time (unverified): {formatDate(sale.createdAt)}</p>
+                          <OfflineConflictPrices sale={sale} />
+                          {isManager && sale.syncConflict?.items?.length > 0 && (
+                            <div className="admin-settings-conflict-actions">
+                              <Button onClick={() => handleApproveOfflineSale(sale.id)} disabled={resolvingSaleId === sale.id || !isOnline}>
+                                <CheckCircle2 size={15} aria-hidden="true" />
+                                {resolvingSaleId === sale.id ? 'Approving…' : 'Approve quoted prices'}
+                              </Button>
+                              <Button variant="secondary" onClick={() => handleRejectOfflineSale(sale.id)} disabled={resolvingSaleId === sale.id || !isOnline}>
+                                {resolvingSaleId === sale.id ? 'Recording…' : 'Reject sale'}
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+              {!pendingCount && reviewSales.length === 0 && !offlineLoadError && (
+                <div className="admin-settings-clear-state"><CheckCircle2 size={16} aria-hidden="true" /><span>No offline sales are waiting for review.</span></div>
+              )}
+            </CardBody>
+          </Card>
+        </div>
 
-      {/* Logout */}
-      <Card>
-        <CardBody className="p-0">
-          <button onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-3.5 text-red-600 hover:bg-red-50 transition-colors rounded-lg">
-            <AlertCircle size={18}/>
-            <span className="font-semibold text-sm flex-1 text-left">Logout</span>
-            <ChevronRight size={16} className="text-red-300"/>
-          </button>
-        </CardBody>
-      </Card>
+        <aside className="admin-settings-side-column" aria-label="Account preferences and information">
+          <Card className="admin-settings-panel">
+            <CardBody className="p-4 sm:p-5">
+              <div className="admin-settings-panel-heading">
+                <span className="admin-settings-panel-icon"><ShieldCheck size={18} aria-hidden="true" /></span>
+                <div><h2>Account & security</h2><p>Personal profile and sign-in controls</p></div>
+              </div>
+              <div className="admin-settings-actions-list">
+                <SettingsAction icon={<UserRound size={17} />} label="Edit profile" description="Update your name and email" onClick={() => setSheet('profile')} />
+                <SettingsAction icon={<LockKeyhole size={17} />} label="Change password" description="Use a new password for future sign-ins" onClick={() => setSheet('password')} />
+              </div>
+            </CardBody>
+          </Card>
 
-      <p className="text-center text-xs text-gray-400 pb-4">Abdulmula Fashion ERP v3.0 · Juba, South Sudan</p>
+          <Card className="admin-settings-panel">
+            <CardBody className="p-4 sm:p-5">
+              <div className="admin-settings-panel-heading">
+                <span className="admin-settings-panel-icon"><Info size={18} aria-hidden="true" /></span>
+                <div><h2>About this workspace</h2><p>Application and business information</p></div>
+              </div>
+              <div className="admin-settings-actions-list">
+                <SettingsAction icon={<Info size={17} />} label="About Abdulmula Fashion" description="Version, business and platform details" onClick={() => setSheet('about')} />
+              </div>
+              <div className="admin-settings-version">
+                <span>Application</span><strong>Abdulmula Fashion ERP</strong>
+                <span>Version</span><strong>3.0.0</strong>
+              </div>
+            </CardBody>
+          </Card>
 
-      {/* Sheets */}
-      {sheet === 'profile'  && <Sheet open={true} title="Edit Profile"   onClose={() => setSheet(null)}><EditProfileForm  onClose={() => setSheet(null)}/></Sheet>}
-      {sheet === 'password' && <Sheet open={true} title="Change Password" onClose={() => setSheet(null)}><ChangePasswordForm onClose={() => setSheet(null)}/></Sheet>}
-      {sheet === 'rate'     && <Sheet open={true} title="Exchange Rate"   onClose={() => setSheet(null)}><RateForm onClose={() => setSheet(null)}/></Sheet>}
-      {sheet === 'about'    && <Sheet open={true} title="About"           onClose={() => setSheet(null)}><AboutContent/></Sheet>}
-    </div>
+          <Card className="admin-settings-danger-panel">
+            <CardBody className="p-4 sm:p-5">
+              <div className="admin-settings-panel-heading">
+                <span className="admin-settings-panel-icon is-danger"><LogOut size={18} aria-hidden="true" /></span>
+                <div><h2>End your session</h2><p>Sign out of this device</p></div>
+              </div>
+              <Button variant="danger" className="w-full" onClick={handleLogout}>
+                <LogOut size={15} aria-hidden="true" /> Log out
+              </Button>
+            </CardBody>
+          </Card>
+        </aside>
+      </div>
+
+      {sheet === 'profile' && <Sheet open title="Edit Profile" onClose={() => setSheet(null)}><EditProfileForm onClose={() => setSheet(null)} /></Sheet>}
+      {sheet === 'password' && <Sheet open title="Change Password" onClose={() => setSheet(null)}><ChangePasswordForm onClose={() => setSheet(null)} /></Sheet>}
+      {sheet === 'rate' && <Sheet open title="Exchange Rate" onClose={() => setSheet(null)}><RateForm onClose={() => setSheet(null)} /></Sheet>}
+      {sheet === 'about' && <Sheet open title="About Abdulmula Fashion" onClose={() => setSheet(null)}><AboutContent /></Sheet>}
+    </main>
   );
 }
 
 function formatPrice(value) {
-  return Number.isFinite(value) ? `$${value.toFixed(2)}` : 'Unavailable';
+  const number = Number(value);
+  return Number.isFinite(number) ? '$' + number.toFixed(2) : 'Unavailable';
 }
 
 function formatDate(value) {
@@ -260,137 +350,156 @@ function formatDate(value) {
 }
 
 function OfflineConflictPrices({ sale }) {
+  const items = sale.syncConflict?.items || [];
+  if (!items.length) {
+    return <p className="admin-settings-conflict-meta">Price comparison details are unavailable for this older queued record.</p>;
+  }
   return (
-    <div className="rounded-lg bg-gray-50 divide-y divide-gray-200">
-      {(sale.syncConflict?.items || []).map((item, index) => (
-        <div key={`${item.productId}-${index}`} className="p-2 text-xs">
-          <p className="font-semibold text-gray-900">
-            {item.productName || item.productId} · quantity {item.quantity}
-          </p>
-          <p className="text-gray-700">
-            Offline quoted price: <strong>{formatPrice(item.offlineQuotedUnitPrice)}</strong>
-          </p>
-          <p className="text-gray-700">
-            Current catalog price at last server check: <strong>{formatPrice(item.currentUnitPriceAtConflict)}</strong>
-          </p>
+    <div className="admin-settings-price-list">
+      {items.map((item, index) => (
+        <div key={(item.productId || 'product') + '-' + index}>
+          <strong>{item.productName || item.productId} · quantity {item.quantity}</strong>
+          <span>Offline quoted price: <b>{formatPrice(item.offlineQuotedUnitPrice)}</b></span>
+          <span>Current catalogue price at last server check: <b>{formatPrice(item.currentUnitPriceAtConflict)}</b></span>
         </div>
       ))}
-      {!sale.syncConflict?.items?.length && (
-        <p className="p-2 text-xs text-gray-600">Price comparison details are unavailable for this older queued record.</p>
-      )}
     </div>
   );
 }
 
-function SettingRow({ icon, label, sub, onClick }) {
+function SettingsAction({ icon, label, description, onClick }) {
   return (
-    <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0">
-      <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">{icon}</div>
-      <div className="flex-1 text-left">
-        <p className="font-semibold text-sm text-gray-900">{label}</p>
-        {sub && <p className="text-xs text-gray-600">{sub}</p>}
-      </div>
-      <ChevronRight size={16} className="text-gray-400"/>
+    <button type="button" className="admin-settings-action" onClick={onClick}>
+      <span className="admin-settings-action-icon" aria-hidden="true">{icon}</span>
+      <span className="admin-settings-action-copy"><strong>{label}</strong><small>{description}</small></span>
+      <ChevronRight size={17} aria-hidden="true" />
     </button>
   );
 }
 
 function EditProfileForm({ onClose }) {
-  const user = useAuthStore(s => s.user);
-  const { register, handleSubmit, formState:{isSubmitting} } = useForm({ defaultValues: { name:user?.name, email:user?.email } });
-  const onSubmit = async (data) => {
-    try { await api.put(`/staff/${user?.id}`, data); toast.success('Profile updated.'); onClose(); }
-    catch (e) { toast.error(e?.response?.data?.message||'Update failed.'); }
+  const user = useAuthStore(state => state.user);
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+    defaultValues: { name: user?.name || '', email: user?.email || '' }
+  });
+
+  const onSubmit = async data => {
+    try {
+      await api.put('/staff/' + user?.id, data);
+      toast.success('Profile updated.');
+      onClose();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Profile update failed.');
+    }
   };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Full Name</label>
-        <input {...register('name',{required:true})} className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"/>
+    <form onSubmit={handleSubmit(onSubmit)} className="admin-settings-form">
+      <div className="admin-settings-form-field">
+        <label htmlFor="settings-profile-name">Full name</label>
+        <input id="settings-profile-name" autoComplete="name" {...register('name', { required: 'Enter your name.' })} />
+        {errors.name && <p role="alert">{errors.name.message}</p>}
       </div>
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Email</label>
-        <input type="email" {...register('email',{required:true})} className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"/>
+      <div className="admin-settings-form-field">
+        <label htmlFor="settings-profile-email">Email address</label>
+        <input id="settings-profile-email" type="email" autoComplete="email" {...register('email', { required: 'Enter your email.' })} />
+        {errors.email && <p role="alert">{errors.email.message}</p>}
       </div>
-      <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">Save Changes</Button>
+      <Button type="submit" className="w-full" disabled={isSubmitting} loading={isSubmitting}>Save profile</Button>
     </form>
   );
 }
 
 function ChangePasswordForm({ onClose }) {
-  const user = useAuthStore(s => s.user);
-  const { register, handleSubmit, watch, formState:{errors,isSubmitting} } = useForm();
-  const [show, setShow] = useState(false);
+  const user = useAuthStore(state => state.user);
+  const [showPassword, setShowPassword] = useState(false);
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm();
+
   const onSubmit = async ({ newPassword }) => {
-    try { await api.patch(`/staff/${user?.id}/reset-password`, { newPassword }); toast.success('Password changed.'); onClose(); }
-    catch (e) { toast.error(e?.response?.data?.message||'Failed.'); }
+    try {
+      await api.patch('/staff/' + user?.id + '/reset-password', { newPassword });
+      toast.success('Password changed.');
+      onClose();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Password could not be changed.');
+    }
   };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">New Password *</label>
-        <div className="relative">
-          <input type={show?'text':'password'} {...register('newPassword',{required:true,minLength:{value:6,message:'Min 6 chars'}})}
-                 className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition pr-10" placeholder="Min. 6 chars"/>
-          <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-            {show?<EyeOff size={16}/>:<Eye size={16}/>}
+    <form onSubmit={handleSubmit(onSubmit)} className="admin-settings-form">
+      <div className="admin-settings-form-field">
+        <label htmlFor="settings-new-password">New password</label>
+        <div className="admin-settings-password-field">
+          <input id="settings-new-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="At least 8 characters" {...register('newPassword', { required: 'Enter a new password.', minLength: { value: 8, message: 'Use at least 8 characters.' } })} />
+          <button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>
+            {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
           </button>
         </div>
-        {errors.newPassword && <p className="text-red-500 text-xs mt-1">{errors.newPassword.message}</p>}
+        {errors.newPassword && <p role="alert">{errors.newPassword.message}</p>}
       </div>
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">Confirm Password *</label>
-        <input type={show?'text':'password'}
-               {...register('confirm',{validate:v=>v===watch('newPassword')||'Passwords do not match'})}
-               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"/>
-        {errors.confirm && <p className="text-red-500 text-xs mt-1">{errors.confirm.message}</p>}
+      <div className="admin-settings-form-field">
+        <label htmlFor="settings-confirm-password">Confirm new password</label>
+        <input id="settings-confirm-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" {...register('confirm', { required: 'Confirm your new password.', validate: value => value === watch('newPassword') || 'Passwords do not match.' })} />
+        {errors.confirm && <p role="alert">{errors.confirm.message}</p>}
       </div>
-      <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">Update Password</Button>
+      <Button type="submit" className="w-full" disabled={isSubmitting} loading={isSubmitting}>Update password</Button>
     </form>
   );
 }
 
 function RateForm({ onClose }) {
   const { usdToSsp, setRate } = useSettingsStore();
-  const { register, handleSubmit, formState:{isSubmitting} } = useForm({ defaultValues:{ usdToSsp } });
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+    defaultValues: { usdToSsp: Number(usdToSsp || 0) }
+  });
+
   const onSubmit = async ({ usdToSsp: rate }) => {
-    try { await api.post('/cashbook/rate', { usdToSsp: rate }); setRate(parseFloat(rate)); toast.success('Exchange rate updated.'); onClose(); }
-    catch (e) { toast.error(e?.response?.data?.message||'Failed.'); }
+    try {
+      const response = await api.post('/cashbook/rate', { usdToSsp: rate });
+      const savedRate = Number(response.data?.data?.usdToSsp ?? rate);
+      setRate(savedRate);
+      toast.success('Exchange rate updated.');
+      onClose();
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Exchange rate could not be updated.');
+    }
   };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4">
-      <Card className="bg-amber-50">
-        <CardBody className="p-3 text-sm text-amber-700 font-medium">
-          Current: 1 USD = {usdToSsp?.toLocaleString()} SSP
-        </CardBody>
-      </Card>
-      <div>
-        <label className="text-xs font-semibold text-gray-600 block mb-1.5">1 USD = ? SSP</label>
-        <input type="number" step="1" min="1" {...register('usdToSsp',{required:true,valueAsNumber:true})}
-               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="e.g. 1300"/>
+    <form onSubmit={handleSubmit(onSubmit)} className="admin-settings-form">
+      <div className="admin-settings-rate-callout">
+        <span>Current rate</span>
+        <strong>1 USD = {Number(usdToSsp || 0).toLocaleString()} SSP</strong>
       </div>
-      <Button type="submit" variant="primary" disabled={isSubmitting} className="w-full">Set Rate</Button>
+      <div className="admin-settings-form-field">
+        <label htmlFor="settings-exchange-rate">1 USD = ? SSP</label>
+        <input id="settings-exchange-rate" type="number" min="1" step="1" inputMode="numeric" {...register('usdToSsp', { required: 'Enter an exchange rate.', valueAsNumber: true, min: { value: 1, message: 'Rate must be at least 1.' } })} />
+        {errors.usdToSsp && <p role="alert">{errors.usdToSsp.message}</p>}
+      </div>
+      <Button type="submit" className="w-full" disabled={isSubmitting} loading={isSubmitting}>Save exchange rate</Button>
     </form>
   );
 }
 
 function AboutContent() {
+  const details = [
+    ['Business', 'Abdulmula Fashion'],
+    ['Location', 'Konyo-Konyo Market, Juba'],
+    ['Country', 'South Sudan'],
+    ['Type', 'Wholesale & Retail Fashion'],
+    ['Offline capability', 'Sales can be queued on this device'],
+    ['PWA', 'Installable on Android & iOS'],
+    ['Currency', 'USD / SSP display']
+  ];
+
   return (
-    <div className="px-5 py-6 text-center space-y-4">
-      <div className="w-20 h-20 rounded-xl flex items-center justify-center font-bold text-3xl text-white mx-auto shadow-lg bg-emerald-600">AF</div>
-      <div>
-        <h2 className="font-bold text-xl text-gray-900">Abdulmula Fashion ERP</h2>
-        <p className="text-sm text-gray-600 mt-1">Version 3.0.0</p>
+    <div className="admin-settings-about">
+      <div className="admin-settings-about-brand"><span>AF</span><div><strong>Abdulmula Fashion ERP</strong><small>Enterprise workspace · Version 3.0.0</small></div></div>
+      <div className="admin-settings-about-list">
+        {details.map(([label, value]) => (
+          <div key={label}><span>{label}</span><strong>{value}</strong></div>
+        ))}
       </div>
-      <Card className="bg-gray-50">
-        <CardBody className="p-4 text-left space-y-2">
-          {[['Business','Abdulmula Fashion'],['Location','Konyo-Konyo Market, Juba'],['Country','South Sudan'],['Type','Wholesale & Retail Fashion'],['Offline','Full offline support (IndexedDB)'],['PWA','Installable on Android & iOS'],['Currency','USD / SSP (dual currency)']].map(([k,v]) => (
-            <div key={k} className="flex justify-between text-sm">
-              <span className="text-gray-600">{k}</span><span className="font-semibold text-gray-900">{v}</span>
-            </div>
-          ))}
-        </CardBody>
-      </Card>
     </div>
   );
 }
