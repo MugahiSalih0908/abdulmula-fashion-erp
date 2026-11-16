@@ -62,7 +62,7 @@ router.post('/', authorize('admin'), async (req, res, next) => {
     const exists = await User.findOne({ email: email.toLowerCase().trim() });
     if (exists) return res.status(400).json({ success:false, message:'An account with this email already exists.' });
 
-    // Generate temp password (will be shown in email; user must change on activation)
+    // Store an unpredictable password hash until the user chooses their own during activation.
     const pendingPassword = generatePendingPassword();
 
     // Create user (NOT yet verified)
@@ -117,24 +117,33 @@ router.post('/:id/resend-activation', authorize('admin'), async (req, res, next)
     if (member.isVerified)
       return res.status(400).json({ success:false, message:'Account is already activated.' });
 
-    const pendingPassword = generatePendingPassword();
-    member.password    = generatePendingPassword();
-    const rawToken     = member.generateVerificationToken();
+    const previousToken = member.verificationToken;
+    const previousExpiry = member.verificationTokenExpire;
+    const rawToken = member.generateVerificationToken();
     await member.save();
 
     const activationUrl = `${process.env.FRONTEND_URL}/activate/${rawToken}`;
     const tmpl = templates.welcome({ name: member.name, role: member.role, activationUrl });
-    const delivery = await sendEmail({
-      to: member.email,
-      ...tmpl,
-      category: 'staff_activation',
-      idempotencyKey: `staff-activation:${member._id}:${member.verificationToken}`,
-      createdBy: req.user._id,
-      relatedEntity: 'User',
-      relatedEntityId: member._id
-    });
-
-    res.json({ success:true, message:`Activation email accepted for ${member.email}.`, emailStatus: delivery.status });
+    try {
+      const delivery = await sendEmail({
+        to: member.email,
+        ...tmpl,
+        category: 'staff_activation',
+        idempotencyKey: `staff-activation:${member._id}:${member.verificationToken}`,
+        createdBy: req.user._id,
+        relatedEntity: 'User',
+        relatedEntityId: member._id
+      });
+      res.json({ success:true, message:`Activation email accepted for ${member.email}.`, emailStatus: delivery.status });
+    } catch (emailErr) {
+      if (emailErr.code !== 'EMAIL_DELIVERY_UNKNOWN') {
+        await User.updateOne(
+          { _id: member._id },
+          { $set: { verificationToken: previousToken, verificationTokenExpire: previousExpiry } }
+        );
+      }
+      throw emailErr;
+    }
   } catch (err) { next(err); }
 });
 

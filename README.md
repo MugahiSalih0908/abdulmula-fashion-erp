@@ -391,3 +391,13 @@ Provider acceptance (`sent`) is not the same as recipient delivery
 (`delivered`). Signed Resend webhook events update the application delivery
 state. The same stable idempotency key is reused for retries of the same logical
 email to reduce duplicate sends.
+
+### Email delivery safety modes
+
+- `EMAIL_DELIVERY_MODE=disabled` is the default. No outbound email is sent.
+- `EMAIL_DELIVERY_MODE=test` requires `EMAIL_TEST_RECIPIENTS` and restricts all sending to those exact addresses.
+- `EMAIL_DELIVERY_MODE=live` requires `EMAIL_DOMAIN_VERIFIED=true`, a configured Resend key, and an `EMAIL_FROM` address on `EMAIL_SENDING_DOMAIN`.
+
+Do not enable live mode until Resend verifies the domain and the SPF/DKIM records
+are passing. The application does not infer domain verification from a DNS
+setting; the operator must confirm it in Resend before changing this flag.

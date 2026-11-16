@@ -37,12 +37,20 @@ router.post('/resend', express.raw({ type: 'application/json', limit: '1mb' }), 
 
   if (!eventId || !eventType) return res.status(400).json({ success: false, message: 'Incomplete webhook event.' });
 
+  if (Number.isNaN(occurredAt.getTime())) {
+    return res.status(400).json({ success: false, message: 'Webhook event timestamp is invalid.' });
+  }
+
+  let duplicateEvent = false;
   try {
     await EmailWebhookEvent.create({ eventId, eventType, providerEmailId, recipient, occurredAt });
   } catch (error) {
-    if (error && error.code === 11000) return res.status(200).json({ received: true, duplicate: true });
-    console.error('[EMAIL WEBHOOK STORE ERROR]', error.code || error.message);
-    return res.status(500).json({ success: false, message: 'Could not store webhook event.' });
+    if (error && error.code === 11000) {
+      duplicateEvent = true;
+    } else {
+      console.error('[EMAIL WEBHOOK STORE ERROR]', error.code || error.message);
+      return res.status(500).json({ success: false, message: 'Could not store webhook event.' });
+    }
   }
 
   if (status && providerEmailId) {
@@ -65,7 +73,7 @@ router.post('/resend', express.raw({ type: 'application/json', limit: '1mb' }), 
     }
   }
 
-  return res.status(200).json({ received: true });
+  return res.status(200).json({ received: true, duplicate: duplicateEvent });
 });
 
 module.exports = router;

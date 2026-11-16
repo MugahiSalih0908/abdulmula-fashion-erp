@@ -1,6 +1,7 @@
 const express = require('express');
 const EmailLog = require('../models/EmailLog');
 const { protect, authorize } = require('../middleware/auth');
+const { getEmailConfig } = require('../utils/emailConfig');
 
 const router = express.Router();
 router.use(protect, authorize('admin'));
@@ -31,7 +32,7 @@ router.get('/', async (req, res, next) => {
 
     const summary = Object.fromEntries(VALID_STATUSES.map(status => [status, 0]));
     grouped.forEach(item => { summary[item._id] = item.count; });
-    res.json({ success: true, data: records, total, page, limit, summary });
+    res.json({ success: true, data: records, total, page, limit, summary, emailConfig: getEmailConfig() });
   } catch (error) {
     next(error);
   }

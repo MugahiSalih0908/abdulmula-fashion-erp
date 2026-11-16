@@ -3,6 +3,7 @@ const { Resend } = require('resend');
 const crypto = require('crypto');
 const validator = require('validator');
 const EmailLog = require('../models/EmailLog');
+const { validateEmailDelivery } = require('./emailConfig');
 
 // ── Initialize Resend with API key ───────────────────────────
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -148,7 +149,7 @@ const passwordChangedTemplate = ({ name }) => ({
   subject: `Abdulmula Fashion ERP — Password Changed Successfully`,
   html: baseLayout(`
     <h1>Password Changed ✅</h1>
-    <p>Hello <strong>${name}</strong>,</p>
+    <p>Hello <strong>${escapeHtml(name)}</strong>,</p>
     <p>Your password has been changed successfully on <strong>Abdulmula Fashion ERP</strong>.</p>
     <p>You can now <a href="${escapeHtml(process.env.FRONTEND_URL)}/login" style="color:${BRAND.gold};font-weight:700;">log in</a> with your new password.</p>
     <div class="warn">
@@ -323,12 +324,7 @@ const sendEmail = async ({
   }
 
   try {
-    if (!from) {
-      const error = new Error('EMAIL_FROM is not configured.');
-      error.code = 'EMAIL_CONFIGURATION_ERROR';
-      error.statusCode = 400;
-      throw error;
-    }
+    validateEmailDelivery({ recipient });
 
     const { data, error: providerError } = await getResendClient().emails.send(
       { from, to: [recipient], subject, html },
