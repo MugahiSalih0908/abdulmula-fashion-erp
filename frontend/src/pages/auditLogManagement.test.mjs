@@ -56,6 +56,7 @@ test('audit action labels and tones stay readable', () => {
   assert.equal(getAuditActionTone('LOGIN_FAILED'), 'danger');
   assert.equal(getAuditActionTone('OFFLINE_CONFLICT_REJECT'), 'warning');
   assert.equal(getAuditActionTone('CASHBOOK_CREATE'), 'info');
+  assert.equal(getAuditActionTone('LOGOUT'), 'primary');
 });
 
 test('audit date formatter handles valid and invalid dates', () => {
