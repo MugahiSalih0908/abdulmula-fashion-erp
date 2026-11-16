@@ -13,7 +13,7 @@ export default function AuthShell({
     <div className="auth-shell">
       <div className="auth-shell-glow auth-shell-glow-one" aria-hidden="true" />
       <div className="auth-shell-glow auth-shell-glow-two" aria-hidden="true" />
-      <div className="auth-shell-inner">
+      <div className={'auth-shell-inner' + (wide ? ' auth-shell-inner-wide' : '')}>
         <header className="auth-brand">
           <div className="auth-brand-mark" aria-hidden="true">AF</div>
           <div className="auth-brand-copy">
