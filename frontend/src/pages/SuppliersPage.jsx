@@ -349,8 +349,8 @@ export default function SuppliersPage() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 250);
   const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [debouncedSearch, hasDebt]);
   const [hasDebt, setHasDebt] = useState(false);
+  useEffect(() => setPage(1), [debouncedSearch, hasDebt]);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [selected, setSelected] = useState(null);
