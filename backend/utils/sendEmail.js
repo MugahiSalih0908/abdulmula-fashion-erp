@@ -5,8 +5,7 @@ const validator = require('validator');
 const EmailLog = require('../models/EmailLog');
 const { validateEmailDelivery } = require('./emailConfig');
 
-// ── Initialize Resend with API key ───────────────────────────
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Resend is initialized lazily only after delivery mode and provider config are validated.
 
 // ── Brand constants ───────────────────────────────────────────
 const BRAND = {
