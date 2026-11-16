@@ -148,3 +148,16 @@ test('authentication profile fetch shares a single in-flight request', () => {
   assert.ok(authStore.includes('if (fetchMeInFlight) return fetchMeInFlight'));
   assert.ok(authStore.includes('get().accessToken === token'));
 });
+
+
+test('product catalogue uses server pagination without changing legacy POS calls', () => {
+  const products = read('src/pages/ProductsPage.jsx');
+  const route = read('../backend/routes/products.js');
+  assert.ok(products.includes('limit:25'));
+  assert.ok(products.includes('<PaginationBar'));
+  assert.ok(products.includes('healthyStock'));
+  assert.ok(route.includes('paginationRequested'));
+  assert.ok(route.includes('totalPages: Math.max(1, Math.ceil(total / pageSize))'));
+  assert.ok(route.includes("findQuery.populate('supplier', 'name')"));
+  assert.ok(route.includes("findQuery.select('name sku barcode price costPrice quantity"));
+});
