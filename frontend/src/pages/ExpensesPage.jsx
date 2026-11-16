@@ -1,309 +1,407 @@
-// src/pages/ExpensesPage.jsx
-
-import { useState }                          from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm }                           from 'react-hook-form';
-import { motion, AnimatePresence }           from 'framer-motion';
-import toast                                 from 'react-hot-toast';
-import api                                   from '../services/api';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
+import {
+  AlertCircle, CircleDollarSign, FileText, Plus, Search,
+  Trash2, TrendingDown, Wallet, X
+} from 'lucide-react';
+import api from '../services/api';
+import useSettingsStore from '../store/settingsStore';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import CardBody from '../components/ui/CardBody';
 import Badge from '../components/ui/Badge';
-import { Plus, Trash2, X, Wallet, TrendingDown } from 'lucide-react';
+import Sheet from '../components/ui/Sheet';
+import {
+  EXPENSE_CATEGORIES,
+  filterExpenses,
+  normalizeExpensePayload,
+  summarizeExpenses
+} from './expenseManagement.mjs';
 
-const CATEGORIES = ['Rent','Transport','Salaries','Electricity','Stock Purchase','Marketing','Maintenance','Other'];
+const inputClass = 'input min-h-11 w-full rounded-xl border border-[var(--color-border)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-gold)] focus:outline-none focus:ring-2 focus:ring-[rgba(197,164,109,0.2)]';
 
-const CAT_COLORS = {
-  Rent:            'bg-purple-100 text-purple-700',
-  Transport:       'bg-blue-100 text-blue-700',
-  Salaries:        'bg-emerald-100 text-emerald-700',
-  Electricity:     'bg-yellow-100 text-yellow-700',
-  'Stock Purchase':'bg-orange-100 text-orange-700',
-  Marketing:       'bg-pink-100 text-pink-700',
-  Maintenance:     'bg-gray-100 text-gray-600',
-  Other:           'bg-slate-100 text-slate-600',
-};
+function money(value, fmt) {
+  const amount = Number(value);
+  return fmt(Number.isFinite(amount) ? amount : 0);
+}
 
-export default function ExpensesPage() {
-  const [showForm,  setShowForm]  = useState(false);
-  const [category,  setCategory]  = useState('All');
-  const queryClient = useQueryClient();
+function dateLabel(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['expenses', category],
-    queryFn:  async () => {
-      const params = category !== 'All' ? `?category=${category}` : '';
-      const { data } = await api.get(`/expenses${params}`);
-      return data;
-    },
+function Metric({ label, value, detail, Icon, tone = 'gold' }) {
+  const tones = {
+    gold: 'bg-[#f4eee3] text-[#80622e]',
+    red: 'bg-[#f8ecea] text-[#963b3b]',
+    slate: 'bg-[var(--color-bg-secondary)] text-[var(--color-text-secondary)]',
+    green: 'bg-[#eaf3ed] text-[#216442]'
+  };
+  return (
+    <Card className="min-w-0">
+      <CardBody className="flex h-full items-start gap-3 p-4 sm:p-5">
+        <span className={'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ' + tones[tone]}>
+          <Icon size={19} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]">{label}</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-[var(--color-text)] sm:text-2xl">{value}</p>
+          <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">{detail}</p>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function ExpenseForm({ onSave, onClose, saving }) {
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+    defaultValues: {
+      title: '',
+      amount: '',
+      category: '',
+      date: new Date().toISOString().slice(0, 10),
+      description: ''
+    }
   });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id) => api.delete(`/expenses/${id}`),
-    onSuccess:  () => { queryClient.invalidateQueries(['expenses']); toast.success('Expense deleted.'); },
-    onError:    (e) => toast.error(e?.response?.data?.message || 'Delete failed.'),
-  });
-
-  const expenses = data?.data  || [];
-  const total    = data?.total || 0;
-
-  // Build category breakdown for mini chart
-  const catBreakdown = CATEGORIES.map(cat => ({
-    cat,
-    amount: expenses.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0)
-  })).filter(c => c.amount > 0).sort((a, b) => b.amount - a.amount);
 
   return (
-    <div className="p-4 space-y-5">
+    <form onSubmit={handleSubmit(values => onSave(normalizeExpensePayload(values)))} className="space-y-4 p-4 sm:p-5" noValidate>
+      <div className="rounded-xl border border-[var(--color-gold-light)] bg-[#fbf8f1] p-3">
+        <p className="text-xs leading-5 text-[var(--color-text-secondary)]">
+          Expense entries are recorded in the business base currency. The selected display currency only changes how totals are shown.
+        </p>
+      </div>
 
-      <PageHeader
-        title="Expenses"
-        sub="Business costs tracker"
-        action={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5"
-          >
-            <Plus size={16} /> Add
-          </Button>
-        }
-      />
+      <div>
+        <label htmlFor="expense-title" className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">
+          Expense title <span className="text-[var(--color-danger)]">*</span>
+        </label>
+        <input
+          id="expense-title"
+          maxLength={120}
+          className={inputClass + (errors.title ? ' border-[var(--color-danger)]' : '')}
+          placeholder="e.g. Monthly shop rent"
+          aria-invalid={Boolean(errors.title)}
+          aria-describedby={errors.title ? 'expense-title-error' : undefined}
+          {...register('title', {
+            required: 'Enter an expense title.',
+            maxLength: { value: 120, message: 'Title must be 120 characters or fewer.' },
+            validate: value => Boolean(String(value || '').trim()) || 'Enter an expense title.'
+          })}
+        />
+        {errors.title && <p id="expense-title-error" role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{errors.title.message}</p>}
+      </div>
 
-      {/* Total card */}
-      <Card className="border-l-4 border-l-red-500">
-        <CardBody className="p-5 flex items-center gap-4">
-          <div className="w-14 h-14 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
-            <TrendingDown size={24} className="text-red-600" />
-          </div>
-          <div className="flex-1">
-            <p className="text-xs text-red-600 font-semibold uppercase tracking-wide">Total Expenses</p>
-            <p className="text-3xl font-bold text-red-700">${total.toFixed(2)}</p>
-          </div>
-        </CardBody>
-      </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="expense-amount" className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">
+            Amount (USD) <span className="text-[var(--color-danger)]">*</span>
+          </label>
+          <input
+            id="expense-amount"
+            type="number"
+            inputMode="decimal"
+            min="0.01"
+            step="0.01"
+            className={inputClass + (errors.amount ? ' border-[var(--color-danger)]' : '')}
+            placeholder="0.00"
+            aria-invalid={Boolean(errors.amount)}
+            aria-describedby={errors.amount ? 'expense-amount-error' : undefined}
+            {...register('amount', {
+              required: 'Enter an expense amount.',
+              valueAsNumber: true,
+              min: { value: 0.01, message: 'Amount must be greater than zero.' },
+              validate: value => Number.isFinite(value) || 'Enter a valid amount.'
+            })}
+          />
+          {errors.amount && <p id="expense-amount-error" role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{errors.amount.message}</p>}
+        </div>
 
-      {/* Category breakdown */}
-      {catBreakdown.length > 0 && (
+        <div>
+          <label htmlFor="expense-date" className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">
+            Expense date <span className="text-[var(--color-danger)]">*</span>
+          </label>
+          <input
+            id="expense-date"
+            type="date"
+            className={inputClass}
+            {...register('date', { required: 'Select the expense date.' })}
+          />
+          {errors.date && <p role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{errors.date.message}</p>}
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="expense-category" className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">
+          Category <span className="text-[var(--color-danger)]">*</span>
+        </label>
+        <select id="expense-category" className={inputClass} {...register('category', { required: 'Choose an expense category.' })}>
+          <option value="">Select a category</option>
+          {EXPENSE_CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}
+        </select>
+        {errors.category && <p role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{errors.category.message}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="expense-description" className="mb-1.5 block text-xs font-semibold text-[var(--color-text-secondary)]">Description</label>
+        <textarea
+          id="expense-description"
+          rows={3}
+          maxLength={300}
+          className={inputClass + ' min-h-24 resize-y'}
+          placeholder="Optional supporting details"
+          {...register('description', { maxLength: { value: 300, message: 'Description must be 300 characters or fewer.' } })}
+        />
+        {errors.description && <p role="alert" className="mt-1 text-xs text-[var(--color-danger)]">{errors.description.message}</p>}
+      </div>
+
+      <div className="flex flex-col-reverse gap-2 border-t border-[var(--color-border-light)] pt-4 sm:flex-row sm:justify-end">
+        <Button type="button" variant="secondary" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+        <Button type="submit" loading={saving || isSubmitting} className="w-full sm:w-auto"><Plus size={15} /> Record expense</Button>
+      </div>
+    </form>
+  );
+}
+
+export default function ExpensesPage() {
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('All');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+  const { fmt } = useSettingsStore();
+  const queryClient = useQueryClient();
+
+  const dateRangeInvalid = Boolean(startDate && endDate && startDate > endDate);
+
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
+    queryKey: ['expenses', { category, startDate, endDate }],
+    enabled: !dateRangeInvalid,
+    queryFn: async () => {
+      const params = {};
+      if (category !== 'All') params.category = category;
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      const response = await api.get('/expenses', { params });
+      return response.data;
+    }
+  });
+
+  const expenses = Array.isArray(data?.data) ? data.data : [];
+  const filtered = useMemo(() => filterExpenses(expenses, search), [expenses, search]);
+  const summary = useMemo(() => summarizeExpenses(filtered), [filtered]);
+
+  const deleteMutation = useMutation({
+    mutationFn: id => api.delete('/expenses/' + id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success('Expense removed. The action has been audit logged.');
+      setDeleting(null);
+    },
+    onError: error => toast.error(error?.response?.data?.message || 'Expense could not be deleted.')
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: values => api.post('/expenses', values),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success('Expense recorded.');
+      setFormOpen(false);
+    },
+    onError: error => toast.error(error?.response?.data?.message || 'Expense could not be recorded.')
+  });
+
+  const clearFilters = () => {
+    setSearch('');
+    setCategory('All');
+    setStartDate('');
+    setEndDate('');
+  };
+
+  return (
+    <main className="space-y-5 p-4 pb-8 sm:space-y-6 sm:p-6 lg:p-7">
+      <PageHeader title="Expense management" sub="Track operating costs and review business spending" action={<Button onClick={() => setFormOpen(true)}><Plus size={16} /> Add expense</Button>} />
+
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Expense summary">
+        <Metric label="Expenses" value={summary.count.toLocaleString('en-IN')} detail="Entries in the selected view" Icon={FileText} tone="slate" />
+        <Metric label="Total spending" value={money(summary.total, fmt)} detail="Selected dates and filters" Icon={TrendingDown} tone="red" />
+        <Metric label="Average entry" value={money(summary.average, fmt)} detail="Mean amount per expense" Icon={CircleDollarSign} tone="gold" />
+        <Metric label="Largest expense" value={money(summary.largest, fmt)} detail="Highest single entry in view" Icon={Wallet} tone="green" />
+      </section>
+
+      <section className="space-y-3" aria-label="Expense filters">
+        <div className="relative">
+          <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" aria-hidden="true" />
+          <label htmlFor="expense-search" className="sr-only">Search expenses</label>
+          <input id="expense-search" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search title, category or description…" className={inputClass + ' min-h-12 pl-10 pr-10'} />
+          {search && <button type="button" aria-label="Clear expense search" onClick={() => setSearch('')} className="absolute right-1.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg"><X size={15} /></button>}
+        </div>
+
         <Card>
-          <CardBody className="p-5">
-            <p className="text-xs font-semibold text-gray-600 uppercase mb-4 tracking-wide">Breakdown by Category</p>
-            <div className="space-y-3">
-              {catBreakdown.map(({ cat, amount }) => {
-                const pct = total > 0 ? (amount / total) * 100 : 0;
-                return (
-                  <div key={cat}>
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-sm font-semibold text-gray-700">{cat}</span>
-                      <span className="text-xs font-medium text-gray-600">${amount.toFixed(2)} ({pct.toFixed(0)}%)</span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${pct}%` }}
-                        transition={{ delay: 0.1, duration: 0.6 }}
-                        className="h-full bg-gradient-to-r from-red-400 to-red-500 rounded-full"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+          <CardBody className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-4">
+            <label className="space-y-1.5">
+              <span className="text-xs font-semibold text-[var(--color-text-secondary)]">Category</span>
+              <select value={category} onChange={event => setCategory(event.target.value)} className={inputClass}>
+                <option value="All">All categories</option>
+                {EXPENSE_CATEGORIES.map(value => <option key={value} value={value}>{value}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs font-semibold text-[var(--color-text-secondary)]">From date</span>
+              <input type="date" value={startDate} onChange={event => setStartDate(event.target.value)} className={inputClass} />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-xs font-semibold text-[var(--color-text-secondary)]">To date</span>
+              <input type="date" value={endDate} onChange={event => setEndDate(event.target.value)} className={inputClass} />
+            </label>
+            <div className="flex items-end"><Button variant="secondary" className="w-full" onClick={clearFilters}>Clear filters</Button></div>
+          </CardBody>
+        </Card>
+        {dateRangeInvalid && <p role="alert" className="text-xs font-medium text-[var(--color-danger)]">The start date must be on or before the end date.</p>}
+      </section>
+
+      {summary.categoryBreakdown.length > 0 && (
+        <Card>
+          <CardBody className="space-y-4 p-4 sm:p-5">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--color-text)]">Expense breakdown</h2>
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">Share of expenses in the selected view</p>
             </div>
+            {summary.categoryBreakdown.map(item => (
+              <div key={item.category}>
+                <div className="mb-1.5 flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium text-[var(--color-text-secondary)]">{item.category}</span>
+                  <span className="shrink-0 text-xs tabular-nums text-[var(--color-text)]">{money(item.amount, fmt)} <span className="text-[var(--color-text-muted)]">({item.share.toFixed(0)}%)</span></span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-[var(--color-bg-secondary)]">
+                  <motion.div initial={{ width: 0 }} animate={{ width: item.share + '%' }} transition={{ duration: 0.45 }} className="h-full rounded-full bg-[#b58d4c]" />
+                </div>
+              </div>
+            ))}
           </CardBody>
         </Card>
       )}
 
-      {/* Category filter */}
-      <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-        {['All', ...CATEGORIES].map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setCategory(cat)}
-            className={`shrink-0 px-4 py-2 rounded-full text-xs font-semibold transition-all whitespace-nowrap ${
-              category === cat
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
-
-      {/* Expense list */}
-      {isLoading ? (
-        <div className="space-y-3">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-16 bg-gray-200 rounded-lg animate-pulse" />
-          ))}
-        </div>
-      ) : expenses.length === 0 ? (
-        <div className="text-center py-16">
-          <Wallet size={48} className="mx-auto mb-3 text-gray-300" />
-          <p className="font-semibold text-gray-500">No expenses recorded</p>
-          <p className="text-xs text-gray-400 mt-1">Add your first expense to get started</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {expenses.map((e) => (
-            <motion.div key={e._id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Card>
-                <CardBody className="p-4 flex items-center gap-3">
-                  <Badge variant="secondary" className={`shrink-0 ${CAT_COLORS[e.category] || 'bg-gray-100 text-gray-600'}`}>
-                    {e.category}
-                  </Badge>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">{e.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{new Date(e.date).toLocaleDateString()}</p>
-                  </div>
-                  <p className="font-bold text-red-600 shrink-0 text-right">${e.amount.toFixed(2)}</p>
-                  <button
-                    onClick={() => {
-                      if (window.confirm('Delete this expense?')) deleteMutation.mutate(e._id);
-                    }}
-                    className="p-2 text-gray-400 hover:text-red-600 rounded-lg transition disabled:opacity-50 shrink-0"
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </CardBody>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
+      {isError && (
+        <Card role="alert">
+          <CardBody className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle size={18} className="mt-0.5 shrink-0 text-[var(--color-danger)]" />
+              <div>
+                <p className="text-sm font-semibold text-[var(--color-text)]">Expenses could not be loaded</p>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">{error?.response?.data?.message || error?.message || 'Check your connection and try again.'}</p>
+              </div>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => refetch()} loading={isFetching}>Try again</Button>
+          </CardBody>
+        </Card>
       )}
 
-      <div className="h-4" />
-
-      <AnimatePresence>
-        {showForm && (
-          <AddExpenseSheet
-            onClose={() => setShowForm(false)}
-            onSaved={() => { queryClient.invalidateQueries(['expenses']); setShowForm(false); }}
-          />
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function AddExpenseSheet({ onClose, onSaved }) {
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
-    defaultValues: { date: new Date().toISOString().split('T')[0] }
-  });
-
-  const onSubmit = async (data) => {
-    try {
-      await api.post('/expenses', data);
-      toast.success('Expense recorded.');
-      onSaved();
-    } catch (e) {
-      toast.error(e?.response?.data?.message || 'Failed.');
-    }
-  };
-
-  return (
-    <>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/50 z-40"
-        onClick={onClose}
-      />
-      <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 26, stiffness: 300 }}
-        className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50"
-      >
-
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
-          <h2 className="font-bold text-lg text-gray-900">Add Expense</h2>
-          <button
-            onClick={onClose}
-            className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition flex items-center justify-center"
-          >
-            <X size={18} />
-          </button>
+      {isLoading && !isError ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Loading expenses">
+          {[0, 1, 2, 3, 4, 5].map(index => <div key={index} className="h-36 animate-pulse rounded-2xl border border-[var(--color-border)] bg-white" />)}
         </div>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="px-5 py-4 space-y-4 max-h-[80vh] overflow-y-auto">
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">Title *</label>
-            <input
-              {...register('title', { required: 'Title is required' })}
-              className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-              placeholder="e.g. Monthly Rent"
-            />
-            {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title.message}</p>}
+      ) : !isError && !dateRangeInvalid && filtered.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-[var(--color-border)] bg-white px-5 py-14 text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f4eee3] text-[#80622e]"><Wallet size={22} /></span>
+          <h2 className="mt-3 text-sm font-semibold text-[var(--color-text)]">{expenses.length ? 'No matching expenses' : 'No expenses for this view'}</h2>
+          <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-[var(--color-text-muted)]">{expenses.length ? 'Try a different search or clear the selected filters.' : 'Record a business expense to start building your cost history.'}</p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {(search || category !== 'All' || startDate || endDate) && <Button variant="secondary" size="sm" onClick={clearFilters}>Clear filters</Button>}
+            {!expenses.length && <Button size="sm" onClick={() => setFormOpen(true)}><Plus size={15} /> Add expense</Button>}
           </div>
-
-          <div className="grid grid-cols-2 gap-3">
+        </div>
+      ) : !isError && (
+        <section className="space-y-3" aria-label="Expense results">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Amount ($) *</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                {...register('amount', { required: 'Amount required', valueAsNumber: true })}
-                className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-                placeholder="0.00"
-              />
-              {errors.amount && <p className="text-red-500 text-xs mt-1">{errors.amount.message}</p>}
+              <h2 className="text-sm font-semibold text-[var(--color-text)]">Expense ledger</h2>
+              <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{filtered.length} entries shown{isFetching ? ' · Updating…' : ''}</p>
             </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 block mb-1.5">Date</label>
-              <input
-                type="date"
-                {...register('date')}
-                className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-              />
+            <Badge variant="info">Audit logged</Badge>
+          </div>
+
+          <div className="hidden overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white lg:block">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] text-left text-sm">
+                <thead className="bg-[var(--color-bg-secondary)] text-[10px] uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 font-semibold">Date</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Expense</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Category</th>
+                    <th scope="col" className="px-4 py-3 font-semibold">Description</th>
+                    <th scope="col" className="px-4 py-3 text-right font-semibold">Amount</th>
+                    <th scope="col" className="px-4 py-3 text-right font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border-light)]">
+                  {filtered.map(expense => (
+                    <tr key={expense._id} className="transition hover:bg-[var(--color-bg-secondary)]/60">
+                      <td className="px-4 py-3 text-xs text-[var(--color-text-secondary)]">{dateLabel(expense.date)}</td>
+                      <td className="px-4 py-3 font-semibold text-[var(--color-text)]">{expense.title}</td>
+                      <td className="px-4 py-3"><Badge>{expense.category}</Badge></td>
+                      <td className="max-w-[260px] truncate px-4 py-3 text-xs text-[var(--color-text-secondary)]">{expense.description || '—'}</td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-[var(--color-danger)]">{money(expense.amount, fmt)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button type="button" aria-label={'Delete expense ' + expense.title} onClick={() => setDeleting(expense)} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[var(--color-danger)] hover:bg-[#f8ecea]"><Trash2 size={16} /></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">Category *</label>
-            <select
-              {...register('category', { required: 'Category required' })}
-              className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition"
-            >
-              <option value="">— Select —</option>
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:hidden">
+            {filtered.map(expense => (
+              <Card key={expense._id}>
+                <CardBody className="space-y-3 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-[var(--color-text)]">{expense.title}</p>
+                      <p className="mt-1 text-xs text-[var(--color-text-muted)]">{dateLabel(expense.date)}</p>
+                    </div>
+                    <p className="shrink-0 text-sm font-semibold tabular-nums text-[var(--color-danger)]">{money(expense.amount, fmt)}</p>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-[var(--color-border-light)] pt-3">
+                    <Badge>{expense.category}</Badge>
+                    <button type="button" aria-label={'Delete expense ' + expense.title} onClick={() => setDeleting(expense)} className="flex h-10 w-10 items-center justify-center rounded-xl text-[var(--color-danger)] hover:bg-[#f8ecea]"><Trash2 size={16} /></button>
+                  </div>
+                  {expense.description && <p className="text-xs leading-5 text-[var(--color-text-secondary)]">{expense.description}</p>}
+                </CardBody>
+              </Card>
+            ))}
           </div>
+        </section>
+      )}
 
-          <div>
-            <label className="text-xs font-semibold text-gray-600 block mb-1.5">Description</label>
-            <textarea
-              {...register('description')}
-              rows={2}
-              className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition resize-none"
-              placeholder="Optional notes…"
-            />
+      <Sheet open={formOpen} title="Add expense" subtitle="Record a business cost with its category and date" onClose={() => saveMutation.isPending ? null : setFormOpen(false)} maxH="94dvh">
+        <ExpenseForm onSave={values => saveMutation.mutate(values)} saving={saveMutation.isPending} onClose={() => setFormOpen(false)} />
+      </Sheet>
+
+      <Sheet open={Boolean(deleting)} title="Permanently delete expense?" subtitle="This action cannot be undone" onClose={() => deleteMutation.isPending ? null : setDeleting(null)} maxH="auto">
+        {deleting && (
+          <div className="space-y-4 p-5">
+            <div className="rounded-xl border border-[#f0d6d2] bg-[#fff7f5] p-3">
+              <p className="text-sm font-semibold text-[var(--color-text)]">{deleting.title}</p>
+              <p className="mt-1 text-xs text-[var(--color-text-secondary)]">{dateLabel(deleting.date)} · {deleting.category} · {money(deleting.amount, fmt)}</p>
+              <p className="mt-2 text-xs leading-5 text-[var(--color-danger)]">The current API permanently removes this expense and records an audit event. Keep supporting documents separately according to your business record policy.</p>
+            </div>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="secondary" onClick={() => setDeleting(null)} disabled={deleteMutation.isPending}>Cancel</Button>
+              <Button variant="danger" loading={deleteMutation.isPending} onClick={() => deleteMutation.mutate(deleting._id)}><Trash2 size={15} /> Permanently delete</Button>
+            </div>
           </div>
-
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={isSubmitting}
-            className="w-full"
-          >
-            {isSubmitting && (
-              <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-            )}
-            Record Expense
-          </Button>
-        </form>
-      </motion.div>
-    </>
+        )}
+      </Sheet>
+    </main>
   );
 }
