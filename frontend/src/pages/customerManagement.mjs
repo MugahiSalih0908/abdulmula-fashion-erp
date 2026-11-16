@@ -4,13 +4,18 @@ const optionalText = value => {
 };
 
 export function normalizeCustomerPayload(values = {}) {
-  return {
-    name: String(values.name ?? '').trim(),
-    email: optionalText(values.email)?.toLowerCase(),
-    phone: optionalText(values.phone),
-    address: optionalText(values.address),
-    notes: optionalText(values.notes)
-  };
+  const payload = { name: String(values.name ?? '').trim() };
+  const email = optionalText(values.email);
+  const phone = optionalText(values.phone);
+  const address = optionalText(values.address);
+  const notes = optionalText(values.notes);
+
+  if (email) payload.email = email.toLowerCase();
+  if (phone) payload.phone = phone;
+  if (address) payload.address = address;
+  if (notes) payload.notes = notes;
+
+  return payload;
 }
 
 export function filterCustomers(customers = [], search = '', hasCredit = false) {
