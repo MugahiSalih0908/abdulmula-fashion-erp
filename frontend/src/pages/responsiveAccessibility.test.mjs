@@ -82,3 +82,34 @@ test('new business forms use explicit labels for primary input fields', () => {
     assert.match(source, /<label htmlFor=/, name + ' should label primary form controls');
   }
 });
+
+
+const adminPageSources = {
+  settings: read('src/pages/SettingsPage.jsx'),
+  audit: read('src/pages/AuditLogsPage.jsx'),
+  adminStyles: read('src/pages/adminWorkspace.css')
+};
+
+test('remaining administration pages use the shared premium workspace shell', () => {
+  assert.match(adminPageSources.settings, /admin-page admin-settings-page/);
+  assert.match(adminPageSources.audit, /admin-page admin-audit-page/);
+  assert.match(adminPageSources.adminStyles, /\.admin-settings-profile/);
+  assert.match(adminPageSources.adminStyles, /\.admin-audit-hero/);
+  assert.match(adminPageSources.adminStyles, /@media \(max-width: 639px\)/);
+  assert.match(adminPageSources.adminStyles, /@media \(min-width: 1024px\)/);
+});
+
+test('settings keeps accessible account, password and exchange-rate form labels', () => {
+  assert.match(adminPageSources.settings, /htmlFor="settings-profile-name"/);
+  assert.match(adminPageSources.settings, /htmlFor="settings-profile-email"/);
+  assert.match(adminPageSources.settings, /htmlFor="settings-new-password"/);
+  assert.match(adminPageSources.settings, /htmlFor="settings-confirm-password"/);
+  assert.match(adminPageSources.settings, /htmlFor="settings-exchange-rate"/);
+});
+
+test('audit logs clearly state that search is page-scoped and events are read-only', () => {
+  assert.match(adminPageSources.audit, /search scans the/);
+  assert.match(adminPageSources.audit, /read-only/);
+  assert.match(adminPageSources.audit, /aria-pressed=/);
+  assert.match(adminPageSources.audit, /<details className="admin-audit-details">/);
+});
