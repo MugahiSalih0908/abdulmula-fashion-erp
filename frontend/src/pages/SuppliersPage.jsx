@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import PaginationBar from '../components/ui/PaginationBar';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -32,7 +33,6 @@ import Card from '../components/ui/Card';
 import CardBody from '../components/ui/CardBody';
 import Badge from '../components/ui/Badge';
 import {
-  filterSuppliers,
   getSupplierInitials,
   normalizeSupplierPayload,
   summarizeSuppliers
@@ -348,6 +348,8 @@ function SupplierDetails({ supplierId, fmt }) {
 export default function SuppliersPage() {
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 250);
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [debouncedSearch, hasDebt]);
   const [hasDebt, setHasDebt] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -358,17 +360,25 @@ export default function SuppliersPage() {
   const canManage = isAdmin || isManager;
   const queryClient = useQueryClient();
 
-  const { data: suppliers = [], isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ['suppliers'],
+  const { data: supplierResponse, isLoading, isError, error, refetch, isFetching } = useQuery({
+    queryKey: ['suppliers', { page, search: debouncedSearch, hasDebt }],
     queryFn: async () => {
-      const response = await api.get('/suppliers');
-      return Array.isArray(response.data?.data) ? response.data.data : [];
+      const params = { page, limit: 25 };
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (hasDebt) params.hasDebt = 'true';
+      const response = await api.get('/suppliers', { params });
+      return response.data;
     },
-    enabled: canManage
+    enabled: canManage,
+    placeholderData: previousData => previousData,
+    staleTime: 30000
   });
 
-  const filtered = useMemo(() => filterSuppliers(suppliers, debouncedSearch, hasDebt), [suppliers, debouncedSearch, hasDebt]);
-  const summary = useMemo(() => summarizeSuppliers(suppliers), [suppliers]);
+  const suppliers = Array.isArray(supplierResponse?.data) ? supplierResponse.data : [];
+  const filtered = suppliers;
+  const total = Number(supplierResponse?.total) || suppliers.length;
+  const totalPages = Math.max(1, Number(supplierResponse?.totalPages) || 1);
+  const summary = supplierResponse?.summary || summarizeSuppliers(suppliers);
 
   const saveMutation = useMutation({
     mutationFn: ({ id, values }) => id
@@ -560,6 +570,8 @@ export default function SuppliersPage() {
           </div>
         </section>
       )}
+
+      <PaginationBar page={page} total={total} totalPages={totalPages} onPageChange={setPage} />
 
       <Sheet open={formOpen} title={editing ? 'Edit supplier' : 'Add supplier'} subtitle={editing ? 'Update supplier details' : 'Create a supplier record for purchasing'} onClose={closeForm} maxH="94dvh">
         <SupplierForm
