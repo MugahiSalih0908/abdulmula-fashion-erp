@@ -27,7 +27,7 @@ function getEmailConfig(env = process.env) {
 
   const issues = [];
   if (mode === 'disabled') {
-    issues.push('Email delivery mode is disabled. Use test mode for an allow-listed test inbox, or live mode after verifying the sending domain.');
+    issues.push('EMAIL_DELIVERY_MODE is disabled. Set it to test for an allow-listed inbox, or live after verifying the sending domain.');
   }
   if (!hasApiKey) issues.push('RESEND_API_KEY is missing from the backend environment.');
   if (!sender) issues.push('EMAIL_FROM is missing from the backend environment.');
