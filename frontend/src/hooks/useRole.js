@@ -15,6 +15,7 @@ export const useRole = () => {
     // Fine-grained permission checks
     can: {
       viewProducts:    true,
+      viewInvoices:    true,
       editProducts:    role !== 'staff',
       deleteProducts:  role !== 'staff',
 
