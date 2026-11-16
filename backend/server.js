@@ -87,11 +87,15 @@ app.use('/api/', rateLimit({ windowMs:15*60*1000, max:500, standardHeaders:true,
 app.use('/api/auth/login', rateLimit({ windowMs:15*60*1000, max:20, message:{ success:false, message:'Too many login attempts. Wait 15 minutes.' } }));
 
 // ── Body parsing ──────────────────────────────────────────────
+app.use('/api/webhooks', require('./routes/webhooks'));
+
 app.use(express.json({ limit:'10mb' }));
 app.use(express.urlencoded({ extended:true }));
 
 // ── Logging ───────────────────────────────────────────────────
-app.use(morgan('combined'));
+const { redactRequestPath } = require('./utils/safeRequestPath');
+morgan.token('safe-url', req => redactRequestPath(req));
+app.use(morgan(':remote-addr - [:date[clf]] ":method :safe-url HTTP/:http-version" :status :res[content-length]'));
 
 // ── Health check ──────────────────────────────────────────────
 // ── Root route ───────────────────────────────────────────────
@@ -125,32 +129,7 @@ app.use('/api/customers',       require('./routes/customers'));
 app.use('/api/suppliers',       require('./routes/suppliers'));
 app.use('/api/expenses',        require('./routes/expenses'));
 app.use('/api/staff',           require('./routes/staff'));
-app.get('/api/test-email', async (req, res) => {
-  try {
-
-    const { sendEmail } = require('./utils/sendEmail');
-
-    await sendEmail({
-      to: req.query.to,
-      subject: 'Test Email',
-      html: '<h1>Resend Working ✅</h1>'
-    });
-
-    res.json({
-      success: true,
-      message: 'Test email sent successfully'
-    });
-
-  } catch (err) {
-
-    console.error('TEST EMAIL ERROR:', err);
-
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
-  }
-});
+app.use('/api/email-logs',       require('./routes/emailLogs'));
 app.use('/api/purchase-orders', require('./routes/purchaseOrders'));
 app.use('/api/cashbook',        require('./routes/cashbook'));
 app.use('/api/reports',         require('./routes/reports'));

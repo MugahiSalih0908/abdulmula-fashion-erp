@@ -67,18 +67,25 @@ router.post('/create', protect, authorize('admin'), async (req, res, next) => {
     try {
       await sendEmail({
         to: normalizedEmail,
-        ...emailTemplate
+        ...emailTemplate,
+        category: 'staff_invitation',
+        idempotencyKey: `invitation:${invitation._id}:initial`,
+        createdBy: req.user._id,
+        relatedEntity: 'Invitation',
+        relatedEntityId: invitation._id
       });
     } catch (emailErr) {
-      console.error('[INVITATION EMAIL ERROR]', emailErr.message);
-      // Delete the invitation if email fails
-      await Invitation.findByIdAndDelete(invitation._id);
+      console.error('[INVITATION EMAIL ERROR]', emailErr.code || emailErr.message);
+      if (!['EMAIL_DELIVERY_UNKNOWN', 'EMAIL_SEND_IN_PROGRESS'].includes(emailErr.code)) {
+        await Invitation.findByIdAndDelete(invitation._id);
+      }
       return res.status(500).json({
         success: false,
-        message: 'Could not send invitation email. Please try again.'
+        message: ['EMAIL_DELIVERY_UNKNOWN', 'EMAIL_SEND_IN_PROGRESS'].includes(emailErr.code)
+          ? 'The email provider response is uncertain. The invitation is being preserved; check Email Center before retrying.'
+          : 'Could not send invitation email. Please try again.'
       });
     }
-
     // ── Audit log ──────────────────────────────────────────────
     await log({
       user: req.user,
@@ -323,7 +330,14 @@ router.post('/resend', protect, authorize('admin'), async (req, res, next) => {
     if (invitation.status === 'accepted')
       return res.status(400).json({ success: false, message: 'Cannot resend accepted invitation.' });
 
-    // ── Generate new token ─────────────────────────────────────
+    // Preserve the previous usable token if the provider definitively rejects the resend.
+    const previous = {
+      token: invitation.token,
+      expiresAt: invitation.expiresAt,
+      status: invitation.status,
+      resendCount: invitation.resendCount,
+      lastResentAt: invitation.lastResentAt
+    };
     const { raw, hashed } = Invitation.generateToken();
     invitation.token = hashed;
     invitation.expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -332,7 +346,6 @@ router.post('/resend', protect, authorize('admin'), async (req, res, next) => {
     invitation.lastResentAt = new Date();
     await invitation.save();
 
-    // ── Send new invitation email ──────────────────────────────
     const inviteUrl = `${process.env.FRONTEND_URL}/invite/${raw}`;
     const emailTemplate = templates.invitation({
       email: invitation.email,
@@ -343,13 +356,28 @@ router.post('/resend', protect, authorize('admin'), async (req, res, next) => {
     try {
       await sendEmail({
         to: invitation.email,
-        ...emailTemplate
+        ...emailTemplate,
+        category: 'staff_invitation',
+        idempotencyKey: `invitation:${invitation._id}:resend:${invitation.resendCount}`,
+        createdBy: req.user._id,
+        relatedEntity: 'Invitation',
+        relatedEntityId: invitation._id
       });
     } catch (emailErr) {
-      console.error('[RESEND EMAIL ERROR]', emailErr.message);
+      if (emailErr.code !== 'EMAIL_DELIVERY_UNKNOWN') {
+        invitation.token = previous.token;
+        invitation.expiresAt = previous.expiresAt;
+        invitation.status = previous.status;
+        invitation.resendCount = previous.resendCount;
+        invitation.lastResentAt = previous.lastResentAt;
+        await invitation.save();
+      }
+      console.error('[RESEND EMAIL ERROR]', emailErr.code || emailErr.message);
       return res.status(500).json({
         success: false,
-        message: 'Could not send invitation email. Please try again.'
+        message: emailErr.code === 'EMAIL_DELIVERY_UNKNOWN'
+          ? 'The email provider response was uncertain. Check Email Center before sending another invitation.'
+          : 'Could not send invitation email. The previous invitation link remains valid.'
       });
     }
 
