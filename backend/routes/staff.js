@@ -125,7 +125,9 @@ router.post('/', authorize('admin'), async (req, res, next) => {
       data: member,
       message: emailStatus === 'sent'
         ? 'Staff account created and activation email accepted by the provider.'
-        : 'Staff account created, but the activation email was not sent. The account remains pending activation. Correct email settings and use Resend activation.',
+        : emailStatus === 'unknown'
+          ? 'Staff account created. The activation email delivery status is uncertain; check Email Center before retrying.'
+          : 'Staff account created, but the activation email was not sent. The account remains pending activation. Correct email settings and use Resend activation.',
       emailStatus,
       emailMessage,
       emailErrorCode
