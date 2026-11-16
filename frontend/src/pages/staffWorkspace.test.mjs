@@ -51,3 +51,23 @@ test('staff and invitation workspaces provide responsive and reduced motion styl
   assert.match(workspaceCss, /\.staff-modal-overlay/);
   assert.match(workspaceCss, /\.staff-member-card/);
 });
+
+
+test('staff creation reports email failure separately from account creation', () => {
+  assert.match(staffPage, /emailStatus === 'sent'/);
+  assert.match(staffPage, /Account created, but activation email was not sent/);
+  assert.match(staffPage, /Resend activation/);
+});
+
+test('invitation UI keeps failed email state visible and retryable', () => {
+  assert.match(invitationModal, /emailStatusMeta/);
+  assert.match(invitationModal, /emailErrorMessage/);
+  assert.match(invitationModal, /resendMutation\.mutate/);
+  assert.match(invitationModal, /getDeliveryMessage/);
+});
+
+test('email stylesheets use paths that resolve from their importing components', () => {
+  assert.match(staffPage, /import '\.\/staffWorkspace\.css'/);
+  assert.match(invitationModal, /import '\.\.\/pages\/staffWorkspace\.css'/);
+  assert.match(workspaceCss, /\.staff-invitation-card-badges/);
+});
