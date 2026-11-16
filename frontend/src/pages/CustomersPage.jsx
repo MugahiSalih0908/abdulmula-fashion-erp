@@ -126,7 +126,7 @@ function CustomerActions({ customer, canManage, onView, onEdit, onDelete }) {
     <div className="flex shrink-0 items-center gap-1">
       {customer.phone && (
         <a
-          href={'https://wa.me/' + customer.phone.replace(/\\D/g, '')}
+          href={'https://wa.me/' + customer.phone.replace(/\D/g, '')}
           target="_blank"
           rel="noreferrer"
           aria-label={'Open WhatsApp chat with ' + customer.name}
@@ -262,7 +262,7 @@ function CustomerForm({ customer, onSave, onClose, saving }) {
             className={inputClass + (errors.email ? ' border-[var(--color-danger)]' : '')}
             placeholder="name@example.com"
             {...register('email', {
-              validate: value => !value || /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value) || 'Enter a valid email address.'
+              validate: value => !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || 'Enter a valid email address.'
             })}
           />
           {fieldError('email')}
