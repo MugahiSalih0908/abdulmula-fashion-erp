@@ -12,6 +12,7 @@ const { log }   = require('../utils/auditLogger');
 const { sendEmail, templates } = require('../utils/sendEmail');
 const { getEmailDeliveryError } = require('../utils/emailDeliveryError');
 const { isEmailDeliveryBlocked } = require('../utils/emailConfig');
+const { buildStaffSalesLookup } = require('../utils/staffSalesSummary');
 
 router.use(protect);
 
@@ -37,12 +38,7 @@ router.get('/', authorize('admin','manager'), async (req, res, next) => {
       ])
     ]);
 
-    const salesByStaff = new Map(
-      salesRows.map(row => [String(row._id), {
-        salesCount: Number(row.salesCount) || 0,
-        salesTotal: Number(row.salesTotal) || 0
-      }])
-    );
+    const salesByStaff = buildStaffSalesLookup(salesRows);
 
     const withStats = staff.map(member => {
       const stats = salesByStaff.get(String(member._id));
