@@ -20,9 +20,10 @@ function getEmailConfig(env = process.env) {
   const senderDomain = senderAddress.includes('@') ? senderAddress.split('@').pop() : '';
   const configuredDomain = String(env.EMAIL_SENDING_DOMAIN || '').trim().toLowerCase();
   const senderDomainMatches = Boolean(
+    configuredDomain &&
     senderDomain &&
     senderDomain !== 'resend.dev' &&
-    (!configuredDomain || senderDomain === configuredDomain)
+    senderDomain === configuredDomain
   );
 
   const issues = [];
