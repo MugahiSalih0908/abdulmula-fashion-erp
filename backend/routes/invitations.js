@@ -109,7 +109,9 @@ router.post('/create', protect, authorize('admin'), async (req, res, next) => {
       success: true,
       message: emailStatus === 'sent'
         ? 'Invitation email accepted by the provider for ' + normalizedEmail + '.'
-        : 'Invitation saved for ' + normalizedEmail + ', but the email was not sent. Correct email settings and use Resend.',
+        : emailStatus === 'unknown'
+          ? 'Invitation saved for ' + normalizedEmail + '. Delivery is uncertain; check Email Center before retrying.'
+          : 'Invitation saved for ' + normalizedEmail + ', but the email was not sent. Correct email settings and use Resend.',
       data: {
         id: invitation._id,
         email: normalizedEmail,
@@ -424,7 +426,9 @@ router.post('/resend', protect, authorize('admin'), async (req, res, next) => {
       success: true,
       message: emailStatus === 'sent'
         ? 'Invitation email accepted by the provider for ' + invitation.email + '.'
-        : 'Invitation remains saved, but the email was not sent. ' + emailMessage,
+        : emailStatus === 'unknown'
+          ? 'Invitation remains saved. Delivery is uncertain; check Email Center before retrying.'
+          : 'Invitation remains saved, but the email was not sent. ' + emailMessage,
       data: {
         id: invitation._id,
         email: invitation.email,
