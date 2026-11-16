@@ -105,6 +105,8 @@ test('settings keeps accessible account, password and exchange-rate form labels'
   assert.match(adminPageSources.settings, /htmlFor="settings-new-password"/);
   assert.match(adminPageSources.settings, /htmlFor="settings-confirm-password"/);
   assert.match(adminPageSources.settings, /htmlFor="settings-exchange-rate"/);
+  assert.match(adminPageSources.settings, /isAdmin \?/);
+  assert.match(adminPageSources.settings, /administrator-managed/);
 });
 
 test('audit logs clearly state that search is page-scoped and events are read-only', () => {
