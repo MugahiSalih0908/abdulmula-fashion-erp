@@ -11,7 +11,7 @@ on:
       - ui/phase-10-purchase-orders
       - ui/phase-11-reports-analytics
       - ui/phase-12-responsive-accessibility
-      - ui/phase-12-responsive-accessibility
+      - ui/phase-13-admin-settings-audit-polish
   pull_request:
     branches:
       - ui/phase-5-premium-pos-products-cart-staff
@@ -23,6 +23,7 @@ on:
       - ui/phase-10-purchase-orders
       - ui/phase-11-reports-analytics
       - ui/phase-12-responsive-accessibility
+      - ui/phase-13-admin-settings-audit-polish
 
 jobs:
   backend:
