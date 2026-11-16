@@ -15,7 +15,7 @@ const emailLogSchema = new mongoose.Schema({
   idempotencyKey: { type: String, required: true, unique: true, select: false },
   status: {
     type: String,
-    enum: ['queued', 'sending', 'sent', 'delivered', 'delivery_delayed', 'bounced', 'complained', 'failed', 'unknown'],
+    enum: ['queued', 'sending', 'sent', 'delivered', 'delivery_delayed', 'bounced', 'complained', 'blocked', 'failed', 'unknown'],
     default: 'queued',
     index: true
   },

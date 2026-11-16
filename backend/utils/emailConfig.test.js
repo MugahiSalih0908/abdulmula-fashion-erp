@@ -52,3 +52,13 @@ test('live mode accepts only the explicitly verified sender domain', () => {
   };
   assert.equal(validateEmailDelivery({ recipient: 'qa@example.com', env }).mode, 'live');
 });
+
+test('classifies intentional delivery policy and configuration blocks separately from provider failures', () => {
+  const { isEmailDeliveryBlocked } = require('./emailConfig');
+  assert.equal(isEmailDeliveryBlocked({ code: 'EMAIL_DELIVERY_DISABLED' }), true);
+  assert.equal(isEmailDeliveryBlocked({ code: 'EMAIL_DOMAIN_NOT_VERIFIED' }), true);
+  assert.equal(isEmailDeliveryBlocked({ code: 'EMAIL_TEST_RECIPIENT_NOT_ALLOWED' }), true);
+  assert.equal(isEmailDeliveryBlocked({ code: 'RESEND_RATE_LIMIT' }), false);
+  assert.equal(isEmailDeliveryBlocked({ code: 'RESEND_REJECTED' }), false);
+  assert.equal(isEmailDeliveryBlocked(new Error('other error')), false);
+});

@@ -13,7 +13,8 @@ const STATUS_META = {
   delivery_delayed: { label: 'Delayed', tone: 'bg-amber-100 text-amber-800' },
   bounced: { label: 'Bounced', tone: 'bg-rose-100 text-rose-700' },
   complained: { label: 'Spam complaint', tone: 'bg-rose-100 text-rose-700' },
-  failed: { label: 'Failed', tone: 'bg-red-100 text-red-700' },
+  blocked: { label: 'Blocked — not sent', tone: 'bg-amber-100 text-amber-800' },
+  failed: { label: 'Provider failed', tone: 'bg-red-100 text-red-700' },
   unknown: { label: 'Status unknown', tone: 'bg-orange-100 text-orange-800' }
 };
 const CATEGORIES = [
@@ -25,7 +26,7 @@ const CATEGORIES = [
 const STATUSES = [
   ['all', 'All statuses'], ['queued', 'Queued'], ['sending', 'Sending'],
   ['sent', 'Accepted'], ['delivered', 'Delivered'], ['delivery_delayed', 'Delayed'],
-  ['bounced', 'Bounced'], ['complained', 'Complaints'], ['failed', 'Failed'],
+  ['bounced', 'Bounced'], ['complained', 'Complaints'], ['blocked', 'Blocked (not sent)'], ['failed', 'Provider failed'],
   ['unknown', 'Unknown']
 ];
 
@@ -90,6 +91,7 @@ export default function EmailCenterPage() {
     { label: 'Accepted by provider', value: summary.sent, icon: Send, tone: 'text-sky-700' },
     { label: 'Delivered', value: summary.delivered, icon: CheckCircle2, tone: 'text-emerald-700' },
     { label: 'Delayed', value: summary.delivery_delayed, icon: Clock3, tone: 'text-amber-700' },
+    { label: 'Blocked — not sent', value: summary.blocked, icon: AlertCircle, tone: 'text-amber-700' },
     { label: 'Needs attention', value: (summary.bounced || 0) + (summary.complained || 0) + (summary.failed || 0) + (summary.unknown || 0), icon: AlertTriangle, tone: 'text-rose-700' }
   ], [summary]);
 
@@ -124,7 +126,7 @@ export default function EmailCenterPage() {
           </div>
         </div>
       </div>
-      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Email delivery summary">
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-5" aria-label="Email delivery summary">
         {cards.map(card => <SummaryCard key={card.label} {...card} />)}
       </section>
       <section className="rounded-2xl border border-[var(--color-border)] bg-white p-3 shadow-sm sm:p-4" aria-label="Email filters">
@@ -152,10 +154,10 @@ export default function EmailCenterPage() {
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[900px] text-left text-sm">
                 <thead className="bg-[var(--color-bg-secondary)] text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]"><tr><th className="px-4 py-3 font-semibold">Recipient</th><th className="px-4 py-3 font-semibold">Message</th><th className="px-4 py-3 font-semibold">Status</th><th className="px-4 py-3 font-semibold">Attempts</th><th className="px-4 py-3 font-semibold">Created</th></tr></thead>
                 <tbody className="divide-y divide-[var(--color-border-light)]">
-                  {rows.map(row => <tr key={row._id} className="align-top"><td className="max-w-[220px] break-all px-4 py-3 text-xs font-medium text-[var(--color-text)]">{row.recipient}</td><td className="px-4 py-3"><p className="max-w-[310px] truncate text-xs font-medium text-[var(--color-text)]">{row.subject}</p><p className="mt-1 text-[11px] text-[var(--color-text-muted)]">{String(row.category || 'system').replaceAll('_',' ')}</p></td><td className="px-4 py-3"><StatusPill status={row.status}/>{row.lastErrorMessage && <p className="mt-1 max-w-[220px] text-[11px] text-red-700">{row.lastErrorMessage}</p>}</td><td className="px-4 py-3 text-xs tabular-nums text-[var(--color-text-secondary)]">{row.attempts || 0}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-[var(--color-text-muted)]">{formatDate(row.createdAt)}</td></tr>)}
+                  {rows.map(row => <tr key={row._id} className="align-top"><td className="min-w-[230px] whitespace-nowrap px-4 py-3 text-xs font-medium text-[var(--color-text)]">{row.recipient}</td><td className="px-4 py-3"><p className="max-w-[310px] truncate text-xs font-medium text-[var(--color-text)]">{row.subject}</p><p className="mt-1 text-[11px] text-[var(--color-text-muted)]">{String(row.category || 'system').replaceAll('_',' ')}</p></td><td className="px-4 py-3"><StatusPill status={row.status}/>{row.lastErrorMessage && <p className="mt-1 max-w-[220px] text-[11px] text-red-700">{row.lastErrorMessage}</p>}</td><td className="px-4 py-3 text-xs tabular-nums text-[var(--color-text-secondary)]">{row.attempts || 0}</td><td className="whitespace-nowrap px-4 py-3 text-xs text-[var(--color-text-muted)]">{formatDate(row.createdAt)}</td></tr>)}
                 </tbody>
               </table>
             </div>

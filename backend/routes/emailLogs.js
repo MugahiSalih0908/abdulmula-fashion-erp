@@ -2,13 +2,13 @@ const express = require('express');
 const crypto = require('crypto');
 const EmailLog = require('../models/EmailLog');
 const { protect, authorize } = require('../middleware/auth');
-const { getEmailConfig } = require('../utils/emailConfig');
+const { getEmailConfig, BLOCKED_EMAIL_CODES } = require('../utils/emailConfig');
 const { sendEmail, templates } = require('../utils/sendEmail');
 
 const router = express.Router();
 router.use(protect, authorize('admin'));
 
-const VALID_STATUSES = ['queued', 'sending', 'sent', 'delivered', 'delivery_delayed', 'bounced', 'complained', 'failed', 'unknown'];
+const VALID_STATUSES = ['queued', 'sending', 'sent', 'delivered', 'delivery_delayed', 'bounced', 'complained', 'blocked', 'failed', 'unknown'];
 const VALID_CATEGORIES = ['staff_activation', 'staff_invitation', 'password_reset', 'password_changed', 'security_alert', 'business_notification', 'system'];
 
 router.post('/test', async (req, res, next) => {
@@ -46,7 +46,17 @@ router.get('/', async (req, res, next) => {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 25));
     const filter = {};
-    if (VALID_STATUSES.includes(req.query.status)) filter.status = req.query.status;
+    if (req.query.status === 'blocked') {
+      filter.$or = [
+        { status: 'blocked' },
+        { status: 'failed', lastErrorCode: { $in: BLOCKED_EMAIL_CODES } }
+      ];
+    } else if (req.query.status === 'failed') {
+      filter.status = 'failed';
+      filter.lastErrorCode = { $nin: BLOCKED_EMAIL_CODES };
+    } else if (VALID_STATUSES.includes(req.query.status)) {
+      filter.status = req.query.status;
+    }
     if (VALID_CATEGORIES.includes(req.query.category)) filter.category = req.query.category;
 
     const search = String(req.query.search || '').trim().slice(0, 120);
@@ -59,12 +69,32 @@ router.get('/', async (req, res, next) => {
       EmailLog.find(filter).select('-idempotencyKey -__v').sort({ createdAt: -1 })
         .skip((page - 1) * limit).limit(limit).populate('createdBy', 'name email'),
       EmailLog.countDocuments(filter),
-      EmailLog.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }])
+      EmailLog.aggregate([{
+        $group: {
+          _id: { status: '$status', errorCode: '$lastErrorCode' },
+          count: { $sum: 1 }
+        }
+      }])
     ]);
 
     const summary = Object.fromEntries(VALID_STATUSES.map(status => [status, 0]));
-    grouped.forEach(item => { summary[item._id] = item.count; });
-    res.json({ success: true, data: records, total, page, limit, summary, emailConfig: getEmailConfig() });
+    grouped.forEach(item => {
+      const rawStatus = item._id.status;
+      const effectiveStatus = rawStatus === 'failed' && BLOCKED_EMAIL_CODES.includes(item._id.errorCode)
+        ? 'blocked'
+        : rawStatus;
+      if (Object.prototype.hasOwnProperty.call(summary, effectiveStatus)) {
+        summary[effectiveStatus] += item.count;
+      }
+    });
+    const safeRecords = records.map(record => {
+      const value = record.toObject();
+      if (value.status === 'failed' && BLOCKED_EMAIL_CODES.includes(value.lastErrorCode)) {
+        value.status = 'blocked';
+      }
+      return value;
+    });
+    res.json({ success: true, data: safeRecords, total, page, limit, summary, emailConfig: getEmailConfig() });
   } catch (error) {
     next(error);
   }

@@ -71,4 +71,10 @@ function validateEmailDelivery({ recipient, env = process.env }) {
   return config;
 }
 
-module.exports = { getEmailConfig, validateEmailDelivery, getSenderAddress };
+module.exports = { getEmailConfig, validateEmailDelivery, getSenderAddress, BLOCKED_EMAIL_CODES, isEmailDeliveryBlocked };
+
+const BLOCKED_EMAIL_CODES = Object.freeze(["EMAIL_DELIVERY_DISABLED","EMAIL_CONFIGURATION_ERROR","EMAIL_TEST_RECIPIENT_NOT_ALLOWED","EMAIL_DOMAIN_NOT_VERIFIED","EMAIL_SENDER_DOMAIN_MISMATCH"]);
+
+function isEmailDeliveryBlocked(error) {
+  return Boolean(error && BLOCKED_EMAIL_CODES.includes(error.code));
+}

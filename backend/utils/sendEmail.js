@@ -3,7 +3,7 @@ const { Resend } = require('resend');
 const crypto = require('crypto');
 const validator = require('validator');
 const EmailLog = require('../models/EmailLog');
-const { validateEmailDelivery } = require('./emailConfig');
+const { validateEmailDelivery, isEmailDeliveryBlocked } = require('./emailConfig');
 
 // Resend is initialized lazily only after delivery mode and provider config are validated.
 
@@ -313,7 +313,7 @@ const sendEmail = async ({
   }
 
   const claim = await EmailLog.findOneAndUpdate(
-    { _id: logEntry._id, status: { $in: ['queued', 'failed'] } },
+    { _id: logEntry._id, status: { $in: ['queued', 'failed', 'blocked'] } },
     {
       $set: {
         status: 'sending',
@@ -362,7 +362,7 @@ const sendEmail = async ({
   } catch (error) {
     const statusCode = Number(error && (error.statusCode || error.status) || 0);
     const uncertain = !statusCode || statusCode === 408 || statusCode === 409 || statusCode === 429 || statusCode >= 500;
-    claim.status = uncertain ? 'unknown' : 'failed';
+    claim.status = isEmailDeliveryBlocked(error) ? 'blocked' : uncertain ? 'unknown' : 'failed';
     claim.lastErrorCode = String(error && error.code || 'EMAIL_SEND_ERROR').slice(0, 80);
     claim.lastErrorMessage = String(error && error.message || 'Email send failed.').slice(0, 240);
     await claim.save();
