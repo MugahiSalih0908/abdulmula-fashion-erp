@@ -190,3 +190,10 @@
   .staff-spin, .staff-skeleton { animation: none; }
   .staff-member-card, .staff-member-actions button { transition: none; }
 }
+
+
+.staff-invitation-card-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.35rem; }
+.staff-invitation-email-error { padding: 0.65rem 0.75rem; border: 1px solid #f0dfbd; border-radius: 0.7rem; background: #fffaf1; color: #805d2d; font-size: 0.66rem; line-height: 1.5; overflow-wrap: anywhere; }
+@media (max-width: 639px) {
+  .staff-invitation-card-badges { justify-content: flex-start; }
+}
