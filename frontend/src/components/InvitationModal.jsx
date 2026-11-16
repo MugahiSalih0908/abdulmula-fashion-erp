@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -14,7 +14,8 @@ import {
   ShieldCheck, Trash2, Users, X
 } from 'lucide-react';
 import Badge from './ui/Badge';
-import './pages/staffWorkspace.css';
+import Button from './ui/Button';
+import '../pages/staffWorkspace.css';
 
 function statusVariant(status) {
   if (status === 'accepted') return 'success';
@@ -36,14 +37,55 @@ export default function InvitationModal({ isOpen, onClose }) {
   const queryClient = useQueryClient();
   const email = watch('email');
   const [tab, setTab] = useState('create');
+  const panelRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen) return undefined;
+
+    const previouslyFocused = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const panel = panelRef.current;
+    const firstFocusable = panel?.querySelector(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    );
+    firstFocusable?.focus();
+
     const handleKeyDown = event => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key !== 'Tab' || !panel) return;
+      const focusable = Array.from(panel.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+      ));
+      if (!focusable.length) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
     };
+
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (previouslyFocused && typeof previouslyFocused.focus === 'function') previouslyFocused.focus();
+    };
   }, [isOpen, onClose]);
 
   const invitationQuery = useQuery({
@@ -95,11 +137,12 @@ export default function InvitationModal({ isOpen, onClose }) {
       className="staff-modal-overlay"
       onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}
     >
-      <section className="staff-modal-panel" role="dialog" aria-modal="true" aria-labelledby="staff-invitation-title" aria-describedby="staff-invitation-description">
+      <section ref={panelRef} tabIndex={-1} className="staff-modal-panel" role="dialog" aria-modal="true" aria-labelledby="staff-invitation-title" aria-describedby="staff-invitation-description">
         <header className="staff-modal-header">
           <div className="staff-modal-header-copy">
             <span>TEAM ACCESS</span>
             <h2 id="staff-invitation-title">Manage invitations</h2>
+            <p id="staff-invitation-description" className="sr-only">Create, review, resend or remove staff invitations.</p>
           </div>
           <button type="button" className="staff-modal-close" onClick={onClose} aria-label="Close invitation manager"><X size={19} aria-hidden="true" /></button>
         </header>
@@ -112,7 +155,6 @@ export default function InvitationModal({ isOpen, onClose }) {
         <div className="staff-modal-content">
           {tab === 'create' ? (
             <div id="staff-invite-create-panel" role="tabpanel" aria-labelledby="staff-invite-create-tab">
-              <p id="staff-invitation-description" className="sr-only">Send a secure invitation to a new staff member.</p>
               <form onSubmit={handleSubmit(data => createMutation.mutate({
                 ...data,
                 email: data.email.trim()
