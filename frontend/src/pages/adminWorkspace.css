@@ -47,6 +47,8 @@
 .admin-settings-profile-status { display: inline-flex; align-items: center; gap: 0.35rem; color: rgb(255 255 255 / 0.72); font-size: 0.7rem; }
 .admin-settings-profile-status span { width: 0.42rem; height: 0.42rem; border-radius: 50%; background: #65c793; box-shadow: 0 0 0 3px rgb(101 199 147 / 0.13); }
 .admin-settings-profile-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.55rem; }
+.admin-settings-access-note { max-width: 20rem; display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.7rem 0.8rem; border: 1px solid rgb(255 255 255 / 0.16); border-radius: 0.8rem; background: rgb(255 255 255 / 0.07); color: rgb(255 255 255 / 0.78); font-size: 0.68rem; line-height: 1.5; }
+.admin-settings-access-note svg { flex: 0 0 auto; margin-top: 0.05rem; color: #d9bd8d; }
 .admin-settings-profile-actions button { border-color: rgb(255 255 255 / 0.18) !important; background: rgb(255 255 255 / 0.08) !important; color: #fff !important; }
 .admin-settings-profile-actions button:hover { background: rgb(255 255 255 / 0.15) !important; }
 
