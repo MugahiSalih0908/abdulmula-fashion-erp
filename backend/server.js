@@ -93,7 +93,9 @@ app.use(express.json({ limit:'10mb' }));
 app.use(express.urlencoded({ extended:true }));
 
 // ── Logging ───────────────────────────────────────────────────
-app.use(morgan('combined'));
+const { redactRequestPath } = require('./utils/safeRequestPath');
+morgan.token('safe-url', req => redactRequestPath(req));
+app.use(morgan(':remote-addr - [:date[clf]] ":method :safe-url HTTP/:http-version" :status :res[content-length]'));
 
 // ── Health check ──────────────────────────────────────────────
 // ── Root route ───────────────────────────────────────────────

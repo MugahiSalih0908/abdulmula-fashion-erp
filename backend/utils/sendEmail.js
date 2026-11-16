@@ -207,6 +207,17 @@ const invitationTemplate = ({ email, role, inviteUrl, expiresIn = 24 }) => ({
   `)
 });
 
+const testTemplate = ({ name }) => ({
+  subject: 'Abdulmula Fashion ERP — Email delivery test',
+  html: baseLayout(`
+    <h1>Email delivery test</h1>
+    <p>Hello <strong>${escapeHtml(name)}</strong>,</p>
+    <p>This message confirms that the configured Abdulmula Fashion ERP email sender accepted a test message.</p>
+    <div class="info-box"><p><strong>Purpose:</strong> Verify the sender configuration and delivery path.</p></div>
+    <p style="font-size:13px;color:#888;">No account action is required.</p>
+  `)
+});
+
 // ─────────────────────────────────────────────────────────────
 // Central Resend sender with persistent delivery tracking
 // ─────────────────────────────────────────────────────────────
@@ -370,5 +381,6 @@ module.exports = {
     reset:           resetTemplate,
     passwordChanged: passwordChangedTemplate,
     invitation:      invitationTemplate,
+    test:             testTemplate,
   },
 };

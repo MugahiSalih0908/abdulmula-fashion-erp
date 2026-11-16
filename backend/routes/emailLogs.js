@@ -1,13 +1,45 @@
 const express = require('express');
+const crypto = require('crypto');
 const EmailLog = require('../models/EmailLog');
 const { protect, authorize } = require('../middleware/auth');
 const { getEmailConfig } = require('../utils/emailConfig');
+const { sendEmail, templates } = require('../utils/sendEmail');
 
 const router = express.Router();
 router.use(protect, authorize('admin'));
 
 const VALID_STATUSES = ['queued', 'sending', 'sent', 'delivered', 'delivery_delayed', 'bounced', 'complained', 'failed', 'unknown'];
 const VALID_CATEGORIES = ['staff_activation', 'staff_invitation', 'password_reset', 'password_changed', 'security_alert', 'business_notification', 'system'];
+
+router.post('/test', async (req, res, next) => {
+  try {
+    const config = getEmailConfig();
+    if (config.mode === 'disabled') {
+      return res.status(403).json({ success: false, message: 'Email delivery is disabled.' });
+    }
+    if (!req.user.email) {
+      return res.status(400).json({ success: false, message: 'The signed-in administrator has no email address.' });
+    }
+
+    const result = await sendEmail({
+      to: req.user.email,
+      ...templates.test({ name: req.user.name }),
+      category: 'system',
+      idempotencyKey: `admin-email-test:${req.user._id}:${crypto.randomUUID()}`,
+      createdBy: req.user._id,
+      relatedEntity: 'User',
+      relatedEntityId: req.user._id
+    });
+
+    return res.status(202).json({
+      success: true,
+      message: 'Test email accepted by the configured provider.',
+      data: { status: result.status, id: result.id }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get('/', async (req, res, next) => {
   try {

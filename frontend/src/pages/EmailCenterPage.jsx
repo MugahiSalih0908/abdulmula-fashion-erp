@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import { AlertCircle, AlertTriangle, CheckCircle2, Clock3, Mail, RefreshCw, Search, Send, ShieldCheck } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import api from '../services/api';
@@ -54,6 +55,18 @@ export default function EmailCenterPage() {
   const [category, setCategory] = useState('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const queryClient = useQueryClient();
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post('/email-logs/test');
+      return response.data;
+    },
+    onSuccess: result => {
+      toast.success(result.message || 'Test email accepted by provider.');
+      queryClient.invalidateQueries(['email-logs']);
+    },
+    onError: error => toast.error(error?.response?.data?.message || 'Test email could not be sent.')
+  });
   const query = useQuery({
     queryKey: ['email-logs', status, category, search, page],
     queryFn: async () => {
@@ -71,6 +84,8 @@ export default function EmailCenterPage() {
   const summary = query.data?.summary || {};
   const total = Number(query.data?.total || 0);
   const pages = Math.max(1, Math.ceil(total / 25));
+  const deliveryConfig = query.data?.emailConfig || {};
+  const canSendTest = deliveryConfig.providerReady && (deliveryConfig.mode === 'test' || (deliveryConfig.mode === 'live' && deliveryConfig.domainVerified));
   const cards = useMemo(() => [
     { label: 'Accepted by provider', value: summary.sent, icon: Send, tone: 'text-sky-700' },
     { label: 'Delivered', value: summary.delivered, icon: CheckCircle2, tone: 'text-emerald-700' },
@@ -81,6 +96,11 @@ export default function EmailCenterPage() {
   return (
     <main className="space-y-5 p-4 pb-10 sm:space-y-6 sm:p-6 lg:p-7">
       <PageHeader title="Email Center" sub="Transactional email activity and delivery status" />
+      <div className="flex justify-end">
+        <button type="button" onClick={() => testMutation.mutate()} disabled={!canSendTest || testMutation.isPending} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--color-primary)] px-4 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
+          <Send size={14} aria-hidden="true" />{testMutation.isPending ? 'Sending test…' : 'Send test to my email'}
+        </button>
+      </div>
       <div className="rounded-2xl border border-[var(--color-gold-light)] bg-[#fbf8f1] p-4">
         <div className="flex items-start gap-3">
           <ShieldCheck size={19} className="mt-0.5 shrink-0 text-[#8b6b35]" aria-hidden="true" />
@@ -93,10 +113,10 @@ export default function EmailCenterPage() {
             </div>
             <p className="mt-1 text-xs leading-5 text-[var(--color-text-secondary)]">
               {query.data?.emailConfig?.mode === 'live'
-                ? 'Live sending mode is enabled. Resend must show your sender domain as verified.'
+                ? 'Live sending mode is enabled. The test button sends only to the signed-in administrator.'
                 : query.data?.emailConfig?.mode === 'test'
                   ? 'Test mode is active. Messages can be sent only to the exact recipients in the backend test allow-list.'
-                  : 'Sending is disabled by default. No staff or customer email will be sent until test or verified live mode is deliberately enabled.'}
+                  : 'Sending is disabled by default. No staff or customer email will be sent until test or verified live mode is deliberately enabled. The test button sends only to the signed-in administrator.'}
             </p>
             <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
               Resend credentials: {query.data?.emailConfig?.providerReady ? 'configured' : 'not configured'} · Sender: {query.data?.emailConfig?.senderConfigured ? 'configured' : 'not configured'} · Verified domain: {query.data?.emailConfig?.domainVerified ? 'confirmed in environment' : 'not confirmed'}
