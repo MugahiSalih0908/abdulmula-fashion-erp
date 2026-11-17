@@ -1,6 +1,6 @@
 // src/pages/SettingsPage.jsx – v3 with currency selector
 
-import { useState }    from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm }     from 'react-hook-form';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -9,6 +9,12 @@ import api             from '../services/api';
 import useAuthStore    from '../store/authStore';
 import useSettingsStore from '../store/settingsStore';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { useRole } from '../hooks/useRole';
+import {
+  approveOfflinePriceConflict,
+  getOfflineSales,
+  rejectOfflinePriceConflict
+} from '../offline/syncManager';
 import PageHeader from '../components/ui/PageHeader';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -16,7 +22,7 @@ import CardBody from '../components/ui/CardBody';
 import Badge from '../components/ui/Badge';
 import Sheet from '../components/ui/Sheet';
 import {
-  User, Lock, Wifi, WifiOff, ChevronRight, X,
+  User, Lock, Wifi, WifiOff, ChevronRight, X, AlertTriangle, CheckCircle,
   Eye, EyeOff, AlertCircle, LogOut, RefreshCw,
   DollarSign, ArrowLeftRight, Info
 } from 'lucide-react';
@@ -26,8 +32,54 @@ export default function SettingsPage() {
   const logout   = useAuthStore(s => s.logout);
   const navigate = useNavigate();
   const { isOnline, pendingCount, isSyncing } = useOnlineStatus();
+  const { isManager } = useRole();
   const { currency, setCurrency, usdToSsp, fmt } = useSettingsStore();
   const [sheet, setSheet] = useState(null);
+  const [offlineSales, setOfflineSales] = useState([]);
+  const [resolvingSaleId, setResolvingSaleId] = useState(null);
+
+  useEffect(() => {
+    getOfflineSales().then(setOfflineSales);
+  }, [pendingCount]);
+
+  const handleApproveOfflineSale = async (saleId) => {
+    const sale = offlineSales.find(item => item.id === saleId);
+    const priceLines = (sale?.syncConflict?.items || []).map(item =>
+      `${item.productName || item.productId} — qty ${item.quantity}, offline quote ${formatPrice(item.offlineQuotedUnitPrice)}, current catalog ${formatPrice(item.currentUnitPriceAtConflict)}`
+    ).join('\n');
+    if (!window.confirm(
+      `Approve this sale at its offline quoted prices?\n\n${priceLines}\n\nThe server will re-check current catalog prices before saving.`
+    )) return;
+    setResolvingSaleId(saleId);
+    try {
+      const invoice = await approveOfflinePriceConflict(saleId);
+      toast.success(`Offline sale ${invoice.invoiceNumber} approved and synced.`);
+      setOfflineSales(await getOfflineSales());
+    } catch (error) {
+      getOfflineSales().then(setOfflineSales);
+      toast.error(error?.response?.data?.message || error.message || 'Could not resolve offline sale.');
+    } finally {
+      setResolvingSaleId(null);
+    }
+  };
+
+  const handleRejectOfflineSale = async (saleId) => {
+    if (!isOnline) {
+      toast.error('Connect to the internet to record a manager rejection.');
+      return;
+    }
+    if (!window.confirm('Reject this offline sale? It will be marked terminal on this device and will never sync automatically.')) return;
+    setResolvingSaleId(saleId);
+    try {
+      const resolution = await rejectOfflinePriceConflict(saleId);
+      toast.success(`Offline sale rejected by ${resolution.decidedBy}.`);
+      setOfflineSales(await getOfflineSales());
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error.message || 'Could not reject offline sale.');
+    } finally {
+      setResolvingSaleId(null);
+    }
+  };
 
   const handleLogout = async () => {
     if (!window.confirm('Log out of Abdulmula Fashion ERP?')) return;
@@ -102,6 +154,69 @@ export default function SettingsPage() {
         </Card>
       )}
 
+      {offlineSales.some(sale => ['blocked', 'rejected'].includes(sale.syncStatus)) && (
+        <Card className="border-amber-300">
+          <CardBody className="p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={18} className="text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold text-gray-900">Offline sales needing review</p>
+                <p className="text-xs text-gray-600">
+                  Pending conflicts do not retry automatically. Rejected conflicts remain visible here and are terminal.
+                </p>
+              </div>
+            </div>
+            {offlineSales.filter(sale => ['blocked', 'rejected'].includes(sale.syncStatus)).map(sale => (
+              <div key={sale.id} className="border-t border-amber-200 pt-3 space-y-2">
+                <p className="text-sm font-semibold text-gray-900">
+                  {sale.syncStatus === 'rejected' ? 'Rejected offline sale' : 'Price conflict'} · {sale.offlineId}
+                </p>
+                {sale.syncStatus === 'rejected' ? (
+                  <>
+                    <p className="text-xs text-gray-700">
+                      Rejected by {sale.resolution?.decidedBy || 'manager/admin'} on {formatDate(sale.resolution?.decidedAt)}.
+                      This sale is retained for audit visibility and will not sync.
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      Client-reported saved time (unverified): {formatDate(sale.createdAt)}
+                    </p>
+                    <OfflineConflictPrices sale={sale} />
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-amber-800">{sale.syncError}</p>
+                    <p className="text-xs text-gray-600">
+                      Client-reported saved time (unverified): {formatDate(sale.createdAt)}
+                    </p>
+                    <OfflineConflictPrices sale={sale} />
+                    {isManager && sale.syncConflict?.items?.length > 0 && (
+                      <div className="space-y-2">
+                        <Button
+                          onClick={() => handleApproveOfflineSale(sale.id)}
+                          disabled={resolvingSaleId === sale.id || !isOnline}
+                          className="w-full"
+                        >
+                          <CheckCircle size={16} className="mr-2" />
+                          {resolvingSaleId === sale.id ? 'Approving…' : 'Approve offline prices & sync'}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          onClick={() => handleRejectOfflineSale(sale.id)}
+                          disabled={resolvingSaleId === sale.id || !isOnline}
+                          className="w-full"
+                        >
+                          {resolvingSaleId === sale.id ? 'Recording…' : 'Reject & keep as terminal record'}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+      )}
+
       {/* Account settings */}
       <Card>
         <CardBody className="p-0">
@@ -130,6 +245,39 @@ export default function SettingsPage() {
       {sheet === 'password' && <Sheet open={true} title="Change Password" onClose={() => setSheet(null)}><ChangePasswordForm onClose={() => setSheet(null)}/></Sheet>}
       {sheet === 'rate'     && <Sheet open={true} title="Exchange Rate"   onClose={() => setSheet(null)}><RateForm onClose={() => setSheet(null)}/></Sheet>}
       {sheet === 'about'    && <Sheet open={true} title="About"           onClose={() => setSheet(null)}><AboutContent/></Sheet>}
+    </div>
+  );
+}
+
+function formatPrice(value) {
+  return Number.isFinite(value) ? `$${value.toFixed(2)}` : 'Unavailable';
+}
+
+function formatDate(value) {
+  if (!value) return 'unknown';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+}
+
+function OfflineConflictPrices({ sale }) {
+  return (
+    <div className="rounded-lg bg-gray-50 divide-y divide-gray-200">
+      {(sale.syncConflict?.items || []).map((item, index) => (
+        <div key={`${item.productId}-${index}`} className="p-2 text-xs">
+          <p className="font-semibold text-gray-900">
+            {item.productName || item.productId} · quantity {item.quantity}
+          </p>
+          <p className="text-gray-700">
+            Offline quoted price: <strong>{formatPrice(item.offlineQuotedUnitPrice)}</strong>
+          </p>
+          <p className="text-gray-700">
+            Current catalog price at last server check: <strong>{formatPrice(item.currentUnitPriceAtConflict)}</strong>
+          </p>
+        </div>
+      ))}
+      {!sale.syncConflict?.items?.length && (
+        <p className="p-2 text-xs text-gray-600">Price comparison details are unavailable for this older queued record.</p>
+      )}
     </div>
   );
 }

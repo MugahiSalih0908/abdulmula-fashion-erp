@@ -20,6 +20,7 @@ import InvitePage              from './pages/InvitePage';
 import DashboardPage           from './pages/DashboardPage';
 import POSPage                 from './pages/POSPage';
 import ProductsPage            from './pages/ProductsPage';
+import OutOfStockPage          from './pages/OutOfStockPage';
 import CustomersPage           from './pages/CustomersPage';
 import ExpensesPage            from './pages/ExpensesPage';
 import ReportsPage             from './pages/ReportsPage';
@@ -69,6 +70,7 @@ useEffect(() => {
             <Route path="/dashboard"       element={<DashboardPage />} />
             <Route path="/pos"             element={<POSPage />} />
             <Route path="/products"        element={<ProductsPage />} />
+            <Route path="/out-of-stock"  element={<OutOfStockPage />} />
             <Route path="/customers"       element={<CustomersPage />} />
             <Route path="/settings"        element={<SettingsPage />} />
 

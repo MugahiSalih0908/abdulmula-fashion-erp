@@ -32,7 +32,7 @@ export default function CashClosingPage() {
   const { fmt, setCurrency, currency, usdToSsp, setRate } = useSettingsStore();
   const queryClient = useQueryClient();
 
-  const { data: today, isLoading } = useQuery({
+  const { data: today, isLoading, isError, refetch } = useQuery({
     queryKey: ['cashbook-today'],
     queryFn:  async () => { const { data } = await api.get('/cashbook/today'); return data.data; },
     refetchInterval: 30000,
@@ -51,8 +51,19 @@ export default function CashClosingPage() {
 
   const approveMutation = useMutation({
     mutationFn: (id) => api.post(`/cashbook/approve/${id}`),
-    onSuccess:  (res) => { queryClient.invalidateQueries(['cash-closings']); queryClient.invalidateQueries(['cashbook-today']); toast.success(res.data.message); },
+    onSuccess:  (res) => { queryClient.invalidateQueries({ queryKey: ['cash-closings'] }); queryClient.invalidateQueries({ queryKey: ['cashbook-today'] }); toast.success(res.data.message); },
     onError:    (e)   => toast.error(e?.response?.data?.message || 'Approval failed.'),
+  });
+
+  const openMutation = useMutation({
+    mutationFn: () => api.post('/cashbook/open'),
+    onSuccess: (res) => {
+      queryClient.setQueryData(['cashbook-today'], res.data.data);
+      queryClient.invalidateQueries({ queryKey: ['cashbook-history'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-cashbook-today'] });
+      toast.success(res.data.message);
+    },
+    onError: (e) => toast.error(e?.response?.data?.message || 'Failed to open cashbook.'),
   });
 
   const netCash = (today?.openingCash||0) + (today?.livesCashSales||0) - (today?.liveExpenses||0);
@@ -69,7 +80,17 @@ export default function CashClosingPage() {
                     className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-600">
               Rate: 1 USD = {usdToSsp?.toLocaleString()} SSP
             </button>
-            {can.closeCashbook && !today?.isClosed && (
+            {can.closeCashbook && !isLoading && !isError && !today && (
+              <Button
+                variant="primary"
+                size="sm"
+                loading={openMutation.isPending}
+                onClick={() => openMutation.mutate()}
+              >
+                Open Today&apos;s Cashbook
+              </Button>
+            )}
+            {can.closeCashbook && today && !today.isClosed && (
               <button onClick={() => setShowClose(true)}
                       className="flex items-center gap-1.5 text-white px-3 py-2.5 rounded-xl font-semibold text-sm"
                       style={{ background:'#111' }}>
@@ -90,16 +111,35 @@ export default function CashClosingPage() {
         ))}
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3">
-        <KpiCard icon={<BookOpen size={18}/>}     label="Opening Cash"   loading={isLoading} value={fmt(today?.openingCash||0)}     color="blue"/>
-        <KpiCard icon={<TrendingUp size={18}/>}   label="Cash Sales"     loading={isLoading} value={fmt(today?.livesCashSales||0)}  color="green"/>
-        <KpiCard icon={<TrendingDown size={18}/>} label="Expenses"       loading={isLoading} value={fmt(today?.liveExpenses||0)}    color="red"/>
-        <KpiCard icon={<DollarSign size={18}/>}   label="Expected Close" loading={isLoading} value={fmt(netCash)}                  color="gold"/>
-      </div>
+      {isError ? (
+        <Card role="alert">
+          <CardBody className="p-4 flex items-center justify-between gap-3">
+            <p className="text-sm text-gray-700">Today&apos;s cashbook could not be loaded.</p>
+            <Button variant="secondary" size="sm" onClick={() => refetch()}>Try again</Button>
+          </CardBody>
+        </Card>
+      ) : today ? (
+        <div className="grid grid-cols-2 gap-3">
+          <KpiCard icon={<BookOpen size={18}/>}     label="Opening Cash"   loading={isLoading} value={fmt(today.openingCash)}     color="blue"/>
+          <KpiCard icon={<TrendingUp size={18}/>}   label="Cash Sales"     loading={isLoading} value={fmt(today.livesCashSales)}  color="green"/>
+          <KpiCard icon={<TrendingDown size={18}/>} label="Expenses"       loading={isLoading} value={fmt(today.liveExpenses)}    color="red"/>
+          <KpiCard icon={<DollarSign size={18}/>}   label="Expected Close" loading={isLoading} value={fmt(netCash)}              color="gold"/>
+        </div>
+      ) : !isLoading ? (
+        <Card>
+          <CardBody className="p-4">
+            <p className="font-semibold text-sm text-gray-900">No cashbook is open for today.</p>
+            <p className="text-sm text-gray-600 mt-1">Open today&apos;s cashbook to begin recording the daily cash position.</p>
+          </CardBody>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          {[0, 1, 2, 3].map(key => <KpiCard key={key} label="Loading cashbook" loading />)}
+        </div>
+      )}
 
       {/* Today's closing status */}
-      {todayClosing && (
+      {today && todayClosing && (
         <Card className={`border-l-4 ${
           todayClosing.status==='approved' ? 'border-l-emerald-500 bg-emerald-50' :
           todayClosing.status==='disputed' ? 'border-l-red-500 bg-red-50' :
@@ -196,7 +236,7 @@ export default function CashClosingPage() {
       <div className="h-4"/>
 
       {/* Close Day Sheet */}
-      <Sheet open={showClose} title="Close Day" subtitle="Enter actual cash in register" onClose={() => setShowClose(false)}>
+      <Sheet open={showClose && Boolean(today)} title="Close Day" subtitle="Enter actual cash in register" onClose={() => setShowClose(false)}>
         <CloseDayForm netCash={netCash} fmt={fmt} openingCash={today?.openingCash}
                       onClose={() => setShowClose(false)}
                       onSaved={() => { queryClient.invalidateQueries(['cashbook-today']); queryClient.invalidateQueries(['cash-closings']); setShowClose(false); }} />
