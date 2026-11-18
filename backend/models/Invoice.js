@@ -10,7 +10,11 @@ const lineItemSchema = new mongoose.Schema({
   quantity:    { type: Number, required: true, min: 1 },
   unitPrice:   { type: Number, required: true, min: 0 },
   discount:    { type: Number, default: 0, min: 0 },
-  lineTotal:   { type: Number, required: true, min: 0 }
+  lineTotal:   { type: Number, required: true, min: 0 },
+  // Trusted server-side product cost captured at invoice creation.
+  // Missing/zero product costs stay uncosted; historical invoices are not backfilled.
+  unitCost:    { type: Number, min: 0 },
+  costKnown:   { type: Boolean, default: false }
 }, { _id: false });
 
 const invoiceSchema = new mongoose.Schema({

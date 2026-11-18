@@ -12,6 +12,7 @@ const AuditLog      = require('../models/AuditLog');
 const OfflineConflictDecision = require('../models/OfflineConflictDecision');
 const { protect, authorize } = require('../middleware/auth');
 const { log }       = require('../utils/auditLogger');
+const { buildLineCostSnapshot } = require('../utils/costSnapshot');
 const invoiceCalculations = import('../../shared/invoiceCalculations.mjs');
 const {
   assertApprovedPayloadMatchesOriginal,
@@ -197,7 +198,8 @@ router.post('/', protect, async (req, res, next) => {
         quantity:    calculatedLine.quantity,
         unitPrice:   calculatedLine.unitPrice,
         discount:    calculatedLine.discount,
-        lineTotal:   calculatedLine.lineTotal
+        lineTotal:   calculatedLine.lineTotal,
+        ...buildLineCostSnapshot(product)
       });
 
       if (calculatedLine.hasOverride) {
