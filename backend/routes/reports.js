@@ -7,6 +7,7 @@ const Product  = require('../models/Product');
 const Expense  = require('../models/Expense');
 const Customer = require('../models/Customer');
 const Supplier = require('../models/Supplier');
+const { buildGrossProfitSummary } = require('../utils/grossProfit');
 const { protect, authorize } = require('../middleware/auth');
 
 router.use(protect, authorize('admin','manager'));
@@ -17,17 +18,66 @@ router.get('/summary', async (req, res, next) => {
     const start = startDate ? new Date(startDate) : (() => { const d=new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })();
     const end   = endDate   ? (() => { const d=new Date(endDate); d.setHours(23,59,59,999); return d; })() : new Date();
     const dateFilter = { date: { $gte: start, $lte: end } };
-    const [salesAgg, expAgg, byPayment, topProducts, creditCustomers, supplierDebt] = await Promise.all([
+    const [salesAgg, expAgg, byPayment, topProducts, creditCustomers, supplierDebt, costAgg] = await Promise.all([
       Invoice.aggregate([{ $match: dateFilter }, { $group: { _id:null, revenue:{ $sum:'$grandTotal' }, count:{ $sum:1 }, discount:{ $sum:'$discountTotal' } } }]),
       Expense.aggregate([{ $match: dateFilter }, { $group: { _id:null, total:{ $sum:'$amount' } } }]),
       Invoice.aggregate([{ $match: dateFilter }, { $group: { _id:'$paymentMethod', total:{ $sum:'$grandTotal' }, count:{ $sum:1 } } }]),
       Invoice.aggregate([{ $match: dateFilter }, { $unwind:'$items' }, { $group: { _id:'$items.product', name:{ $first:'$items.productName' }, qty:{ $sum:'$items.quantity' }, revenue:{ $sum:'$items.lineTotal' } } }, { $sort:{ qty:-1 } }, { $limit:10 }]),
       Customer.aggregate([{ $group: { _id:null, total:{ $sum:'$creditBalance' } } }]),
-      Supplier.aggregate([{ $group: { _id:null, total:{ $sum:'$debtBalance' } } }])
+      Supplier.aggregate([{ $group: { _id:null, total:{ $sum:'$debtBalance' } } }]),
+      Invoice.aggregate([
+        { $match: dateFilter },
+        { $project: {
+          netSales: { $sum: { $map: { input: { $ifNull: ['$items', []] }, as: 'line', in: { $ifNull: ['$line.lineTotal', 0] } } } },
+          costKnownForAllItems: { $allElementsTrue: { $map: {
+            input: { $ifNull: ['$items', []] },
+            as: 'line',
+            in: { $and: [
+              { $eq: [{ $ifNull: ['$line.costKnown', false] }, true] },
+              { $gte: [{ $ifNull: ['$line.unitCost', -1] }, 0] }
+            ] }
+          } } },
+          lineCost: { $sum: { $map: {
+            input: { $ifNull: ['$items', []] },
+            as: 'line',
+            in: { $cond: [
+              { $eq: [{ $ifNull: ['$line.costKnown', false] }, true] },
+              { $multiply: [{ $ifNull: ['$line.unitCost', 0] }, { $ifNull: ['$line.quantity', 0] }] },
+              0
+            ] }
+          } } }
+        } },
+        { $group: {
+          _id: null,
+          netSales: { $sum: '$netSales' },
+          costOfGoodsSold: { $sum: { $cond: ['$costKnownForAllItems', '$lineCost', 0] } },
+          costedInvoiceCount: { $sum: { $cond: ['$costKnownForAllItems', 1, 0] } }
+        } }
+      ])
     ]);
-    const revenue  = salesAgg[0]?.revenue || 0;
-    const expenses = expAgg[0]?.total     || 0;
-    res.json({ success:true, data: { period:{ start, end }, revenue, expenses, profit: revenue-expenses, salesCount: salesAgg[0]?.count||0, totalDiscount: salesAgg[0]?.discount||0, byPayment, topProducts, totalCreditOwed: creditCustomers[0]?.total||0, totalSupplierDebt: supplierDebt[0]?.total||0 } });
+    const revenue = salesAgg[0]?.revenue || 0;
+    const expenses = expAgg[0]?.total || 0;
+    const salesCount = salesAgg[0]?.count || 0;
+    const grossProfit = buildGrossProfitSummary({
+      salesCount,
+      costedInvoiceCount: costAgg[0]?.costedInvoiceCount || 0,
+      netSales: costAgg[0]?.netSales || 0,
+      costOfGoodsSold: costAgg[0]?.costOfGoodsSold || 0
+    });
+    res.json({ success:true, data: {
+      period: { start, end },
+      revenue,
+      expenses,
+      // Kept for compatibility; this is before product cost and is not net profit.
+      profit: revenue - expenses,
+      salesCount,
+      totalDiscount: salesAgg[0]?.discount || 0,
+      byPayment,
+      topProducts,
+      totalCreditOwed: creditCustomers[0]?.total || 0,
+      totalSupplierDebt: supplierDebt[0]?.total || 0,
+      ...grossProfit
+    } });
   } catch (err) { next(err); }
 });
 
