@@ -49,20 +49,20 @@ export default function CashbookPage() {
   const netCash = (today?.openingCash || 0) + (today?.livesCashSales || 0) - (today?.liveExpenses || 0);
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="space-y-5 p-4 pb-8 sm:p-6 lg:p-7">
       <PageHeader
         title="Daily Cashbook"
         sub={new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}
         action={
           <div className="flex gap-2">
             <button onClick={() => setShowRate(true)}
-                    className="p-2.5 bg-white border border-gray-200 rounded-xl text-gray-600">
+                    className="p-2.5 bg-white border border-[var(--color-border)] rounded-xl text-[var(--color-text-secondary)] hover:border-[var(--color-gold)]">
               <ArrowLeftRight size={18}/>
             </button>
             {!today?.isClosed && (
               <button onClick={() => setShowClose(true)}
                       className="flex items-center gap-1.5 text-white px-3 py-2.5 rounded-xl font-semibold text-sm"
-                      style={{ background: '#111' }}>
+                      style={{ background: '#111', border: '1px solid #986d2c' }}>
                 <Lock size={15}/> Close Day
               </button>
             )}
@@ -71,11 +71,11 @@ export default function CashbookPage() {
       />
 
       {/* Currency toggle */}
-      <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
+      <div className="flex bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-xl p-1 gap-1">
         {['USD','SSP'].map(c => (
           <button key={c} onClick={() => setCurrency(c)}
                   className={`flex-1 py-2 rounded-md text-sm font-semibold transition-all ${
-                    currency === c ? 'bg-white text-emerald-600 shadow-md' : 'text-gray-600'
+                    currency === c ? 'bg-[#111111] text-[#dfc58f] shadow-md' : 'text-[var(--color-text-secondary)] hover:bg-white'
                   }`}>
             {c}
           </button>
@@ -121,18 +121,18 @@ export default function CashbookPage() {
       {/* History */}
       <Card>
         <CardBody className="p-0">
-          <div className="px-4 pt-4 pb-2 border-b border-gray-100">
-            <p className="font-semibold text-sm text-gray-900">Cashbook History</p>
+          <div className="px-4 pt-4 pb-2 border-b border-[var(--color-border-light)]">
+            <p className="font-semibold text-sm text-[var(--color-text)]">Cashbook History</p>
           </div>
           {history.length === 0 ? (
-            <div className="text-center py-8 text-gray-400 text-sm">No history yet</div>
+            <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">No history yet</div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-[var(--color-border-light)]">
               {history.map(entry => (
-                <div key={entry._id} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50 transition">
+                <div key={entry._id} className="px-4 py-3 flex items-center justify-between hover:bg-[var(--color-bg-secondary)] transition">
                   <div>
                     <p className="font-semibold text-sm text-gray-900">{entry.date}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-[var(--color-text-muted)]">
                       Open: {fmt(entry.openingCash)}
                       {entry.isClosed && ` → Close: ${fmt(entry.closingCash)}`}
                     </p>
@@ -168,16 +168,16 @@ function CloseDayForm({ onClose, onSaved, isPending, openingCash, netCash, fmt }
   const { register, handleSubmit } = useForm({ defaultValues: { closingCash: netCash?.toFixed(2) || '' } });
   return (
     <form onSubmit={handleSubmit(onSaved)} className="px-5 py-4 space-y-4">
-      <Card className="bg-gray-50">
+      <Card className="bg-[var(--color-bg-secondary)]">
         <CardBody className="p-3 space-y-2">
-          <div className="flex justify-between text-sm"><span className="text-gray-600">Opening Cash</span><span className="font-semibold text-gray-900">{fmt(openingCash || 0)}</span></div>
+          <div className="flex justify-between text-sm"><span className="text-[var(--color-text-secondary)]">Opening Cash</span><span className="font-semibold text-gray-900">{fmt(openingCash || 0)}</span></div>
           <div className="flex justify-between text-sm"><span className="text-gray-600">Expected Closing</span><span className="font-bold text-emerald-700">{fmt(netCash || 0)}</span></div>
         </CardBody>
       </Card>
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">Actual Closing Cash ($)</label>
         <input type="number" step="0.01" min="0" {...register('closingCash', { required:true, valueAsNumber:true })}
-               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition" placeholder="0.00"/>
+               className="w-full border border-[var(--color-border)] rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-gold)] focus:border-[var(--color-gold)] transition" placeholder="0.00"/>
       </div>
       <div>
         <label className="text-xs font-semibold text-gray-600 block mb-1.5">Note</label>

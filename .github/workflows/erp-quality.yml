@@ -1,0 +1,76 @@
+name: ERP quality checks
+
+on:
+  push:
+    branches:
+      - main
+      - release/premium-workspaces-contrast
+      - feature/email-center-infrastructure
+      - ui/phase-6-invoice-history
+      - ui/phase-7-customer-management
+      - ui/phase-8-supplier-management
+      - ui/phase-9-financial-management
+      - ui/phase-10-purchase-orders
+      - ui/phase-11-reports-analytics
+      - ui/phase-12-responsive-accessibility
+      - ui/phase-13-admin-settings-audit-polish
+      - ui/phase-14-authentication-experience
+      - ui/phase-15-staff-cashbook-polish
+      - perf/phase-17-mobile-performance
+      - fix/phase-16-email-invitation-delivery
+      - perf/phase-17-mobile-performance
+  pull_request:
+    branches:
+      - main
+      - ui/phase-5-premium-pos-products-cart-staff
+      - feature/email-center-infrastructure
+      - ui/phase-6-invoice-history
+      - ui/phase-7-customer-management
+      - ui/phase-8-supplier-management
+      - ui/phase-9-financial-management
+      - ui/phase-10-purchase-orders
+      - ui/phase-11-reports-analytics
+      - ui/phase-12-responsive-accessibility
+      - ui/phase-13-admin-settings-audit-polish
+      - ui/phase-14-authentication-experience
+      - ui/phase-15-staff-cashbook-polish
+
+jobs:
+  backend:
+    name: Backend syntax and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+      - name: Check backend JavaScript syntax
+        run: find backend -type f -name '*.js' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 node --check
+      - name: Run backend tests
+        working-directory: backend
+        run: npm test
+
+  frontend:
+    name: Frontend tests and production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: node --test src/pages/*.test.mjs src/store/*.test.js
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build

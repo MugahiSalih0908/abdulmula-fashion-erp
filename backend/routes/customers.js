@@ -6,16 +6,78 @@ const Customer = require('../models/Customer');
 const Invoice  = require('../models/Invoice');
 const { protect, authorize } = require('../middleware/auth');
 const { log }  = require('../utils/auditLogger');
+const { getPaginationOptions, escapeRegExp } = require('../utils/queryPagination');
 
 router.get('/', protect, async (req, res, next) => {
   try {
     const { search, hasCredit } = req.query;
     const filter = { isDeleted: false };
-    if (search) filter.$text = { $search: search };
+
+    if (search && String(search).trim()) {
+      const pattern = new RegExp(escapeRegExp(String(search).trim()), 'i');
+      filter.$or = [
+        { name: pattern },
+        { phone: pattern },
+        { email: pattern },
+        { address: pattern }
+      ];
+    }
     if (hasCredit === 'true') filter.creditBalance = { $gt: 0 };
 
-    const customers = await Customer.find(filter).sort({ name: 1 });
-    res.json({ success: true, data: customers });
+    const pagination = getPaginationOptions(req.query);
+    if (!pagination) {
+      const customers = await Customer.find(filter).sort({ name: 1 });
+      return res.json({ success: true, data: customers });
+    }
+
+    const [customers, total, summaryRows] = await Promise.all([
+      Customer.find(filter)
+        .select('name phone email address creditBalance totalPurchases createdAt updatedAt')
+        .sort({ name: 1, _id: 1 })
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean(),
+      Customer.countDocuments(filter),
+      Customer.aggregate([
+        { $match: { isDeleted: false } },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            totalPurchases: { $sum: { $ifNull: ['$totalPurchases', 0] } },
+            outstandingCredit: { $sum: { $ifNull: ['$creditBalance', 0] } },
+            withCredit: {
+              $sum: { $cond: [{ $gt: [{ $ifNull: ['$creditBalance', 0] }, 0] }, 1, 0] }
+            },
+            withEmail: {
+              $sum: { $cond: [{ $ne: [{ $ifNull: ['$email', ''] }, ''] }, 1, 0] }
+            },
+            withPhone: {
+              $sum: { $cond: [{ $ne: [{ $ifNull: ['$phone', ''] }, ''] }, 1, 0] }
+            }
+          }
+        }
+      ])
+    ]);
+
+    const summary = summaryRows[0] || {
+      count: 0,
+      totalPurchases: 0,
+      outstandingCredit: 0,
+      withCredit: 0,
+      withEmail: 0,
+      withPhone: 0
+    };
+
+    res.json({
+      success: true,
+      data: customers,
+      total,
+      page: pagination.page,
+      limit: pagination.limit,
+      totalPages: Math.max(1, Math.ceil(total / pagination.limit)),
+      summary
+    });
   } catch (err) { next(err); }
 });
 

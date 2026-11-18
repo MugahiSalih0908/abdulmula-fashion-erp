@@ -2,6 +2,10 @@
 
 import { create } from 'zustand';
 import api from '../services/api';
+
+// React StrictMode and protected route transitions may request the current user together.
+// Share one in-flight request so the same access token is not checked multiple times.
+let fetchMeInFlight = null;
 const storedAccessToken = localStorage.getItem('accessToken');
 const storedRefreshToken = localStorage.getItem('refreshToken');
 
@@ -48,30 +52,34 @@ const useAuthStore = create((set, get) => ({
 // FETCH CURRENT USER
 // ─────────────────────────────
 
-fetchMe: async () => {
-
+fetchMe: () => {
   const token = get().accessToken;
+  if (!token) return Promise.resolve();
+  if (fetchMeInFlight) return fetchMeInFlight;
 
-  if (!token) return;
+  fetchMeInFlight = (async () => {
+    try {
+      const { data } = await api.get('/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-  try {
+      // Ignore stale results if the user signed out or changed accounts mid-request.
+      if (get().accessToken === token) {
+        set({ user: data.data });
+      }
+    } catch (error) {
+      if (error.response?.status === 401 && get().accessToken === token) {
+        get().logout();
+        return;
+      }
 
-    const { data } = await api.get('/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    set({
-      user: data.data,
-    });
-
-  } catch (error) {
-    if (error.response?.status === 401) {
-      get().logout();
-      return;
+      console.error('Fetch me failed:', error.message);
+    } finally {
+      fetchMeInFlight = null;
     }
+  })();
 
-    console.error('Fetch me failed:', error.message);
-  }
+  return fetchMeInFlight;
 },
 
   // ─────────────────────────────

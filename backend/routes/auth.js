@@ -149,7 +149,15 @@ router.post('/forgot-password', async (req, res, next) => {
     const tmpl     = templates.reset({ name: user.name, resetUrl });
 
     try {
-      await sendEmail({ to: user.email, ...tmpl });
+      await sendEmail({
+        to: user.email,
+        ...tmpl,
+        category: 'password_reset',
+        idempotencyKey: `password-reset:${user._id}:${user.resetPasswordToken}`,
+        createdBy: user._id,
+        relatedEntity: 'User',
+        relatedEntityId: user._id
+      });
     } catch (emailErr) {
       // Don't fail if email service is down – log it
       console.error('[EMAIL ERROR]', emailErr.message);
@@ -197,8 +205,15 @@ router.post('/reset-password/:token', async (req, res, next) => {
     await user.save();
 
     // Send confirmation email (fire and forget)
-    sendEmail({ to: user.email, ...templates.passwordChanged({ name: user.name }) })
-      .catch(err => console.error('[EMAIL]', err.message));
+    sendEmail({
+      to: user.email,
+      ...templates.passwordChanged({ name: user.name }),
+      category: 'password_changed',
+      idempotencyKey: `password-changed:${user._id}:${user.passwordChangedAt ? user.passwordChangedAt.getTime() : Date.now()}`,
+      createdBy: user._id,
+      relatedEntity: 'User',
+      relatedEntityId: user._id
+    }).catch(err => console.error('[PASSWORD CONFIRMATION EMAIL ERROR]', err.code || err.message));
 
     await log({ user, action:'USER_UPDATE', entity:'User', entityId: user._id, details:{ action:'password_reset_completed' }, req });
 
