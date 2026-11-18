@@ -9,7 +9,7 @@ const invitationSchema = new mongoose.Schema({
   role:   { type: String, enum: ['admin', 'manager', 'staff'], default: 'staff' },
 
   // ── Token management ───────────────────────────────────────────
-  token:        { type: String, required: true, unique: true, index: true },  // hashed token
+  token:        { type: String, required: true, unique: true },  // hashed token
   expiresAt:    { type: Date, required: true, index: true },
 
   // ── Invitation metadata ────────────────────────────────────────
