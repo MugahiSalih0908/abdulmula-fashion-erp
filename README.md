@@ -227,43 +227,31 @@ cd backend  && npm install
 cd frontend && npm install
 ```
 
-### Step 2 — Gmail App Password
+### Step 2 — Configure local environment
 
-1. Go to **myaccount.google.com → Security → 2-Step Verification → App Passwords**
-2. Create an app password for "Mail"
-3. Copy the 16-character password
-4. Put it in `backend/.env` as `EMAIL_PASS`
+Copy `backend/.env.example` to `backend/.env` and configure:
 
-**Important:** Use the App Password, NOT your normal Gmail password.
+- `MONGO_URI`: your development MongoDB database (use a separate database from production).
+- `JWT_SECRET` and `JWT_REFRESH_SECRET`: generate two independent, random secrets.
+- `CLIENT_URL` and `FRONTEND_URL`: use `http://localhost:5173` for local development.
+- Resend settings: leave `EMAIL_DELIVERY_MODE=disabled` until you deliberately configure a restricted test inbox.
 
-### Step 3 — Configure `backend/.env`
+Never reuse production JWT secrets or the production MongoDB URI in a local development environment.
 
-```env
-MONGO_URI=mongodb://localhost:27017/abdulmula_erp
-JWT_SECRET=<run: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))">
-JWT_REFRESH_SECRET=<another 64-char hex>
-JWT_EXPIRE=15m
-JWT_REFRESH_EXPIRE=7d
-PORT=5000
-NODE_ENV=development
-CLIENT_URL=http://localhost:5173
-FRONTEND_URL=http://localhost:5173
-EMAIL_USER=your_gmail@gmail.com
-EMAIL_PASS=your_16_char_app_password
-EMAIL_FROM=Abdulmula Fashion ERP <your_gmail@gmail.com>
-ADMIN_EMAIL=admin@abdulmula.com
-ADMIN_PASSWORD=Admin@12345
-```
+### Step 3 — Create the first admin (one time only)
 
-### Step 4 — Create first admin
+Set `ADMIN_NAME`, `ADMIN_EMAIL`, and a strong `ADMIN_PASSWORD` of at least 12 characters in the untracked `backend/.env` file. Then run:
 
 ```bash
 cd backend
 npm run create-admin
 ```
 
-This creates `admin@abdulmula.com` / `Admin@12345` with `isVerified: true`.
-**Change the password immediately after first login.**
+The seed script refuses to create an account without an explicit password. It does not print the password to logs. Remove the bootstrap-only `ADMIN_PASSWORD` value from the environment after the first admin is created.
+
+### Step 4 — Configure transactional email
+
+Follow [docs/email-delivery-setup.md](docs/email-delivery-setup.md). The application uses Resend; it does not use Gmail SMTP or email temporary passwords.
 
 ### Step 5 — Start
 
@@ -282,10 +270,8 @@ cd frontend && npm run dev   # → http://localhost:5173
 3. Tap **Add Staff**
 4. Enter name, real email, role
 5. Tap **Create & Send Invitation**
-6. System auto-sends branded welcome email with:
-   - Temporary password
-   - Activation link (24-hour expiry)
-7. Staff clicks link → sets own password → can log in
+6. System sends a branded, one-time activation link (24-hour expiry) through Resend.
+7. Staff opens the link, chooses their own password, and activates the account. No temporary password is emailed.
 
 ---
 
@@ -383,9 +369,11 @@ Never commit live credentials, raw activation URLs, reset tokens, email HTML, or
 temporary passwords. Staff activation emails use a one-time setup link; the
 system does not email a temporary password.
 
-The sender domain can be connected later. Until then, the email layer can be
-tested with mocked provider responses and Resend test recipients. Real staff
-delivery remains unavailable until Resend verifies the sender domain.
+Resend domain verification is only one prerequisite for production delivery.
+The Render backend must also have the live delivery mode, a restricted sending
+API key, a sender address on the verified domain, the sending-domain value,
+and the explicit domain-verification flag configured. Confirm a successful
+Email Center test before relying on real staff invitations.
 
 Provider acceptance (`sent`) is not the same as recipient delivery
 (`delivered`). Signed Resend webhook events update the application delivery

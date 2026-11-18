@@ -9,7 +9,7 @@ const invitationSchema = new mongoose.Schema({
   role:   { type: String, enum: ['admin', 'manager', 'staff'], default: 'staff' },
 
   // ── Token management ───────────────────────────────────────────
-  token:        { type: String, required: true, unique: true, index: true },  // hashed token
+  token:        { type: String, required: true, unique: true },  // hashed token
   expiresAt:    { type: Date, required: true, index: true },
 
   // ── Invitation metadata ────────────────────────────────────────
@@ -38,7 +38,6 @@ const invitationSchema = new mongoose.Schema({
 
 // ── Index for finding pending invitations ──────────────────────────
 invitationSchema.index({ email: 1, status: 1 });
-invitationSchema.index({ expiresAt: 1 });
 invitationSchema.index({ invitedBy: 1, createdAt: -1 });
 
 // ── Generate secure invitation token ───────────────────────────────
