@@ -444,11 +444,17 @@ export default function DashboardPage() {
               />
               <KpiCard
                 icon={<TrendingUp size={19} />}
-                label="Net Profit"
-                value="Unavailable"
-                sub="Current backend figure excludes cost of goods sold"
+                label="Gross Profit"
+                value={isManager && summary?.grossProfitAvailable
+                  ? currencyFormat(summary.grossProfit)
+                  : 'Unavailable'}
+                sub={isManager && summary
+                  ? summary.grossProfitAvailable
+                    ? 'Sales less recorded product cost, before operating expenses'
+                    : `${Number(summary.uncostedInvoiceCount || 0).toLocaleString()} invoice(s) need product cost data`
+                  : 'Available to managers and administrators'}
                 color="gray"
-                className="dashboard-kpi dashboard-kpi-unavailable"
+                className={isManager && summary?.grossProfitAvailable ? 'dashboard-kpi' : 'dashboard-kpi dashboard-kpi-unavailable'}
               />
               <KpiCard
                 icon={<Wallet size={19} />}
@@ -462,7 +468,7 @@ export default function DashboardPage() {
           )}
           {isManager && (
             <p className="dashboard-financial-note">
-              Figures use the system currency display setting. Historical invoices do not include a stored currency or exchange-rate snapshot.
+              Figures use the system currency display setting. Gross profit is shown only when every invoice in the selected period has a server-recorded product-cost snapshot; historical invoices are not backfilled.
             </p>
           )}
         </section>
