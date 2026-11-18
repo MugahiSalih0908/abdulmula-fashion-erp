@@ -28,21 +28,23 @@ router.get('/summary', async (req, res, next) => {
       Invoice.aggregate([
         { $match: dateFilter },
         { $project: {
-          netSales: { $sum: { $map: { input: { $ifNull: ['$items', []] }, as: 'line', in: { $ifNull: ['$line.lineTotal', 0] } } } },
-          costKnownForAllItems: { $allElementsTrue: { $map: {
-            input: { $ifNull: ['$items', []] },
-            as: 'line',
-            in: { $and: [
-              { $eq: [{ $ifNull: ['$line.costKnown', false] }, true] },
-              { $gte: [{ $ifNull: ['$line.unitCost', -1] }, 0] }
-            ] }
-          } } },
+          netSales: { $sum: { $map: { input: { $ifNull: ['$items', []] }, as: 'line', in: { $ifNull: ['$$line.lineTotal', 0] } } } },
+          costKnownForAllItems: { $allElementsTrue: [{
+            $map: {
+              input: { $ifNull: ['$items', []] },
+              as: 'line',
+              in: { $and: [
+                { $eq: [{ $ifNull: ['$$line.costKnown', false] }, true] },
+                { $gte: [{ $ifNull: ['$$line.unitCost', -1] }, 0] }
+              ] }
+            }
+          }] },
           lineCost: { $sum: { $map: {
             input: { $ifNull: ['$items', []] },
             as: 'line',
             in: { $cond: [
-              { $eq: [{ $ifNull: ['$line.costKnown', false] }, true] },
-              { $multiply: [{ $ifNull: ['$line.unitCost', 0] }, { $ifNull: ['$line.quantity', 0] }] },
+              { $eq: [{ $ifNull: ['$$line.costKnown', false] }, true] },
+              { $multiply: [{ $ifNull: ['$$line.unitCost', 0] }, { $ifNull: ['$$line.quantity', 0] }] },
               0
             ] }
           } } }
