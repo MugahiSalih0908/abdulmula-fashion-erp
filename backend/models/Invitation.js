@@ -38,7 +38,6 @@ const invitationSchema = new mongoose.Schema({
 
 // ── Index for finding pending invitations ──────────────────────────
 invitationSchema.index({ email: 1, status: 1 });
-invitationSchema.index({ expiresAt: 1 });
 invitationSchema.index({ invitedBy: 1, createdAt: -1 });
 
 // ── Generate secure invitation token ───────────────────────────────
