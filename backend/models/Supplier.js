@@ -14,4 +14,7 @@ const supplierSchema = new mongoose.Schema({
   addedBy:     { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
 
+supplierSchema.index({ isDeleted: 1, name: 1, _id: 1 });
+supplierSchema.index({ isDeleted: 1, debtBalance: 1 });
+
 module.exports = mongoose.model('Supplier', supplierSchema);

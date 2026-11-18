@@ -1,37 +1,54 @@
-// src/pages/InvitePage.jsx – Accept invitation and setup password
-
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { validateInvitation, acceptInvitation } from '../services/invitationService';
 import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
-import { AlertCircle, CheckCircle, Clock, Mail } from 'lucide-react';
+import {
+  AlertCircle, ArrowLeft, CalendarClock, CheckCircle2, Eye, EyeOff,
+  Mail, ShieldCheck, UserRound
+} from 'lucide-react';
+import AuthShell from '../components/AuthShell';
+
+function calculatePasswordStrength(password) {
+  if (!password) return 0;
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+  if (/\d/.test(password)) score++;
+  if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) score++;
+  return Math.min(5, score);
+}
+
+const STRENGTH_LABELS = ['', 'Very weak', 'Weak', 'Fair', 'Strong', 'Very strong'];
+
+function formatExpiry(value) {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Not available' : date.toLocaleString();
+}
 
 export default function InvitePage() {
   const { token } = useParams();
   const navigate = useNavigate();
-  const setAuth = useAuthStore((s) => s.setAuth);
+  const setAuth = useAuthStore(state => state.setAuth);
 
   const [loading, setLoading] = useState(true);
   const [validating, setValidating] = useState(false);
-  const [step, setStep] = useState('validate'); // validate | setup | success
+  const [step, setStep] = useState('validate');
   const [invitation, setInvitation] = useState(null);
   const [error, setError] = useState(null);
-
-  const [formData, setFormData] = useState({
-    name: '',
-    password: '',
-    confirmPassword: ''
-  });
-
+  const [showPassword, setShowPassword] = useState(false);
+  const [formData, setFormData] = useState({ name: '', password: '', confirmPassword: '' });
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [formErrors, setFormErrors] = useState({});
 
-  // ── Validate token on mount ────────────────────────────────────
   useEffect(() => {
+    let active = true;
+
     const validate = async () => {
       if (!token) {
-        setError({ message: 'No invitation token provided', code: 'INVALID_TOKEN' });
+        setError({ message: 'No invitation token was provided.', code: 'INVALID_TOKEN' });
         setStep('error');
         setLoading(false);
         return;
@@ -39,80 +56,69 @@ export default function InvitePage() {
 
       try {
         const result = await validateInvitation(token);
+        if (!active) return;
         setInvitation(result.data);
         setStep('setup');
-      } catch (err) {
-        console.error('Validation error:', err);
-        setError(err);
+      } catch (requestError) {
+        if (!active) return;
+        const payload = requestError?.response?.data || requestError?.data || {};
+        setError({
+          code: payload.code || requestError?.code || 'INVALID_TOKEN',
+          message: payload.message || requestError?.message || 'This invitation link is invalid or has expired.',
+          data: payload.data || requestError?.data
+        });
         setStep('error');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     validate();
+    return () => { active = false; };
   }, [token]);
 
-  // ── Calculate password strength ────────────────────────────────
-  const calculatePasswordStrength = (pwd) => {
-    if (!pwd) return 0;
-    let strength = 0;
-    if (pwd.length >= 8) strength++;
-    if (pwd.length >= 12) strength++;
-    if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) strength++;
-    if (/\d/.test(pwd)) strength++;
-    if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd)) strength++;
-    return Math.min(5, strength);
+  useEffect(() => {
+    if (step !== 'success') return undefined;
+    const timer = window.setTimeout(() => navigate('/dashboard'), 1500);
+    return () => window.clearTimeout(timer);
+  }, [step, navigate]);
+
+  const handlePasswordChange = event => {
+    const password = event.target.value;
+    setFormData(current => ({ ...current, password }));
+    setPasswordStrength(calculatePasswordStrength(password));
   };
 
-  // ── Handle password change ─────────────────────────────────────
-  const handlePasswordChange = (e) => {
-    const pwd = e.target.value;
-    setFormData({ ...formData, password: pwd });
-    setPasswordStrength(calculatePasswordStrength(pwd));
-  };
-
-  // ── Validate form ──────────────────────────────────────────────
   const validateForm = () => {
-    const errors = {};
+    const nextErrors = {};
 
-    if (!formData.name.trim()) {
-      errors.name = 'Name is required';
-    } else if (formData.name.trim().length < 2) {
-      errors.name = 'Name must be at least 2 characters';
-    }
+    if (!formData.name.trim()) nextErrors.name = 'Name is required.';
+    else if (formData.name.trim().length < 2) nextErrors.name = 'Name must be at least 2 characters.';
 
-    if (!formData.password) {
-      errors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      errors.password = 'Password must be at least 8 characters';
-    }
+    if (!formData.password) nextErrors.password = 'Password is required.';
+    else if (formData.password.length < 8) nextErrors.password = 'Password must be at least 8 characters.';
 
-    if (!formData.confirmPassword) {
-      errors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
-      errors.confirmPassword = 'Passwords do not match';
-    }
+    if (!formData.confirmPassword) nextErrors.confirmPassword = 'Please confirm your password.';
+    else if (formData.password !== formData.confirmPassword) nextErrors.confirmPassword = 'Passwords do not match.';
 
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+    setFormErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
-  // ── Handle form submission ─────────────────────────────────────
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
+  const handleSubmit = async event => {
+    event.preventDefault();
     if (!validateForm()) {
-      toast.error('Please fix the errors below');
+      toast.error('Please review the highlighted fields.');
       return;
     }
 
     setValidating(true);
-
     try {
-      const result = await acceptInvitation(token, formData);
+      const result = await acceptInvitation(token, {
+        ...formData,
+        name: formData.name.trim()
+      });
 
-      // Store tokens
       setAuth({
         accessToken: result.data.accessToken,
         refreshToken: result.data.refreshToken,
@@ -121,225 +127,162 @@ export default function InvitePage() {
 
       setStep('success');
       toast.success('Account created successfully!');
+    } catch (requestError) {
+      const payload = requestError?.response?.data || requestError?.data || {};
+      const code = payload.code || requestError?.code;
+      const message = payload.message || requestError?.message || 'Failed to create your account.';
 
-      // Redirect to dashboard after short delay
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 1500);
-    } catch (err) {
-      console.error('Acceptance error:', err);
-      if (err.code === 'EXPIRED_TOKEN') {
-        setError(err);
+      if (code === 'EXPIRED_TOKEN') {
+        setError({ code, message, data: payload.data || requestError?.data });
         setStep('error');
-        toast.error('Invitation has expired');
       } else {
-        toast.error(err.message || 'Failed to create account');
+        toast.error(message);
       }
     } finally {
       setValidating(false);
     }
   };
 
-  // ── Loading state ──────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-2xl flex items-center justify-center mx-auto mb-6 animate-pulse">
-            <span className="text-3xl font-bold text-black">AF</span>
-          </div>
-          <p className="text-gray-300 text-lg">Validating your invitation...</p>
-        </div>
-      </div>
+      <AuthShell
+        eyebrow="INVITATION"
+        title="Checking your invitation"
+        description="We’re verifying the secure invitation link."
+        status={<><span className="auth-spinner" aria-hidden="true" /> Validating invitation…</>}
+      >
+        <div className="auth-loading"><div className="auth-loading-mark">AF</div><span>Please keep this page open.</span></div>
+      </AuthShell>
     );
   }
 
-  // ── Error state ────────────────────────────────────────────────
   if (step === 'error') {
+    const invitationId = error?.data?.invitationId;
     return (
-      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center p-4">
-        <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700 rounded-2xl p-8 max-w-md w-full text-center">
-          <div className="mb-4 flex justify-center">
-            <div className="w-16 h-16 bg-red-900/20 rounded-full flex items-center justify-center">
-              <AlertCircle className="w-8 h-8 text-red-400" />
-            </div>
+      <AuthShell
+        eyebrow="INVITATION"
+        title="Invitation unavailable"
+        description="This invitation can’t be used to create an account."
+        footer={<Link to="/login" className="auth-link"><ArrowLeft size={14} aria-hidden="true" /> Back to sign in</Link>}
+      >
+        <div className="auth-alert is-danger" role="alert">
+          <AlertCircle size={19} aria-hidden="true" />
+          <div>
+            <strong>{error?.code === 'EXPIRED_TOKEN' ? 'Invitation expired' : 'Invitation could not be validated'}</strong>
+            <p>{error?.code === 'EXPIRED_TOKEN' ? 'Ask your administrator to send you a new invitation.' : (error?.message || 'The invitation link is invalid or expired.')}</p>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Invitation Error</h1>
-          <p className="text-gray-300 mb-6">
-            {error?.code === 'EXPIRED_TOKEN' ? (
-              <>
-                Your invitation has expired. Please ask your administrator to send you a new one.
-              </>
-            ) : (
-              error?.message || 'Invalid or expired invitation link'
-            )}
-          </p>
-          {error?.code === 'EXPIRED_TOKEN' && error?.data?.invitationId && (
-            <p className="text-sm text-gray-400 mb-6">
-              Invitation ID: {error.data.invitationId}
-            </p>
-          )}
-          <button
-            onClick={() => navigate('/login')}
-            className="w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold rounded-lg transition"
-          >
-            Back to Login
-          </button>
         </div>
-      </div>
+        {invitationId && <div className="auth-info-card"><div className="auth-info-row"><Mail size={16} aria-hidden="true" /><div><span>Invitation reference</span><strong>{invitationId}</strong></div></div></div>}
+      </AuthShell>
     );
   }
 
-  // ── Setup password state ───────────────────────────────────────
-  if (step === 'setup') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center p-4">
-        <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700 rounded-2xl p-8 max-w-md w-full">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="w-20 h-20 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl font-bold text-black">AF</span>
-            </div>
-            <h1 className="text-3xl font-bold text-white mb-2">Welcome! 🎉</h1>
-            <p className="text-gray-300">Abdulmula Fashion ERP</p>
-          </div>
-
-          {/* Invitation Info */}
-          <div className="bg-gray-900/50 border border-gray-700 rounded-lg p-4 mb-6">
-            <div className="flex items-start gap-3 mb-3">
-              <Mail className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-1" />
-              <div>
-                <p className="text-xs text-gray-400">Email</p>
-                <p className="text-white font-medium">{invitation?.email}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 mb-3">
-              <CheckCircle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-1" />
-              <div>
-                <p className="text-xs text-gray-400">Role</p>
-                <p className="text-white font-medium capitalize">{invitation?.role}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Clock className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-1" />
-              <div>
-                <p className="text-xs text-gray-400">Expires</p>
-                <p className="text-white font-medium">
-                  {new Date(invitation?.expiresAt).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Full Name</label>
-              <input
-                type="text"
-                placeholder="Your full name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-700/50 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500 transition ${
-                  formErrors.name ? 'border-red-500' : 'border-gray-600'
-                }`}
-              />
-              {formErrors.name && (
-                <p className="text-red-400 text-sm mt-1">{formErrors.name}</p>
-              )}
-            </div>
-
-            {/* Password */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
-              <input
-                type="password"
-                placeholder="Enter a strong password"
-                value={formData.password}
-                onChange={handlePasswordChange}
-                className={`w-full px-4 py-3 bg-gray-700/50 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500 transition ${
-                  formErrors.password ? 'border-red-500' : 'border-gray-600'
-                }`}
-              />
-              {formData.password && (
-                <div className="mt-2">
-                  <div className="flex gap-1 h-2">
-                    {[...Array(5)].map((_, i) => (
-                      <div
-                        key={i}
-                        className={`flex-1 rounded-full transition ${
-                          i < passwordStrength ? 'bg-yellow-500' : 'bg-gray-700'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {passwordStrength === 5
-                      ? '🔐 Strong password'
-                      : passwordStrength >= 3
-                      ? '⚠️ Good password'
-                      : '⚡ Weak password'}
-                  </p>
-                </div>
-              )}
-              {formErrors.password && (
-                <p className="text-red-400 text-sm mt-1">{formErrors.password}</p>
-              )}
-            </div>
-
-            {/* Confirm Password */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                placeholder="Confirm your password"
-                value={formData.confirmPassword}
-                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className={`w-full px-4 py-3 bg-gray-700/50 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-yellow-500 transition ${
-                  formErrors.confirmPassword ? 'border-red-500' : 'border-gray-600'
-                }`}
-              />
-              {formErrors.confirmPassword && (
-                <p className="text-red-400 text-sm mt-1">{formErrors.confirmPassword}</p>
-              )}
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={validating}
-              className="w-full py-3 bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 text-black font-semibold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed mt-6"
-            >
-              {validating ? 'Creating Account...' : '✨ Create Account & Login'}
-            </button>
-          </form>
-
-          {/* Help */}
-          <p className="text-center text-xs text-gray-400 mt-4">
-            Password must be at least 8 characters
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Success state ──────────────────────────────────────────────
   if (step === 'success') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black flex items-center justify-center p-4">
-        <div className="bg-gray-800/40 backdrop-blur-xl border border-gray-700 rounded-2xl p-8 max-w-md w-full text-center">
-          <div className="mb-4 flex justify-center">
-            <div className="w-16 h-16 bg-green-900/20 rounded-full flex items-center justify-center animate-pulse">
-              <CheckCircle className="w-8 h-8 text-green-400" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Account Created! ✅</h1>
-          <p className="text-gray-300">Redirecting to your dashboard...</p>
+      <AuthShell
+        eyebrow="ACCOUNT CREATED"
+        title="Welcome to the team"
+        description="Your invitation has been accepted and your workspace account is ready."
+        footer={<span>Opening your dashboard…</span>}
+      >
+        <div className="auth-alert is-success" role="status" aria-live="polite">
+          <CheckCircle2 size={22} aria-hidden="true" />
+          <div><strong>Account created successfully</strong><p>You’re signed in. Redirecting to your dashboard.</p></div>
         </div>
-      </div>
+      </AuthShell>
     );
   }
+
+  return (
+    <AuthShell
+      wide
+      eyebrow="TEAM INVITATION"
+      title="Create your staff account"
+      description="Confirm your details and choose a strong password to join Abdulmula Fashion ERP."
+      footer="Your invitation is private to the email address shown above. Keep your password confidential."
+    >
+      <div className="auth-info-card">
+        <div className="auth-info-row"><Mail size={17} aria-hidden="true" /><div><span>Invited email</span><strong>{invitation?.email || 'Email unavailable'}</strong></div></div>
+        <div className="auth-info-row"><ShieldCheck size={17} aria-hidden="true" /><div><span>Workspace role</span><strong className="auth-capitalize">{invitation?.role || 'Staff'}</strong></div></div>
+        <div className="auth-info-row"><CalendarClock size={17} aria-hidden="true" /><div><span>Invitation expires</span><strong>{formatExpiry(invitation?.expiresAt)}</strong></div></div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="auth-form" noValidate>
+        <div className="auth-field">
+          <label htmlFor="invite-name">Full name</label>
+          <div className="auth-password-input">
+            <input
+              id="invite-name"
+              type="text"
+              autoComplete="name"
+              placeholder="Enter your full name"
+              value={formData.name}
+              aria-invalid={!!formErrors.name}
+              aria-describedby={formErrors.name ? 'invite-name-error' : undefined}
+              onChange={event => setFormData(current => ({ ...current, name: event.target.value }))}
+            />
+            <span className="auth-field-trailing-icon"><UserRound size={16} aria-hidden="true" /></span>
+          </div>
+          {formErrors.name && <p id="invite-name-error" className="auth-field-error" role="alert">{formErrors.name}</p>}
+        </div>
+
+        <div className="auth-field">
+          <label htmlFor="invite-password">Password</label>
+          <div className="auth-password-input">
+            <input
+              id="invite-password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              placeholder="Create a password"
+              value={formData.password}
+              aria-invalid={!!formErrors.password}
+              aria-describedby={formErrors.password ? 'invite-password-error' : 'invite-password-strength'}
+              onChange={handlePasswordChange}
+            />
+            <button type="button" className="auth-password-toggle" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>
+              {showPassword ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+            </button>
+          </div>
+          {formData.password && (
+            <div id="invite-password-strength">
+              <div className="auth-password-meter" data-score={passwordStrength} aria-label={'Password strength: ' + STRENGTH_LABELS[passwordStrength]}>
+                {[1,2,3,4,5].map(item => <span key={item} />)}
+              </div>
+              <p className="auth-password-strength">Password strength: {STRENGTH_LABELS[passwordStrength]}</p>
+            </div>
+          )}
+          {formErrors.password && <p id="invite-password-error" className="auth-field-error" role="alert">{formErrors.password}</p>}
+        </div>
+
+        <div className="auth-field">
+          <label htmlFor="invite-confirm-password">Confirm password</label>
+          <input
+            id="invite-confirm-password"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            placeholder="Re-enter your password"
+            value={formData.confirmPassword}
+            aria-invalid={!!formErrors.confirmPassword}
+            aria-describedby={formErrors.confirmPassword ? 'invite-confirm-error' : undefined}
+            onChange={event => setFormData(current => ({ ...current, confirmPassword: event.target.value }))}
+          />
+          {formErrors.confirmPassword && <p id="invite-confirm-error" className="auth-field-error" role="alert">{formErrors.confirmPassword}</p>}
+        </div>
+
+        <div className="auth-requirements">
+          {[
+            ['At least 8 characters', formData.password.length >= 8],
+            ['Uppercase and lowercase letters', /[a-z]/.test(formData.password) && /[A-Z]/.test(formData.password)],
+            ['A number', /\d/.test(formData.password)],
+            ['A symbol', /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password)]
+          ].map(([label, met]) => <p key={label} className={met ? 'is-met' : ''}><span>{met ? '✓' : '○'}</span>{label}</p>)}
+        </div>
+
+        <button type="submit" className="auth-submit" disabled={validating}>
+          {validating && <span className="auth-spinner" aria-hidden="true" />}
+          {validating ? 'Creating account…' : 'Create account & sign in'}
+        </button>
+      </form>
+    </AuthShell>
+  );
 }

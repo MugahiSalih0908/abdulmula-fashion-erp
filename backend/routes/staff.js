@@ -10,26 +10,45 @@ const AuditLog  = require('../models/AuditLog');
 const { protect, authorize } = require('../middleware/auth');
 const { log }   = require('../utils/auditLogger');
 const { sendEmail, templates } = require('../utils/sendEmail');
+const { getEmailDeliveryError } = require('../utils/emailDeliveryError');
+const { isEmailDeliveryBlocked } = require('../utils/emailConfig');
+const { buildStaffSalesLookup } = require('../utils/staffSalesSummary');
 
 router.use(protect);
 
 // ── Helper: generate secure temp password ─────────────────────
-const generateTempPassword = () => {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-  return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-};
+const generatePendingPassword = () => crypto.randomBytes(32).toString('hex');
 
 /* ── GET /api/staff ────────────────────── admin + manager ───── */
 router.get('/', authorize('admin','manager'), async (req, res, next) => {
   try {
-    const staff = await User.find({}).select('-password -refreshTokens').sort({ createdAt:-1 });
-    const withStats = await Promise.all(staff.map(async m => {
-      const [cnt, agg] = await Promise.all([
-        Invoice.countDocuments({ soldBy: m._id }),
-        Invoice.aggregate([{ $match:{ soldBy: m._id } }, { $group:{ _id:null, total:{ $sum:'$grandTotal' } } }])
-      ]);
-      return { ...m.toObject(), salesCount:cnt, salesTotal: agg[0]?.total||0 };
-    }));
+    // Fetch staff and all sales summaries in two independent queries.
+    // The previous per-member count + aggregate loop grew by two queries per staff member.
+    const [staff, salesRows] = await Promise.all([
+      User.find({}).select('-password -refreshTokens').sort({ createdAt:-1 }),
+      Invoice.aggregate([
+        { $match: { soldBy: { $ne: null } } },
+        {
+          $group: {
+            _id: '$soldBy',
+            salesCount: { $sum: 1 },
+            salesTotal: { $sum: '$grandTotal' }
+          }
+        }
+      ])
+    ]);
+
+    const salesByStaff = buildStaffSalesLookup(salesRows);
+
+    const withStats = staff.map(member => {
+      const stats = salesByStaff.get(String(member._id));
+      return {
+        ...member.toObject(),
+        salesCount: stats?.salesCount || 0,
+        salesTotal: stats?.salesTotal || 0
+      };
+    });
+
     res.json({ success:true, data: withStats });
   } catch (err) { next(err); }
 });
@@ -65,44 +84,77 @@ router.post('/', authorize('admin'), async (req, res, next) => {
     const exists = await User.findOne({ email: email.toLowerCase().trim() });
     if (exists) return res.status(400).json({ success:false, message:'An account with this email already exists.' });
 
-    // Generate temp password (will be shown in email; user must change on activation)
-    const tempPassword = generateTempPassword();
-
-    // Create user (NOT yet verified)
+    // Create a pending account; the staff member chooses their own password during activation.
     const member = new User({
-      name:       name.trim(),
-      email:      email.toLowerCase().trim(),
-      password:   tempPassword,
-      role:       role || 'staff',
-      salary:     salary || 0,
-      isVerified: false,
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      password: generatePendingPassword(),
+      role: role || 'staff',
+      salary: salary || 0,
+      isVerified: false
     });
 
-    // Generate activation token
     const rawToken = member.generateVerificationToken();
     await member.save();
 
-    // Build activation URL
-    const activationUrl = `${process.env.FRONTEND_URL}/activate/${rawToken}`;
-    // Never log raw verification tokens or activation URLs.
-    const tmpl          = templates.welcome({ name: member.name, role: member.role, tempPassword, activationUrl });
+    const frontendUrl = String(process.env.FRONTEND_URL || '').replace(/\/+$/, '');
+    const activationUrl = frontendUrl + '/activate/' + rawToken;
+    const tmpl = templates.welcome({
+      name: member.name,
+      role: member.role,
+      activationUrl
+    });
 
-    // Send welcome email
+    let emailStatus = 'failed';
+    let emailMessage = '';
+    let emailErrorCode = null;
+
     try {
-     console.log('EMAIL WOULD SEND TO:', member.email);
+      const delivery = await sendEmail({
+        to: member.email,
+        ...tmpl,
+        category: 'staff_activation',
+        idempotencyKey: 'staff-activation:' + member._id + ':' + member.verificationToken,
+        createdBy: req.user._id,
+        relatedEntity: 'User',
+        relatedEntityId: member._id
+      });
+      emailStatus = delivery.status;
+      emailMessage = 'Activation email was accepted by the email provider.';
     } catch (emailErr) {
-      console.error('[EMAIL ERROR] Welcome email failed:', emailErr.message);
-      // Don't fail the creation — admin can resend
+      const safeError = getEmailDeliveryError(emailErr);
+      emailErrorCode = safeError.code;
+      emailMessage = safeError.message;
+      emailStatus = ['EMAIL_DELIVERY_UNKNOWN', 'EMAIL_SEND_IN_PROGRESS'].includes(emailErr.code)
+        ? 'unknown'
+        : isEmailDeliveryBlocked(emailErr) ? 'blocked' : 'failed';
+      console.error('[STAFF ACTIVATION EMAIL ERROR]', emailErr.code || emailErr.message);
     }
 
-    await log({ user: req.user, action:'USER_CREATE', entity:'User', entityId: member._id, details:{ name: member.name, role: member.role, email: member.email }, req });
+    await log({
+      user: req.user,
+      action: 'USER_CREATE',
+      entity: 'User',
+      entityId: member._id,
+      details: { name: member.name, role: member.role, email: member.email, emailStatus },
+      req
+    });
 
     res.status(201).json({
-      success:true,
-      data:    member,
-     message: `Account created successfully.`
+      success: true,
+      data: member,
+      message: emailStatus === 'sent'
+        ? 'Staff account created and activation email accepted by the provider.'
+        : emailStatus === 'unknown'
+          ? 'Staff account created. The activation email delivery status is uncertain; check Email Center before retrying.'
+          : 'Staff account created, but the activation email was not sent. The account remains pending activation. Correct email settings and use Resend activation.',
+      emailStatus,
+      emailMessage,
+      emailErrorCode
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
 /* ── POST /api/staff/:id/resend-activation ── admin ─────────── */
@@ -114,17 +166,33 @@ router.post('/:id/resend-activation', authorize('admin'), async (req, res, next)
     if (member.isVerified)
       return res.status(400).json({ success:false, message:'Account is already activated.' });
 
-    const tempPassword = generateTempPassword();
-    member.password    = tempPassword;
-    const rawToken     = member.generateVerificationToken();
+    const previousToken = member.verificationToken;
+    const previousExpiry = member.verificationTokenExpire;
+    const rawToken = member.generateVerificationToken();
     await member.save();
 
     const activationUrl = `${process.env.FRONTEND_URL}/activate/${rawToken}`;
-    const tmpl          = templates.welcome({ name: member.name, role: member.role, tempPassword, activationUrl });
-
-  console.log('EMAIL WOULD SEND TO:', member.email);
-
-    res.json({ success:true, message:`Activation email resent to ${member.email}.` });
+    const tmpl = templates.welcome({ name: member.name, role: member.role, activationUrl });
+    try {
+      const delivery = await sendEmail({
+        to: member.email,
+        ...tmpl,
+        category: 'staff_activation',
+        idempotencyKey: `staff-activation:${member._id}:${member.verificationToken}`,
+        createdBy: req.user._id,
+        relatedEntity: 'User',
+        relatedEntityId: member._id
+      });
+      res.json({ success:true, message:`Activation email accepted for ${member.email}.`, emailStatus: delivery.status });
+    } catch (emailErr) {
+      if (emailErr.code !== 'EMAIL_DELIVERY_UNKNOWN') {
+        await User.updateOne(
+          { _id: member._id },
+          { $set: { verificationToken: previousToken, verificationTokenExpire: previousExpiry } }
+        );
+      }
+      throw emailErr;
+    }
   } catch (err) { next(err); }
 });
 

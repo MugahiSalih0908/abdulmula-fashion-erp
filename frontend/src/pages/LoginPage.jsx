@@ -1,142 +1,112 @@
-// src/pages/LoginPage.jsx – v6 with forgot password link + lockout messages
-
-import { useState }    from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useForm }     from 'react-hook-form';
-import toast           from 'react-hot-toast';
-import useAuthStore    from '../store/authStore';
-import { Eye, EyeOff, AlertCircle, Mail, ShieldOff } from 'lucide-react';
-import { Input, Button } from '../components/ui';
+import { useForm } from 'react-hook-form';
+import toast from 'react-hot-toast';
+import useAuthStore from '../store/authStore';
+import { AlertCircle, Eye, EyeOff, Mail, ShieldOff } from 'lucide-react';
+import { Input } from '../components/ui';
+import AuthShell from '../components/AuthShell';
 
-// Map backend error codes to friendly UI states
 const CODE_UI = {
-  ACCOUNT_LOCKED:   { icon: ShieldOff, color: 'text-red-600',    bg: 'bg-red-50 border-red-200'    },
-  ACCOUNT_DISABLED: { icon: ShieldOff, color: 'text-gray-600',   bg: 'bg-gray-50 border-gray-200'   },
-  NOT_VERIFIED:     { icon: Mail,       color: 'text-amber-700',  bg: 'bg-amber-50 border-amber-200' },
+  ACCOUNT_LOCKED: { icon: ShieldOff, tone: 'danger' },
+  ACCOUNT_DISABLED: { icon: ShieldOff, tone: 'neutral' },
+  NOT_VERIFIED: { icon: Mail, tone: 'warning' }
 };
 
 export default function LoginPage() {
   const { register, handleSubmit, formState: { errors } } = useForm();
   const { login, isLoading } = useAuthStore();
-  const navigate  = useNavigate();
-  const [showPwd, setShowPwd]   = useState(false);
-  const [errorUI, setErrorUI]   = useState(null); // { code, message }
+  const navigate = useNavigate();
+  const [showPwd, setShowPwd] = useState(false);
+  const [errorUI, setErrorUI] = useState(null);
 
   const onSubmit = async ({ email, password }) => {
     setErrorUI(null);
     const result = await login(email, password);
+
     if (result.success) {
       toast.success('Welcome back!');
       navigate('/dashboard');
+      return;
+    }
+
+    if (result.code && CODE_UI[result.code]) {
+      setErrorUI({ code: result.code, message: result.message });
     } else {
-      const code = result.code;
-      if (code && CODE_UI[code]) {
-        setErrorUI({ code, message: result.message });
-      } else {
-        toast.error(result.message, { duration: 5000 });
-      }
+      toast.error(result.message || 'Sign-in failed. Please try again.', { duration: 5000 });
     }
   };
 
+  const errorMeta = errorUI ? CODE_UI[errorUI.code] : null;
+  const ErrorIcon = errorMeta?.icon;
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-900 to-gray-800">
-      <div className="w-full max-w-sm">
-
-        {/* Brand */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center font-black text-3xl mx-auto mb-4 shadow-2xl bg-green-600 text-white">
-            AF
+    <AuthShell
+      eyebrow="STAFF PORTAL"
+      title="Welcome back"
+      description="Sign in with your Abdulmula Fashion staff credentials to open your workspace."
+      footer={<>Need access to the system? Contact your administrator to create or invite your account.</>}
+    >
+      {errorUI && (
+        <div className={'auth-alert ' + (errorMeta?.tone === 'danger' ? 'is-danger' : '')} role="alert">
+          {ErrorIcon ? <ErrorIcon size={18} aria-hidden="true" /> : <AlertCircle size={18} aria-hidden="true" />}
+          <div>
+            <strong>{errorUI.message}</strong>
+            {errorUI.code === 'NOT_VERIFIED' && <p>Check your inbox for the account activation email.</p>}
+            {errorUI.code === 'ACCOUNT_LOCKED' && <p>Too many failed attempts. Wait until the lock expires before trying again.</p>}
+            {errorUI.code === 'ACCOUNT_DISABLED' && <p>Contact an administrator if you believe this account should be active.</p>}
           </div>
-          <h1 className="text-white font-black text-2xl tracking-tight">Abdulmula Fashion</h1>
-          <p className="text-sm mt-1 text-green-400 font-medium">ERP & POS System</p>
-          <p className="text-gray-400 text-xs mt-0.5">Konyo-Konyo Market · Juba, South Sudan</p>
         </div>
+      )}
 
-        {/* Card */}
-        <div className="bg-white rounded-3xl p-6 shadow-2xl">
-          <h2 className="font-bold text-xl mb-1 text-gray-900">Sign In</h2>
-          <p className="text-gray-500 text-sm mb-5">Enter your staff credentials</p>
+      <form onSubmit={handleSubmit(onSubmit)} className="auth-form" noValidate>
+        <Input
+          id="login-email"
+          type="email"
+          label="Email address"
+          placeholder="you@abdulmula.com"
+          autoComplete="email"
+          required
+          error={errors.email?.message}
+          {...register('email', {
+            required: 'Email is required',
+            pattern: { value: /^\S+@\S+\.\S+$/, message: 'Enter a valid email address.' }
+          })}
+        />
 
-          {/* Contextual error banners */}
-          {errorUI && (() => {
-            const { icon: Icon, color, bg } = CODE_UI[errorUI.code];
-            return (
-              <div className={`flex items-start gap-2.5 p-3 rounded-xl border mb-4 ${bg}`}>
-                <Icon size={18} className={`${color} shrink-0 mt-0.5`} />
-                <div>
-                  <p className={`text-sm font-semibold ${color}`}>{errorUI.message}</p>
-                  {errorUI.code === 'NOT_VERIFIED' && (
-                    <p className="text-xs text-amber-600 mt-0.5">
-                      Check your inbox for the activation email from Abdulmula Fashion ERP.
-                    </p>
-                  )}
-                  {errorUI.code === 'ACCOUNT_LOCKED' && (
-                    <p className="text-xs text-red-500 mt-0.5">
-                      Too many failed attempts. Try again after the lock expires.
-                    </p>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-
-            <Input
-              type="email"
-              label="Email Address"
-              placeholder="you@abdulmula.com"
-              error={errors.email?.message}
-              {...register('email', { required: 'Email is required' })}
-              autoComplete="email"
+        <div className="auth-field">
+          <div className="auth-field-row">
+            <label htmlFor="login-password">Password</label>
+            <Link to="/forgot-password" className="auth-link">Forgot password?</Link>
+          </div>
+          <div className="auth-password-input">
+            <input
+              id="login-password"
+              type={showPwd ? 'text' : 'password'}
+              autoComplete="current-password"
+              placeholder="Enter your password"
+              aria-invalid={!!errors.password}
+              aria-describedby={errors.password ? 'login-password-error' : undefined}
+              {...register('password', { required: 'Password is required' })}
             />
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="login-password" className="text-sm font-semibold text-gray-700">Password</label>
-                <Link to="/forgot-password"
-                      className="text-xs font-semibold text-green-600 hover:text-green-700">
-                  Forgot password?
-                </Link>
-              </div>
-              <div className="relative">
-                <input
-                  id="login-password"
-                  type={showPwd ? 'text' : 'password'}
-                  {...register('password', { required: 'Password is required' })}
-                  className="input"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
-                <button type="button" onClick={() => setShowPwd(!showPwd)}
-                        aria-label={showPwd ? 'Hide password' : 'Show password'}
-                        aria-pressed={showPwd}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 min-w-10 min-h-10 flex items-center justify-center text-gray-500 hover:text-gray-900 transition-colors rounded-lg">
-                  {showPwd ? <EyeOff size={16} strokeWidth={1.75} aria-hidden="true" /> : <Eye size={16} strokeWidth={1.75} aria-hidden="true" />}
-                </button>
-              </div>
-              {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
-            </div>
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              loading={isLoading}
-              className="w-full mt-1"
+            <button
+              type="button"
+              className="auth-password-toggle"
+              onClick={() => setShowPwd(value => !value)}
+              aria-label={showPwd ? 'Hide password' : 'Show password'}
+              aria-pressed={showPwd}
             >
-              Sign In
-            </Button>
-          </form>
+              {showPwd ? <EyeOff size={17} aria-hidden="true" /> : <Eye size={17} aria-hidden="true" />}
+            </button>
+          </div>
+          {errors.password && <p id="login-password-error" className="auth-field-error" role="alert">{errors.password.message}</p>}
         </div>
 
-        {/* Footer note */}
-        <div className="text-center mt-5 space-y-1">
-          <p className="text-gray-400 text-xs">Don't have an account?</p>
-          <p className="text-gray-500 text-xs">Contact your system administrator.</p>
-          <p className="text-gray-400 text-xs font-semibold">Admin-created accounts only.</p>
-        </div>
-      </div>
-    </div>
+        <button type="submit" className="auth-submit" disabled={isLoading}>
+          {isLoading && <span className="auth-spinner" aria-hidden="true" />}
+          {isLoading ? 'Signing in…' : 'Sign in to workspace'}
+        </button>
+      </form>
+    </AuthShell>
   );
-} 
+}

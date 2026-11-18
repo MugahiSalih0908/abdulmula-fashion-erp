@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Activity, Archive, BarChart3, BookOpen, ChevronRight, ClipboardList,
+  Activity, Archive, BarChart3, BookOpen, ChevronRight, ClipboardList, Mail, Receipt,
   LayoutDashboard, LogOut, Menu, Package, PanelLeftClose,
   PanelLeftOpen, Settings, ShieldCheck, ShoppingCart, Truck, UserCog, Users,
   Wallet, Wifi, WifiOff, X
@@ -12,10 +12,12 @@ import { useRole } from '../../hooks/useRole';
 import useAuthStore from '../../store/authStore';
 import BottomNav from './BottomNav';
 import Drawer from './Drawer';
+import PageLoadingFallback from '../PageLoadingFallback';
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/pos', label: 'POS', icon: ShoppingCart },
+  { to: '/invoices', label: 'Invoices', icon: Receipt, permission: 'viewInvoices' },
   { to: '/products', label: 'Products', icon: Package, permission: 'viewProducts' },
   { to: '/out-of-stock', label: 'Out of Stock', icon: Archive, permission: 'viewProducts' },
   { to: '/customers', label: 'Customers', icon: Users },
@@ -26,6 +28,7 @@ const NAV_ITEMS = [
   { to: '/reports', label: 'Reports', icon: BarChart3, permission: 'viewReports' },
   { to: '/staff', label: 'Staff', icon: UserCog, permission: 'manageStaff' },
   { to: '/audit-logs', label: 'Audit Logs', icon: ShieldCheck, permission: 'viewAuditLogs' },
+  { to: '/email-center', label: 'Email Center', icon: Mail, permission: 'manageEmail' },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -92,6 +95,8 @@ export default function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreDialogRef = useRef(null);
+  const moreCloseRef = useRef(null);
   const { isOnline, pendingCount, isSyncing } = useOnlineStatus();
   const user = useAuthStore(state => state.user);
   const logout = useAuthStore(state => state.logout);
@@ -113,12 +118,47 @@ export default function AppLayout() {
   useEffect(() => {
     if (!moreOpen) return undefined;
 
+    const previousOverflow = document.body.style.overflow;
+    const previouslyFocused = document.activeElement;
+    const focusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
     const handleKeyDown = event => {
-      if (event.key === 'Escape') setMoreOpen(false);
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMoreOpen(false);
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(
+        moreDialogRef.current?.querySelectorAll(focusableSelector) || []
+      ).filter(element => element.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (!first || !last) {
+        event.preventDefault();
+        moreDialogRef.current?.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
 
+    document.body.style.overflow = 'hidden';
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    moreCloseRef.current?.focus();
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) {
+        previouslyFocused.focus();
+      }
+    };
   }, [moreOpen]);
 
   const handleLogout = () => {
@@ -132,6 +172,7 @@ export default function AppLayout() {
 
   return (
     <div className={`app-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+      <a className="app-skip-link" href="#main-content">Skip to main content</a>
       <aside className="app-sidebar" aria-label="Main navigation">
         <div className="app-sidebar-brand">
           <NavLink to="/dashboard" className="app-brand" aria-label="Abdulmula Fashion dashboard">
@@ -216,9 +257,11 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <main className="app-main-content" id="main-content">
-          <Outlet />
-        </main>
+        <div className="app-main-content" id="main-content" tabIndex={-1}>
+          <Suspense fallback={<PageLoadingFallback />}>
+            <Outlet />
+          </Suspense>
+        </div>
       </div>
 
       <BottomNav
@@ -264,10 +307,12 @@ export default function AppLayout() {
               onClick={() => setMoreOpen(false)}
             />
             <motion.section
+              ref={moreDialogRef}
               className="app-more-sheet"
               role="dialog"
               aria-modal="true"
               aria-label="More navigation"
+              tabIndex={-1}
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
@@ -278,7 +323,7 @@ export default function AppLayout() {
                   <p className="app-more-sheet-title">More</p>
                   <p className="app-more-sheet-subtitle">Your workspace and account</p>
                 </div>
-                <button type="button" className="app-more-close" onClick={() => setMoreOpen(false)} aria-label="Close more menu">
+                <button ref={moreCloseRef} type="button" className="app-more-close" onClick={() => setMoreOpen(false)} aria-label="Close more menu">
                   <X size={20} aria-hidden="true" />
                 </button>
               </div>

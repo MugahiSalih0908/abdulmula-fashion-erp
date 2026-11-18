@@ -15,5 +15,7 @@ const customerSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 customerSchema.index({ name: 'text', phone: 'text' });
+customerSchema.index({ isDeleted: 1, name: 1, _id: 1 });
+customerSchema.index({ isDeleted: 1, creditBalance: 1 });
 
 module.exports = mongoose.model('Customer', customerSchema);

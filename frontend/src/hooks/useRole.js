@@ -15,6 +15,7 @@ export const useRole = () => {
     // Fine-grained permission checks
     can: {
       viewProducts:    true,
+      viewInvoices:    true,
       editProducts:    role !== 'staff',
       deleteProducts:  role !== 'staff',
 
@@ -37,6 +38,7 @@ export const useRole = () => {
 
       manageStaff:     role === 'admin',
       viewAuditLogs:   role === 'admin',
+      manageEmail:     role === 'admin',
 
       editAllSettings: role !== 'staff',
       ownSettingsOnly: true,       // always true — everyone can edit own profile

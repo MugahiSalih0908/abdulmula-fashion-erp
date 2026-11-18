@@ -25,6 +25,15 @@ const invitationSchema = new mongoose.Schema({
   lastResentAt: { type: Date },
   resendCount:  { type: Number, default: 0, min: 0 },
 
+  // Track email submission separately from the invitation's acceptance state.
+  emailStatus: {
+    type: String,
+    enum: ['not_attempted', 'sent', 'blocked', 'failed', 'unknown'],
+    default: 'not_attempted'
+  },
+  emailErrorCode: { type: String, maxlength: 80 },
+  emailErrorMessage: { type: String, maxlength: 240 },
+
 }, { timestamps: true });
 
 // ── Index for finding pending invitations ──────────────────────────
