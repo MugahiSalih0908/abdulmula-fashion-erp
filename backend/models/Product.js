@@ -28,6 +28,5 @@ const productSchema = new mongoose.Schema({
 // Index for fast POS search
 productSchema.index({ name: 'text', sku: 'text', barcode: 'text' });
 productSchema.index({ category: 1, isDeleted: 1 });
-productSchema.index({ barcode: 1 }, { sparse: true });
 
 module.exports = mongoose.model('Product', productSchema);
