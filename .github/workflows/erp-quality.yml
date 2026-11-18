@@ -3,6 +3,8 @@ name: ERP quality checks
 on:
   push:
     branches:
+      - main
+      - release/premium-workspaces-contrast
       - feature/email-center-infrastructure
       - ui/phase-6-invoice-history
       - ui/phase-7-customer-management
@@ -19,6 +21,7 @@ on:
       - perf/phase-17-mobile-performance
   pull_request:
     branches:
+      - main
       - ui/phase-5-premium-pos-products-cart-staff
       - feature/email-center-infrastructure
       - ui/phase-6-invoice-history
