@@ -313,17 +313,26 @@ export default function ReportsPage() {
           <ReportError message={summaryQuery.error?.response?.data?.message || summaryQuery.error?.message} onRetry={() => summaryQuery.refetch()} retrying={summaryQuery.isFetching} />
         ) : summaryQuery.data ? (
           <section className="space-y-4" aria-label="Business overview">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
               <Metric label="Revenue" value={money(summaryQuery.data.revenue, fmt)} detail={(summaryQuery.data.salesCount || 0) + ' recorded sales'} Icon={TrendingUp} tone="green" />
               <Metric label="Recorded expenses" value={money(summaryQuery.data.expenses, fmt)} detail="Expenses in the selected period" Icon={TrendingDown} tone="red" />
               <Metric label="Revenue less expenses" value={money(getRevenueLessExpenses(summaryQuery.data.revenue, summaryQuery.data.expenses), fmt)} detail="Before product cost / cost of goods sold" Icon={Wallet} tone="gold" />
+              <Metric
+                label="Gross profit"
+                value={summaryQuery.data.grossProfitAvailable ? money(summaryQuery.data.grossProfit, fmt) : 'Unavailable'}
+                detail={summaryQuery.data.grossProfitAvailable
+                  ? 'Sales less recorded product cost, before operating expenses'
+                  : `${Number(summaryQuery.data.uncostedInvoiceCount || 0)} invoice(s) need product cost data`}
+                Icon={Wallet}
+                tone="gold"
+              />
               <Metric label="Average sale" value={money(summaryQuery.data.salesCount ? summaryQuery.data.revenue / summaryQuery.data.salesCount : 0, fmt)} detail="Revenue divided by sales count" Icon={ShoppingBag} tone="slate" />
               <Metric label="Sales count" value={Number(summaryQuery.data.salesCount || 0).toLocaleString('en-IN')} detail="Invoices in the selected period" Icon={BarChart3} tone="slate" />
             </div>
 
             <div className="rounded-2xl border border-[#ead8ad] bg-[#fbf8f1] p-3.5">
               <p className="text-xs leading-5 text-[var(--color-text-secondary)]">
-                “Revenue less expenses” is not net profit. Current invoices do not preserve historical product cost, so this report cannot calculate cost of goods sold or true profit yet.
+                “Revenue less expenses” is before product cost and is not net profit. Gross profit is calculated from server-recorded product cost snapshots on new invoices; historical invoices are not backfilled. It remains unavailable for a period until every invoice in that period has complete cost data.
               </p>
             </div>
 
