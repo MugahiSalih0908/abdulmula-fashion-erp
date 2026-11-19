@@ -50,6 +50,30 @@ router.post('/', protect, async (req, res, next) => {
       addCurrency,
       subtractCurrency
     } = await invoiceCalculations;
+    const allowedInvoiceFields = [
+      'items', 'paymentMethod', 'amountPaid', 'cashReceived', 'customerId',
+      'taxRate', 'note', 'offlineId', 'offlineOriginalPayload',
+      'offlineConflictApproval', 'offlineCreatedAt', 'createdAt'
+    ];
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) ||
+        Object.keys(req.body).some(key => !allowedInvoiceFields.includes(key))) {
+      throw Object.assign(new Error('Invoice request contains unsupported fields.'), { statusCode: 400 });
+    }
+    if (req.body.note !== undefined &&
+        (typeof req.body.note !== 'string' || req.body.note.length > 300)) {
+      throw Object.assign(new Error('Invoice note must be text of at most 300 characters.'), { statusCode: 400 });
+    }
+    if (!Array.isArray(req.body.items) || req.body.items.length < 1 || req.body.items.length > 100) {
+      throw Object.assign(new Error('Invoice must contain between 1 and 100 line items.'), { statusCode: 400 });
+    }
+    const allowedItemFields = ['productId', 'productName', 'quantity', 'unitPrice', 'expectedUnitPrice', 'discount'];
+    for (const item of req.body.items) {
+      if (!item || typeof item !== 'object' || Array.isArray(item) ||
+          Object.keys(item).some(key => !allowedItemFields.includes(key))) {
+        throw Object.assign(new Error('Invoice line contains unsupported fields.'), { statusCode: 400 });
+      }
+    }
+
     const {
       items,           // [{ productId, quantity, unitPrice, discount }]
       paymentMethod,
@@ -706,24 +730,42 @@ router.post('/offline-conflicts/reject', protect, authorize('admin', 'manager'),
 /* ── GET /api/invoices ───────────────────────────────────────── */
 router.get('/', protect, async (req, res, next) => {
   try {
-    const { startDate, endDate, paymentMethod, paymentStatus, page = 1, limit = 50 } = req.query;
+    const { startDate, endDate, paymentMethod, paymentStatus } = req.query;
     const filter = {};
-
     if (startDate || endDate) {
       filter.date = {};
-      if (startDate) filter.date.$gte = new Date(startDate);
-      if (endDate)   { const e = new Date(endDate); e.setHours(23,59,59); filter.date.$lte = e; }
+      if (startDate) {
+        const start = new Date(startDate);
+        if (Number.isNaN(start.getTime())) return res.status(400).json({ success: false, message: 'Invalid start date.' });
+        filter.date.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        if (Number.isNaN(end.getTime())) return res.status(400).json({ success: false, message: 'Invalid end date.' });
+        end.setHours(23, 59, 59, 999);
+        filter.date.$lte = end;
+      }
+      if (filter.date.$gte && filter.date.$lte && filter.date.$gte > filter.date.$lte) {
+        return res.status(400).json({ success: false, message: 'Start date cannot be after end date.' });
+      }
     }
-    if (paymentMethod && paymentMethod !== 'all') filter.paymentMethod = paymentMethod;
-    if (paymentStatus && paymentStatus !== 'all') filter.paymentStatus = paymentStatus;
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    if (paymentMethod && paymentMethod !== 'all') {
+      if (!['Cash', 'Credit', 'Mobile Transfer', 'Mixed'].includes(paymentMethod)) return res.status(400).json({ success: false, message: 'Invalid payment method filter.' });
+      filter.paymentMethod = paymentMethod;
+    }
+    if (paymentStatus && paymentStatus !== 'all') {
+      if (!['paid', 'partial', 'unpaid'].includes(paymentStatus)) return res.status(400).json({ success: false, message: 'Invalid payment status filter.' });
+      filter.paymentStatus = paymentStatus;
+    }
+    const pagination = require('../utils/queryPagination').getPaginationOptions(req.query, 50, 100)
+      || { page: 1, limit: 50, skip: 0 };
+    const { page, limit, skip } = pagination;
     const [invoices, total, revenue] = await Promise.all([
       Invoice.find(filter)
              .populate('customer', 'name phone')
              .sort({ date: -1 })
              .skip(skip)
-             .limit(parseInt(limit)),
+             .limit(limit),
       Invoice.countDocuments(filter),
       Invoice.aggregate([
         { $match: filter },
@@ -736,7 +778,7 @@ router.get('/', protect, async (req, res, next) => {
       data:    invoices,
       total,
       totalRevenue: revenue[0]?.total || 0,
-      page: parseInt(page)
+      page
     });
   } catch (err) { next(err); }
 });
@@ -744,6 +786,7 @@ router.get('/', protect, async (req, res, next) => {
 /* ── GET /api/invoices/:id ───────────────────────────────────── */
 router.get('/:id', protect, async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, message: 'Invoice not found.' });
     const invoice = await Invoice.findById(req.params.id)
                                  .populate('customer', 'name phone')
                                  .populate('soldBy', 'name');
@@ -753,34 +796,26 @@ router.get('/:id', protect, async (req, res, next) => {
 });
 
 /* ── POST /api/invoices/sync-offline ─────────────────────────── */
-// Accepts an array of offline-queued invoices and processes each safely
-router.post('/sync-offline', protect, async (req, res, next) => {
-  try {
-    const { invoices } = req.body;
-    if (!invoices?.length)
-      return res.status(400).json({ success: false, message: 'No invoices to sync.' });
-
-    const results = [];
-
-    for (const inv of invoices) {
-      try {
-        // Reuse the single-invoice creation logic via internal call
-        const response = await createInvoiceInternal({ ...inv, soldBy: req.user._id, soldByName: req.user.name });
-        results.push({ offlineId: inv.offlineId, success: true, invoiceNumber: response.invoiceNumber });
-      } catch (err) {
-        results.push({ offlineId: inv.offlineId, success: false, error: err.message });
-      }
-    }
-
-    res.json({ success: true, data: results });
-  } catch (err) { next(err); }
+// Legacy batch sync was not safe: it used an undefined internal creator and
+// bypassed the single-invoice validation path. The PWA uses POST /:idempotent
+// invoice creation one sale at a time; reject this legacy endpoint explicitly.
+router.post('/sync-offline', protect, async (req, res) => {
+  res.status(410).json({
+    success: false,
+    code: 'LEGACY_SYNC_DISABLED',
+    message: 'Batch offline sync is disabled. Synchronize each sale through the validated invoice endpoint.'
+  });
 });
 
 /* ── DELETE /api/invoices/:id ────────────────────────────────── */
-router.delete('/:id', protect, async (req, res, next) => {
+router.delete('/:id', protect, authorize('admin'), async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      await session.abortTransaction();
+      return res.status(404).json({ success: false, message: 'Invoice not found.' });
+    }
     const { shouldReverseCustomerPurchases, subtractCurrency } = await invoiceCalculations;
     const invoice = await Invoice.findById(req.params.id).session(session);
     if (!invoice) {
