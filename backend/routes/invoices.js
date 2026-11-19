@@ -707,7 +707,9 @@ router.post('/offline-conflicts/reject', protect, authorize('admin', 'manager'),
 router.get('/', protect, async (req, res, next) => {
   try {
     const { startDate, endDate, paymentMethod, paymentStatus, page = 1, limit = 50 } = req.query;
-    const filter = {};
+    // Staff can inspect only their own sales; management roles retain the
+    // organisation-wide invoice history for reconciliation and reporting.
+    const filter = req.user.role === 'staff' ? { soldBy: req.user._id } : {};
 
     if (startDate || endDate) {
       filter.date = {};
@@ -744,7 +746,11 @@ router.get('/', protect, async (req, res, next) => {
 /* ── GET /api/invoices/:id ───────────────────────────────────── */
 router.get('/:id', protect, async (req, res, next) => {
   try {
-    const invoice = await Invoice.findById(req.params.id)
+    const invoiceFilter = {
+      _id: req.params.id,
+      ...(req.user.role === 'staff' ? { soldBy: req.user._id } : {})
+    };
+    const invoice = await Invoice.findOne(invoiceFilter)
                                  .populate('customer', 'name phone')
                                  .populate('soldBy', 'name');
     if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found.' });
