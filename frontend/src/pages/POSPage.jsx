@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import api from '../services/api';
+import useAuthStore from '../store/authStore';
 import useCartStore from '../store/cartStore';
 import { calculateCashChange } from '../../../shared/invoiceCalculations.mjs';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
@@ -39,6 +40,7 @@ export default function POSPage() {
   const checkoutCreatedAt = useRef(localStorage.getItem('pos.pendingCheckoutCreatedAt'));
 
   const cart = useCartStore();
+  const ownerUserId = useAuthStore(state => state.offlineUserId || state.user?._id || state.user?.id);
   const { isOnline } = useOnlineStatus();
   const queryClient = useQueryClient();
 
@@ -132,10 +134,10 @@ export default function POSPage() {
   const { mutate: checkout, isPending: isCheckingOut } = useMutation({
     mutationFn: async (payload) => {
       if (isOnline) {
-        const offlineId = await saveSaleOffline(payload, payload.offlineId);
+        const offlineId = await saveSaleOffline(payload, payload.offlineId, ownerUserId);
         try {
           const { data } = await api.post('/invoices', payload);
-          await markSaleSynced(offlineId);
+          await markSaleSynced(offlineId, ownerUserId);
           return data.data;
         } catch (err) {
           const status = err?.response?.status;
