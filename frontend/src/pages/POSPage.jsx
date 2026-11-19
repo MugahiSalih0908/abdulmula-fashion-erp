@@ -193,8 +193,9 @@ export default function POSPage() {
     onSuccess: (invoice) => {
       const cash = cart.cashReceived;
       const change = calculateCashChange(cash, invoice.grandTotal);
+      const completedCheckoutId = checkoutId.current;
+      if (completedCheckoutId) clearPendingCheckout(checkoutKey, completedCheckoutId);
       checkoutId.current = null;
-      clearPendingCheckout(checkoutKey, checkoutId.current);
       checkoutCreatedAt.current = null;
       queryClient.invalidateQueries(['pos-products']);
       cart.clearCart();
