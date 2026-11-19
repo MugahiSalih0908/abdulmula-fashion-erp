@@ -23,3 +23,17 @@ services:
         sync: false
       - key: CLIENT_PREVIEW_URL
         sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_DELIVERY_MODE
+        value: disabled
+      - key: EMAIL_SENDING_DOMAIN
+        sync: false
+      - key: EMAIL_DOMAIN_VERIFIED
+        value: "false"
