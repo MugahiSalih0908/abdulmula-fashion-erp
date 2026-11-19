@@ -763,27 +763,13 @@ router.get('/:id', protect, async (req, res, next) => {
 });
 
 /* ── POST /api/invoices/sync-offline ─────────────────────────── */
-// Accepts an array of offline-queued invoices and processes each safely
-router.post('/sync-offline', protect, async (req, res, next) => {
-  try {
-    const { invoices } = req.body;
-    if (!invoices?.length)
-      return res.status(400).json({ success: false, message: 'No invoices to sync.' });
-
-    const results = [];
-
-    for (const inv of invoices) {
-      try {
-        // Reuse the single-invoice creation logic via internal call
-        const response = await createInvoiceInternal({ ...inv, soldBy: req.user._id, soldByName: req.user.name });
-        results.push({ offlineId: inv.offlineId, success: true, invoiceNumber: response.invoiceNumber });
-      } catch (err) {
-        results.push({ offlineId: inv.offlineId, success: false, error: err.message });
-      }
-    }
-
-    res.json({ success: true, data: results });
-  } catch (err) { next(err); }
+// The old batch handler referenced a removed helper. Current clients safely submit
+// each queued sale through the validated POST /api/invoices endpoint.
+router.post('/sync-offline', protect, (req, res) => {
+  res.status(410).json({
+    success: false,
+    message: 'Batch offline sync is retired. Submit queued sales individually to POST /api/invoices.'
+  });
 });
 
 /* ── DELETE /api/invoices/:id ────────────────────────────────── */
