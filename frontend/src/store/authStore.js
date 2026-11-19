@@ -6,6 +6,7 @@ import api from '../services/api';
 // React StrictMode and protected route transitions may request the current user together.
 // Share one in-flight request so the same access token is not checked multiple times.
 let fetchMeInFlight = null;
+let fetchMeToken = null;
 const storedAccessToken = localStorage.getItem('accessToken');
 const storedRefreshToken = localStorage.getItem('refreshToken');
 
@@ -55,8 +56,10 @@ const useAuthStore = create((set, get) => ({
 fetchMe: () => {
   const token = get().accessToken;
   if (!token) return Promise.resolve();
-  if (fetchMeInFlight) return fetchMeInFlight;
+  if (fetchMeInFlight && fetchMeToken === token) return fetchMeInFlight;
 
+  const requestToken = token;
+  fetchMeToken = requestToken;
   fetchMeInFlight = (async () => {
     try {
       const { data } = await api.get('/auth/me', {
@@ -64,19 +67,22 @@ fetchMe: () => {
       });
 
       // Ignore stale results if the user signed out or changed accounts mid-request.
-      if (get().accessToken === token) {
+      if (get().accessToken === requestToken) {
         localStorage.setItem('activeUserId', String(data.data._id));
         set({ user: data.data });
       }
     } catch (error) {
-      if (error.response?.status === 401 && get().accessToken === token) {
+      if (error.response?.status === 401 && get().accessToken === requestToken) {
         get().logout();
         return;
       }
 
       console.error('Fetch me failed:', error.message);
     } finally {
-      fetchMeInFlight = null;
+      if (fetchMeToken === requestToken) {
+        fetchMeInFlight = null;
+        fetchMeToken = null;
+      }
     }
   })();
 
@@ -135,24 +141,26 @@ fetchMe: () => {
   // ─────────────────────────────
 
   logout: async () => {
-    // Capture the current session, clear the shared device immediately, then
-    // best-effort revoke this refresh token on the server.
     const { accessToken, refreshToken } = get();
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('activeUserId');
-    set({ user: null, accessToken: null, refreshToken: null });
 
+    // Revoke while the current session is still available. The API client can
+    // rotate an expired access token and update the logout body to the new
+    // refresh token before the server revokes this device session.
     if (accessToken && refreshToken) {
       try {
         await api.post('/auth/logout', { refreshToken }, {
           headers: { Authorization: `Bearer ${accessToken}` },
-          timeout: 5000
+          timeout: 4000
         });
       } catch {
-        // Local sign-out must still complete when the device is offline.
+        // Always complete local sign-out, including when the device is offline.
       }
     }
+
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('activeUserId');
+    set({ user: null, accessToken: null, refreshToken: null });
   },
 
   // ─────────────────────────────
