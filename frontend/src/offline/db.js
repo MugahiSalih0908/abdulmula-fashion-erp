@@ -38,4 +38,17 @@ db.version(3).stores({
   syncMeta:     'key'
 });
 
+db.version(4).stores({
+  pendingSales: '++id, offlineId, userId, createdAt, isSynced, syncStatus',
+  products:     '_id, name, category, barcode, sku, updatedAt',
+  customers:    null,
+  syncMeta:     'key'
+}).upgrade(async transaction => {
+  // Remove sensitive product cost and supplier fields left by previous offline cache versions.
+  await transaction.table('products').toCollection().modify(product => {
+    delete product.costPrice;
+    delete product.supplier;
+  });
+});
+
 export default db;
