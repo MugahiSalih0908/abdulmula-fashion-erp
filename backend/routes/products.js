@@ -12,6 +12,7 @@ const { validateProductPayload } = require('../utils/productValidation');
 router.get('/', protect, async (req, res, next) => {
   try {
     const { search, category, lowStock, outOfStock, healthyStock, page = 1, limit = 500 } = req.query;
+    const isManager = ['admin', 'manager'].includes(req.user.role);
     const filter = { isDeleted: false };
     if (search) filter.$text = { $search: search };
     if (category && category !== 'all' && category !== 'All') filter.category = category;
@@ -40,9 +41,15 @@ router.get('/', protect, async (req, res, next) => {
       .limit(pageSize);
 
     if (paginationRequested) {
-      findQuery.select('name sku barcode price costPrice quantity category description size color imageUrl lowStockThreshold supplier');
+      const productFields = [
+        'name', 'sku', 'barcode', 'price', 'quantity', 'category',
+        'description', 'size', 'color', 'imageUrl', 'lowStockThreshold', 'supplier'
+      ];
+      if (isManager) productFields.push('costPrice');
+      findQuery.select(productFields.join(' '));
     } else {
       findQuery.populate('supplier', 'name');
+      if (!isManager) findQuery.select('-costPrice');
     }
 
     const [products, total, summaryRows] = await Promise.all([
@@ -86,6 +93,18 @@ router.get('/', protect, async (req, res, next) => {
     ]);
 
     const summary = summaryRows[0] || null;
+    const emptySummary = {
+      productCount: 0,
+      unitsOnHand: 0,
+      lowStockCount: 0,
+      outOfStockCount: 0,
+      ...(isManager ? { inventoryCostValue: 0 } : {})
+    };
+    const safeSummary = summary
+      ? { ...summary, ...(!isManager ? { inventoryCostValue: undefined } : {}) }
+      : emptySummary;
+    if (safeSummary.inventoryCostValue === undefined) delete safeSummary.inventoryCostValue;
+
     res.json({
       success: true,
       data: products,
@@ -94,13 +113,7 @@ router.get('/', protect, async (req, res, next) => {
       limit: pageSize,
       ...(paginationRequested && {
         totalPages: Math.max(1, Math.ceil(total / pageSize)),
-        summary: summary || {
-          productCount: 0,
-          unitsOnHand: 0,
-          lowStockCount: 0,
-          outOfStockCount: 0,
-          inventoryCostValue: 0
-        }
+        summary: safeSummary
       })
     });
   } catch (err) { next(err); }
@@ -108,7 +121,9 @@ router.get('/', protect, async (req, res, next) => {
 
 router.get('/barcode/:barcode', protect, async (req, res, next) => {
   try {
-    const product = await Product.findOne({ barcode: req.params.barcode, isDeleted: false });
+    const productQuery = Product.findOne({ barcode: req.params.barcode, isDeleted: false });
+    if (req.user.role === 'staff') productQuery.select('-costPrice');
+    const product = await productQuery;
     if (!product) return res.status(404).json({ success: false, message: 'No product found for this barcode.' });
     res.json({ success: true, data: product });
   } catch (err) { next(err); }
@@ -116,7 +131,10 @@ router.get('/barcode/:barcode', protect, async (req, res, next) => {
 
 router.get('/:id', protect, async (req, res, next) => {
   try {
-    const product = await Product.findOne({ _id: req.params.id, isDeleted: false }).populate('supplier','name phone');
+    const productQuery = Product.findOne({ _id: req.params.id, isDeleted: false });
+    productQuery.populate('supplier', req.user.role === 'staff' ? 'name' : 'name phone');
+    if (req.user.role === 'staff') productQuery.select('-costPrice');
+    const product = await productQuery;
     if (!product) return res.status(404).json({ success: false, message: 'Product not found.' });
     res.json({ success: true, data: product });
   } catch (err) { next(err); }
