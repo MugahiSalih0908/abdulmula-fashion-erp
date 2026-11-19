@@ -40,7 +40,7 @@ test('password setup forms retain the backend minimum length and confirmation ch
     invite: pages.invite,
     reset: pages.reset
   })) {
-    assert.match(source, /at least 8 characters|at least 8|value: 8/, name + ' should enforce the eight-character minimum');
+    assert.match(source, /at least 12 characters|at least 12|value: 12/, name + ' should enforce the twelve-character minimum');
     assert.match(source, /Passwords do not match|passwords do not match/, name + ' should confirm the new password');
   }
 });
