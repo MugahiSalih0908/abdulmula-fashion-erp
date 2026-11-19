@@ -44,11 +44,10 @@ const buildRefreshTokenRotationPipeline = (consumedTokens, nextTokenDigest) => {
       refreshTokens: {
         $concatArrays: [
           {
-            $filter: {
-              input: { $ifNull: ['$refreshTokens', []] },
-              as: 'storedToken',
-              cond: { $not: [{ $in: ['$storedToken', consumedTokens] }] }
-            }
+            $setDifference: [
+              { $ifNull: ['$refreshTokens', []] },
+              consumedTokens
+            ]
           },
           [nextTokenDigest]
         ]
