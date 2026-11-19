@@ -39,7 +39,6 @@ app.use((req, res, next) => {
 app.use(helmet({
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: false } : false
 }));
-app.use(mongoSanitize());
 app.use((req, res, next) => {
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=(), usb=()');
   next();
@@ -101,6 +100,8 @@ app.use('/api/webhooks', require('./routes/webhooks'));
 
 app.use(express.json({ limit:'1mb' }));
 app.use(express.urlencoded({ extended:true, limit:'16kb', parameterLimit:50 }));
+// Sanitize only after body parsers populate req.body; running this earlier leaves JSON bodies untouched.
+app.use(mongoSanitize());
 
 // ── Logging ───────────────────────────────────────────────────
 const { redactRequestPath } = require('./utils/safeRequestPath');
