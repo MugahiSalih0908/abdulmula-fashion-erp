@@ -83,7 +83,18 @@ app.use(cors({
 
 // ── Rate limiting ──────────────────────────────────────────────
 app.use('/api/', rateLimit({ windowMs:15*60*1000, max:500, standardHeaders:true, legacyHeaders:false }));
-app.use('/api/auth/login', rateLimit({ windowMs:15*60*1000, max:20, message:{ success:false, message:'Too many login attempts. Wait 15 minutes.' } }));
+app.use('/api/auth/login', rateLimit({ windowMs:15*60*1000, max:20, standardHeaders:true, legacyHeaders:false, message:{ success:false, message:'Too many login attempts. Wait 15 minutes.' } }));
+const sensitiveAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many account-security requests. Try again later.' }
+});
+app.use('/api/auth/activate', sensitiveAuthLimiter);
+app.use('/api/auth/forgot-password', sensitiveAuthLimiter);
+app.use('/api/auth/reset-password', sensitiveAuthLimiter);
+app.use('/api/auth/refresh', sensitiveAuthLimiter);
 
 // ── Body parsing ──────────────────────────────────────────────
 app.use('/api/webhooks', require('./routes/webhooks'));
