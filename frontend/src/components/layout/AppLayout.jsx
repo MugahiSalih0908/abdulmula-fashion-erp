@@ -161,10 +161,10 @@ export default function AppLayout() {
     };
   }, [moreOpen]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setDrawerOpen(false);
     setMoreOpen(false);
-    logout();
+    await logout();
     navigate('/login');
   };
 
