@@ -12,7 +12,7 @@ import AuthShell from '../components/AuthShell';
 function calculatePasswordStrength(password) {
   if (!password) return 0;
   let score = 0;
-  if (password.length >= 8) score++;
+  if (password.length >= 12) score++;
   if (password.length >= 12) score++;
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
   if (/\d/.test(password)) score++;
@@ -96,7 +96,7 @@ export default function InvitePage() {
     else if (formData.name.trim().length < 2) nextErrors.name = 'Name must be at least 2 characters.';
 
     if (!formData.password) nextErrors.password = 'Password is required.';
-    else if (formData.password.length < 8) nextErrors.password = 'Password must be at least 8 characters.';
+    else if (formData.password.length < 12) nextErrors.password = 'Password must be at least 12 characters.';
 
     if (!formData.confirmPassword) nextErrors.confirmPassword = 'Please confirm your password.';
     else if (formData.password !== formData.confirmPassword) nextErrors.confirmPassword = 'Passwords do not match.';
@@ -271,7 +271,7 @@ export default function InvitePage() {
 
         <div className="auth-requirements">
           {[
-            ['At least 8 characters', formData.password.length >= 8],
+            ['At least 12 characters', formData.password.length >= 8],
             ['Uppercase and lowercase letters', /[a-z]/.test(formData.password) && /[A-Z]/.test(formData.password)],
             ['A number', /\d/.test(formData.password)],
             ['A symbol', /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password)]
