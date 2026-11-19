@@ -20,7 +20,7 @@ router.use(protect);
 const generatePendingPassword = () => crypto.randomBytes(32).toString('hex');
 
 /* ── GET /api/staff ────────────────────── admin + manager ───── */
-router.get('/', authorize('admin','manager'), async (req, res, next) => {
+router.get('/', authorize('admin'), async (req, res, next) => {
   try {
     // Fetch staff and all sales summaries in two independent queries.
     // The previous per-member count + aggregate loop grew by two queries per staff member.
@@ -54,7 +54,7 @@ router.get('/', authorize('admin','manager'), async (req, res, next) => {
 });
 
 /* ── GET /api/staff/:id ──────────────── admin + manager ──────── */
-router.get('/:id', authorize('admin','manager'), async (req, res, next) => {
+router.get('/:id', authorize('admin'), async (req, res, next) => {
   try {
     if (req.params.id === 'system') return next(); // skip for /system/audit-logs
     const member = await User.findById(req.params.id).select('-password -refreshTokens');
@@ -72,25 +72,31 @@ router.get('/:id', authorize('admin','manager'), async (req, res, next) => {
 // Admin creates account → system auto-sends welcome + activation email
 router.post('/', authorize('admin'), async (req, res, next) => {
   try {
-    const { name, email, role, salary } = req.body;
+    const allowed = ['name', 'email', 'role', 'salary'];
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).some(key => !allowed.includes(key))) {
+      return res.status(400).json({ success:false, message:'Unsupported staff account field.' });
+    }
+    const { name, email, role = 'staff', salary = 0 } = req.body;
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const parsedSalary = typeof salary === 'number' || (typeof salary === 'string' && salary.trim() !== '') ? Number(salary) : Number.NaN;
+    if (!normalizedName || normalizedName.length > 60 || !normalizedEmail || normalizedEmail.length > 254) {
+      return res.status(400).json({ success:false, message:'Name (up to 60 characters) and email (up to 254 characters) are required.' });
+    }
+    if (!validator.isEmail(normalizedEmail)) return res.status(400).json({ success:false, message:'Enter a valid email address.' });
+    if (!['admin', 'manager', 'staff'].includes(role)) return res.status(400).json({ success:false, message:'Choose a valid staff role.' });
+    if (!Number.isFinite(parsedSalary) || parsedSalary < 0) return res.status(400).json({ success:false, message:'Salary must be a finite non-negative number.' });
 
-    if (!name || !email)
-      return res.status(400).json({ success:false, message:'Name and email are required.' });
-    if (!validator.isEmail(email))
-      return res.status(400).json({ success:false, message:'Enter a valid email address.' });
-    if (role === 'admin' && req.user.role !== 'admin')
-      return res.status(403).json({ success:false, message:'Only admins can create admin accounts.' });
-
-    const exists = await User.findOne({ email: email.toLowerCase().trim() });
+    const exists = await User.findOne({ email: normalizedEmail });
     if (exists) return res.status(400).json({ success:false, message:'An account with this email already exists.' });
 
     // Create a pending account; the staff member chooses their own password during activation.
     const member = new User({
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
+      name: normalizedName,
+      email: normalizedEmail,
       password: generatePendingPassword(),
-      role: role || 'staff',
-      salary: salary || 0,
+      role,
+      salary: parsedSalary,
       isVerified: false
     });
 
@@ -199,12 +205,40 @@ router.post('/:id/resend-activation', authorize('admin'), async (req, res, next)
 /* ── PUT /api/staff/:id ──────────────────── admin only ──────── */
 router.put('/:id', authorize('admin'), async (req, res, next) => {
   try {
-    const { name, email, role, salary } = req.body;
-    if (email && !validator.isEmail(email))
-      return res.status(400).json({ success:false, message:'Enter a valid email address.' });
+    if (!require('mongoose').isValidObjectId(req.params.id)) return res.status(404).json({ success:false, message:'Staff not found.' });
+    const allowed = ['name', 'email', 'role', 'salary'];
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length === 0 || Object.keys(req.body).some(key => !allowed.includes(key))) {
+      return res.status(400).json({ success:false, message:'Provide only name, email, role or salary fields.' });
+    }
+    const update = {};
+    if (Object.prototype.hasOwnProperty.call(req.body, 'name')) {
+      if (typeof req.body.name !== 'string' || !req.body.name.trim() || req.body.name.trim().length > 60) {
+        return res.status(400).json({ success:false, message:'Name must be 1–60 characters.' });
+      }
+      update.name = req.body.name.trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'email')) {
+      if (typeof req.body.email !== 'string' || !validator.isEmail(req.body.email.trim()) || req.body.email.trim().length > 254) {
+        return res.status(400).json({ success:false, message:'Enter a valid email address.' });
+      }
+      update.email = req.body.email.trim().toLowerCase();
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'role')) {
+      if (!['admin', 'manager', 'staff'].includes(req.body.role)) return res.status(400).json({ success:false, message:'Choose a valid staff role.' });
+      if (String(req.params.id) === String(req.user._id) && req.body.role !== req.user.role) {
+        return res.status(400).json({ success:false, message:'You cannot change your own administrator role.' });
+      }
+      update.role = req.body.role;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'salary')) {
+      const salary = Number(req.body.salary);
+      if (typeof req.body.salary === 'boolean' || !Number.isFinite(salary) || salary < 0) {
+        return res.status(400).json({ success:false, message:'Salary must be a finite non-negative number.' });
+      }
+      update.salary = salary;
+    }
     const member = await User.findByIdAndUpdate(
-      req.params.id,
-      { name, email: email?.toLowerCase().trim(), role, salary },
+      req.params.id, { $set: update },
       { new:true, runValidators:true, select:'-password -refreshTokens' }
     );
     if (!member) return res.status(404).json({ success:false, message:'Staff not found.' });
@@ -231,9 +265,9 @@ router.patch('/:id/toggle', authorize('admin'), async (req, res, next) => {
 /* ── PATCH /api/staff/:id/reset-password ─── admin only ──────── */
 router.patch('/:id/reset-password', authorize('admin'), async (req, res, next) => {
   try {
-    const { newPassword } = req.body;
-    if (!newPassword || newPassword.length < 8)
-      return res.status(400).json({ success:false, message:'New password must be at least 8 characters.' });
+    const newPassword = req.body?.newPassword;
+    if (typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 128)
+      return res.status(400).json({ success:false, message:'New password must be between 12 and 128 characters.' });
     const member = await User.findById(req.params.id).select('+refreshTokens');
     if (!member) return res.status(404).json({ success:false, message:'Staff not found.' });
     member.password      = newPassword;
