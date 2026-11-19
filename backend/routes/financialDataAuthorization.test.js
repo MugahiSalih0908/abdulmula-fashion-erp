@@ -6,6 +6,7 @@ const path = require('node:path');
 const products = readFileSync(path.join(__dirname, 'products.js'), 'utf8');
 const invoices = readFileSync(path.join(__dirname, 'invoices.js'), 'utf8');
 const dashboard = readFileSync(path.join(__dirname, 'dashboard.js'), 'utf8');
+const customers = readFileSync(path.join(__dirname, 'customers.js'), 'utf8');
 
 test('cashiers do not receive product cost, supplier, or inventory cost totals', () => {
   assert.match(products, /const canViewProductCosts = role => \['admin', 'manager'\]\.includes\(role\)/);
@@ -29,4 +30,9 @@ test('offline duplicate invoice responses cannot cross cashier accounts', () => 
 test('cashier dashboard does not include supplier or product cost data', () => {
   assert.match(dashboard, /-items\.unitCost -items\.costKnown/);
   assert.match(dashboard, /-costPrice -supplier/);
+});
+
+test('cashier customer detail history does not expose invoice cost snapshots', () => {
+  assert.match(customers, /const mayViewCosts = \['admin', 'manager'\]\.includes\(req\.user\.role\)/);
+  assert.match(customers, /invoiceQuery\.select\('-items\.unitCost -items\.costKnown'\)/);
 });
