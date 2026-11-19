@@ -11,6 +11,25 @@ export const API_BASE_URL = `${configuredApiUrl
   .replace(/\/+$/, '')
   .replace(/(?:\/api)+$/i, '')}/api`;
 
+// Production builds must never send bearer tokens or shop data to an
+// unencrypted API endpoint or to an API URL containing embedded credentials.
+if (import.meta.env.PROD) {
+  let productionApiUrl;
+  try {
+    productionApiUrl = new URL(API_BASE_URL);
+  } catch {
+    throw new Error('VITE_API_URL must be a valid absolute HTTPS URL in production.');
+  }
+
+  if (
+    productionApiUrl.protocol !== 'https:' ||
+    productionApiUrl.username ||
+    productionApiUrl.password
+  ) {
+    throw new Error('Production API connections must use HTTPS and must not embed credentials in the URL.');
+  }
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
