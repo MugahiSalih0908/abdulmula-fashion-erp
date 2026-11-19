@@ -2,7 +2,7 @@
 // Handles syncing queued offline sales when internet returns
 
 import db  from './db';
-import api from '../services/api';
+import api, { getSessionAuthConfig } from '../services/api';
 import {
   normalizeOwnerUserId,
   canSyncSaleForUser,
@@ -177,7 +177,7 @@ export const approveOfflinePriceConflict = async (saleId) => {
         ...item,
         currentUnitPriceAtConflict: item.currentUnitPriceAtReview
       }))
-    });
+    }, getSessionAuthConfig());
     const approvedItems = approvalResponse.data.data.items;
     payload.items = sale.items.map((item, index) => ({
       ...item,
@@ -187,7 +187,7 @@ export const approveOfflinePriceConflict = async (saleId) => {
     payload.offlineId = offlineId;
     payload.offlineConflictApproval = true;
     payload.offlineOriginalPayload = offlineOriginalPayload;
-    const { data } = await api.post('/invoices', payload);
+    const { data } = await api.post('/invoices', payload, getSessionAuthConfig());
     await markSaleSynced(offlineId, sale.userId);
     return data.data;
   } catch (error) {
@@ -244,7 +244,7 @@ export const rejectOfflinePriceConflict = async (saleId) => {
     })(),
     reason: 'Rejected by an authenticated manager or admin.',
     items
-  });
+  }, getSessionAuthConfig());
   const resolution = data.data;
   await db.pendingSales.update(saleId, {
     isSynced: false,
@@ -304,7 +304,7 @@ export const syncPendingSales = async (ownerUserId) => {
         })),
         offlineId
       };
-      await api.post('/invoices', payload);
+      await api.post('/invoices', payload, getSessionAuthConfig(userId));
       await markSaleSynced(offlineId, userId);
       synced++;
     } catch (err) {
@@ -346,7 +346,11 @@ export const getPendingCount = async (ownerUserId) => {
  */
 export const cacheProducts = async (products) => {
   await db.products.clear();
-  await db.products.bulkPut(products.map(p => ({ ...p, _id: p._id.toString() })));
+  await db.products.bulkPut(products.map(p => {
+    // Offline POS needs selling price and stock only; never persist inventory cost on shared devices.
+    const { costPrice, supplier, ...posProduct } = p;
+    return { ...posProduct, _id: p._id.toString() };
+  }));
   await db.syncMeta.put({ key: 'productsLastSync', value: new Date().toISOString() });
 };
 
