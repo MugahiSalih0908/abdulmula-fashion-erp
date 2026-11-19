@@ -64,9 +64,7 @@ jobs:
       - name: Preview non-breaking backend dependency fixes
         working-directory: backend
         shell: bash
-        run: |
-          npm audit fix --dry-run --json > /tmp/backend-audit-fix-plan.json || true
-          node -e "const a=require('/tmp/backend-audit-fix-plan.json'); console.log(JSON.stringify({added:a.added,removed:a.removed,changed:a.changed,audit:a.audit?.metadata?.vulnerabilities,fixes:a.audit?.fixAvailable},null,2));"
+        run: npm audit fix --dry-run || true
       - name: Check backend JavaScript syntax
         run: find backend -type f -name '*.js' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 node --check
       - name: Run backend tests
@@ -101,9 +99,7 @@ jobs:
       - name: Preview non-breaking frontend dependency fixes
         working-directory: frontend
         shell: bash
-        run: |
-          npm audit fix --dry-run --json > /tmp/frontend-audit-fix-plan.json || true
-          node -e "const a=require('/tmp/frontend-audit-fix-plan.json'); console.log(JSON.stringify({added:a.added,removed:a.removed,changed:a.changed,audit:a.audit?.metadata?.vulnerabilities,fixes:a.audit?.fixAvailable},null,2));"
+        run: npm audit fix --dry-run || true
       - name: Run frontend unit tests
         working-directory: frontend
         run: node --test src/pages/*.test.mjs src/store/*.test.js
