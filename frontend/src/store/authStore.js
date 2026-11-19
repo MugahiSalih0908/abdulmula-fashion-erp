@@ -65,6 +65,7 @@ fetchMe: () => {
 
       // Ignore stale results if the user signed out or changed accounts mid-request.
       if (get().accessToken === token) {
+        localStorage.setItem('activeUserId', String(data.data._id));
         set({ user: data.data });
       }
     } catch (error) {
@@ -98,6 +99,7 @@ fetchMe: () => {
 
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
+      localStorage.setItem('activeUserId', String(user._id));
 
       set({
         user,
@@ -136,6 +138,7 @@ fetchMe: () => {
 
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('activeUserId');
 
     set({
       user: null,
@@ -157,6 +160,17 @@ fetchMe: () => {
       accessToken,
       refreshToken,
     });
+  },
+
+  // ─────────────────────────────
+  setAuth: ({ accessToken, refreshToken, user }) => {
+    if (!accessToken || !refreshToken || !user?._id) {
+      throw new Error('An authenticated user and both session tokens are required.');
+    }
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
+    localStorage.setItem('activeUserId', String(user._id));
+    set({ user, accessToken, refreshToken });
   },
 
   // ─────────────────────────────
