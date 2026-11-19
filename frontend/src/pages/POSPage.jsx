@@ -156,7 +156,7 @@ export default function POSPage() {
           throw err;
         }
       }
-      const offlineId = await saveSaleOffline(payload, payload.offlineId);
+      const offlineId = await saveSaleOffline(payload, payload.offlineId, ownerUserId);
       localStorage.removeItem('pos.pendingCheckoutId');
       localStorage.removeItem('pos.pendingCheckoutCreatedAt');
       checkoutId.current = null;
