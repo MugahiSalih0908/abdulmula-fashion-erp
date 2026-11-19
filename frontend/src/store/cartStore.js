@@ -1,7 +1,7 @@
 // src/store/cartStore.js – full POS cart with cash/change logic
 
 import { create } from 'zustand';
-import { calculateCashChange, calculateInvoiceTotals, STAFF_MAX_DISCOUNT_PERCENT } from '../../../shared/invoiceCalculations.mjs';
+import { calculateCashChange, calculateInvoiceTotals } from '../../../shared/invoiceCalculations.mjs';
 import { getSellableUnitCount, getStockStatus } from '../utils/posStock.mjs';
 
 const getTotals = (state) => calculateInvoiceTotals(
