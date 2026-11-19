@@ -359,12 +359,3 @@ export const cacheProducts = async (products) => {
  */
 export const getOfflineProducts = () => db.products.toArray();
 
-/**
- * cacheCustomers
- */
-export const cacheCustomers = async (customers) => {
-  await db.customers.clear();
-  await db.customers.bulkPut(customers.map(c => ({ ...c, _id: c._id.toString() })));
-};
-
-export const getOfflineCustomers = () => db.customers.toArray();
