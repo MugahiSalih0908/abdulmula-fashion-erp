@@ -7,7 +7,17 @@ const crypto   = require('crypto');
 const userSchema = new mongoose.Schema({
   name:     { type: String, required: true, trim: true, maxlength: 60 },
   email:    { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true, minlength: 12, select: false },
+  password: {
+    type: String,
+    required: true,
+    minlength: 12,
+    maxlength: 128,
+    select: false,
+    validate: {
+      validator: value => typeof value === 'string' && Buffer.byteLength(value, 'utf8') <= 72,
+      message: 'Password must not exceed 72 UTF-8 bytes.'
+    }
+  },
   role:     { type: String, enum: ['admin','manager','staff'], default: 'staff' },
 
   // ── Account status ─────────────────────────────────────────
