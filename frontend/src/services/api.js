@@ -74,7 +74,8 @@ api.interceptors.response.use(
         processQueue(null, data.data.accessToken);
 
         // The logout body must revoke the newly rotated token, not the consumed token.
-        if (original.url?.replace(/^\\//, '') === 'auth/logout' && original.data && typeof original.data === 'object') {
+        const requestPath = String(original.url || '').split('?')[0];
+        if (requestPath === '/auth/logout' && original.data && typeof original.data === 'object') {
           original.data = { ...original.data, refreshToken: data.data.refreshToken };
         }
         original.headers.Authorization = `Bearer ${data.data.accessToken}`;
