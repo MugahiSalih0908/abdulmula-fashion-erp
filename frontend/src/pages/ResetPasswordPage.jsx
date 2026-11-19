@@ -9,7 +9,7 @@ import AuthShell from '../components/AuthShell';
 function getStrength(password) {
   if (!password) return 0;
   return [
-    password.length >= 8,
+    password.length >= 12,
     /[A-Z]/.test(password),
     /[a-z]/.test(password),
     /\d/.test(password),
@@ -104,12 +104,12 @@ export default function ResetPasswordPage() {
               id="reset-password"
               type={showPwd ? 'text' : 'password'}
               autoComplete="new-password"
-              placeholder="At least 8 characters"
+              placeholder="At least 12 characters"
               aria-invalid={!!errors.password}
               aria-describedby={errors.password ? 'reset-password-error' : 'reset-password-strength'}
               {...register('password', {
                 required: 'Password is required.',
-                minLength: { value: 8, message: 'Use at least 8 characters.' }
+                minLength: { value: 12, message: 'Use at least 12 characters.' }
               })}
             />
             <button type="button" className="auth-password-toggle" onClick={() => setShowPwd(value => !value)} aria-label={showPwd ? 'Hide password' : 'Show password'} aria-pressed={showPwd}>
