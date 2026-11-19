@@ -87,6 +87,21 @@ test('cart rejects negative and oversized line discounts', () => {
   assert.equal(useCartStore.getState().items[0].discount, 20);
 });
 
+test('applies a cashier discount ceiling when the POS supplies the active role limit', () => {
+  useCartStore.getState().clearCart();
+  useCartStore.getState().addItem({
+    _id: 'cashier-limit-product',
+    name: 'Cashier limit product',
+    price: 100,
+    quantity: 2
+  });
+
+  const cart = useCartStore.getState();
+  assert.equal(cart.setDiscount('cashier-limit-product', 20, 10), true);
+  assert.equal(cart.setDiscount('cashier-limit-product', 20.01, 10), false);
+  assert.equal(useCartStore.getState().items[0].discount, 20);
+});
+
 test('cart rejects zero, negative, non-finite, non-numeric, and fractional stock', () => {
   for (const [index, quantity] of [0, -1, NaN, Infinity, '2', 'unknown', 0.75, null].entries()) {
     useCartStore.getState().clearCart();
