@@ -28,4 +28,14 @@ db.version(2).stores({
   });
 });
 
+// Customer contacts are shared business records fetched only while online.
+// Remove the unused legacy offline customer cache (which could retain PII on a
+// shared till phone). Pending sales and the POS catalogue remain untouched.
+db.version(3).stores({
+  pendingSales: '++id, offlineId, userId, createdAt, isSynced, syncStatus',
+  products:     '_id, name, category, barcode, sku, updatedAt',
+  customers:    null,
+  syncMeta:     'key'
+});
+
 export default db;
