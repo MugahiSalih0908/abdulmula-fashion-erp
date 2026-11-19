@@ -94,7 +94,7 @@ test('applies a cashier discount ceiling when the POS supplies the active role l
     name: 'Cashier limit product',
     price: 100,
     quantity: 2
-  });
+  }, 2);
 
   const cart = useCartStore.getState();
   assert.equal(cart.setDiscount('cashier-limit-product', 20, 10), true);
