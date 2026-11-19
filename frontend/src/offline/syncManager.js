@@ -31,7 +31,11 @@ const offlineIdsMatch = (candidate, canonical) => {
  * saveSaleOffline – called when network is unavailable
  * Stores the cart + metadata in IndexedDB
  */
-export const saveSaleOffline = async (salePayload, requestedOfflineId = salePayload.offlineId) => {
+export const saveSaleOffline = async (salePayload, requestedOfflineId = salePayload.offlineId, ownerUserId) => {
+  if (typeof ownerUserId !== 'string' || !ownerUserId.trim()) {
+    throw new Error('A signed-in user is required to save an offline sale.');
+  }
+  ownerUserId = ownerUserId.trim();
   const offlineId = requestedOfflineId == null
     ? `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`
     : normalizeOfflineId(requestedOfflineId);
@@ -39,6 +43,9 @@ export const saveSaleOffline = async (salePayload, requestedOfflineId = salePayl
     .toCollection()
     .filter(sale => offlineIdsMatch(sale.offlineId, offlineId))
     .first();
+  if (existing && existing.ownerUserId !== ownerUserId) {
+    throw new Error('This checkout ID belongs to a different staff account.');
+  }
   if (existing?.syncStatus === 'rejected') {
     throw new Error('This offline sale was rejected and cannot be resubmitted.');
   }
@@ -72,6 +79,7 @@ export const saveSaleOffline = async (salePayload, requestedOfflineId = salePayl
         : {})
     })),
     offlineId,
+    ownerUserId,
     offlineCreatedAt: salePayload.offlineCreatedAt || new Date().toISOString(),
     createdAt: new Date().toISOString(),
     isSynced: false,
@@ -83,11 +91,11 @@ export const saveSaleOffline = async (salePayload, requestedOfflineId = salePayl
   return offlineId;
 };
 
-export const markSaleSynced = async (offlineId) => {
+export const markSaleSynced = async (offlineId, ownerUserId) => {
   offlineId = normalizeOfflineId(offlineId);
   const records = await db.pendingSales
     .toCollection()
-    .filter(sale => offlineIdsMatch(sale.offlineId, offlineId))
+    .filter(sale => offlineIdsMatch(sale.offlineId, offlineId) && sale.ownerUserId === ownerUserId)
     .toArray();
   await Promise.all(records.map(record => db.pendingSales.update(record.id, {
     isSynced: true,
@@ -102,14 +110,26 @@ export const markSaleSynced = async (offlineId) => {
   return records.length;
 };
 
-export const getOfflineSales = () =>
-  db.pendingSales
+export const getOfflineSales = (ownerUserId, includeAllOwners = false) => {
+  if (!includeAllOwners && (typeof ownerUserId !== 'string' || !ownerUserId.trim())) {
+    return Promise.resolve([]);
+  }
+  return db.pendingSales
     .toCollection()
-    .filter(sale => sale.isSynced === false)
+    .filter(sale => sale.isSynced === false && (includeAllOwners || sale.ownerUserId === ownerUserId))
     .toArray();
+};
 
-export const approveOfflinePriceConflict = async (saleId) => {
+const assertSaleOwnership = (sale, actorUserId, mayReviewOtherOwners) => {
+  if (mayReviewOtherOwners) return;
+  if (!actorUserId || sale?.ownerUserId !== actorUserId) {
+    throw new Error('This offline sale belongs to a different staff account.');
+  }
+};
+
+export const approveOfflinePriceConflict = async (saleId, actorUserId, mayReviewOtherOwners = false) => {
   const sale = await db.pendingSales.get(saleId);
+  assertSaleOwnership(sale, actorUserId, mayReviewOtherOwners);
   if (!sale || sale.isSynced || sale.syncStatus !== 'blocked' ||
       !sale.syncConflict?.items?.length) {
     throw new Error('This sale is not awaiting price-conflict approval.');
@@ -168,7 +188,7 @@ export const approveOfflinePriceConflict = async (saleId) => {
     payload.offlineConflictApproval = true;
     payload.offlineOriginalPayload = offlineOriginalPayload;
     const { data } = await api.post('/invoices', payload);
-    await markSaleSynced(offlineId);
+    await markSaleSynced(offlineId, sale.ownerUserId);
     return data.data;
   } catch (error) {
     const status = error?.response?.status;
@@ -185,8 +205,9 @@ export const approveOfflinePriceConflict = async (saleId) => {
   }
 };
 
-export const rejectOfflinePriceConflict = async (saleId) => {
+export const rejectOfflinePriceConflict = async (saleId, actorUserId, mayReviewOtherOwners = false) => {
   const sale = await db.pendingSales.get(saleId);
+  assertSaleOwnership(sale, actorUserId, mayReviewOtherOwners);
   if (!sale || sale.isSynced || sale.syncStatus !== 'blocked' || !sale.syncConflict?.items?.length) {
     throw new Error('This sale is not awaiting price-conflict resolution.');
   }
@@ -241,10 +262,13 @@ export const rejectOfflinePriceConflict = async (saleId) => {
  * syncPendingSales – push all unsynced sales to the server
  * Called automatically when online event fires
  */
-export const syncPendingSales = async () => {
+export const syncPendingSales = async (ownerUserId) => {
+  if (typeof ownerUserId !== 'string' || !ownerUserId.trim()) {
+    return { synced: 0, failed: 0 };
+  }
   const pending = await db.pendingSales
     .toCollection()
-    .filter(sale => sale.isSynced === false && !['blocked', 'rejected'].includes(sale.syncStatus))
+    .filter(sale => sale.ownerUserId === ownerUserId && sale.isSynced === false && !['blocked', 'rejected'].includes(sale.syncStatus))
     .toArray();
   if (!pending.length) return { synced: 0, failed: 0 };
 
@@ -264,7 +288,7 @@ export const syncPendingSales = async () => {
         offlineId
       };
       await api.post('/invoices', payload);
-      await markSaleSynced(offlineId);
+      await markSaleSynced(offlineId, ownerUserId);
       synced++;
     } catch (err) {
       // Keep it in queue unless it's a business logic error (not a network error)
@@ -290,11 +314,15 @@ export const syncPendingSales = async () => {
 /**
  * getPendingCount – reactive count of unsynced sales
  */
-export const getPendingCount = () =>
-  db.pendingSales
+export const getPendingCount = (ownerUserId) => {
+  if (typeof ownerUserId !== 'string' || !ownerUserId.trim()) {
+    return Promise.resolve(0);
+  }
+  return db.pendingSales
     .toCollection()
-    .filter(sale => sale.isSynced === false && !['blocked', 'rejected'].includes(sale.syncStatus))
+    .filter(sale => sale.ownerUserId === ownerUserId && sale.isSynced === false && !['blocked', 'rejected'].includes(sale.syncStatus))
     .count();
+};
 
 /**
  * cacheProducts – store full product list in IndexedDB for offline POS

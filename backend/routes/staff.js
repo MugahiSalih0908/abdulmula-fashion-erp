@@ -218,10 +218,13 @@ router.patch('/:id/toggle', authorize('admin'), async (req, res, next) => {
   try {
     if (req.params.id === req.user._id.toString())
       return res.status(400).json({ success:false, message:'Cannot disable your own account.' });
-    const member = await User.findById(req.params.id).select('+refreshTokens');
+    const member = await User.findById(req.params.id).select('+refreshTokens +activeSessions');
     if (!member) return res.status(404).json({ success:false, message:'Staff not found.' });
     member.isActive = !member.isActive;
-    if (!member.isActive) member.refreshTokens = [];
+    if (!member.isActive) {
+      member.refreshTokens = [];
+      member.activeSessions = [];
+    }
     await member.save();
     await log({ user: req.user, action:'USER_UPDATE', entity:'User', entityId: member._id, details:{ isActive: member.isActive }, req });
     res.json({ success:true, data:{ isActive: member.isActive }, message:`Account ${member.isActive?'enabled':'disabled'}.` });
@@ -234,10 +237,11 @@ router.patch('/:id/reset-password', authorize('admin'), async (req, res, next) =
     const { newPassword } = req.body;
     if (!newPassword || newPassword.length < 8)
       return res.status(400).json({ success:false, message:'New password must be at least 8 characters.' });
-    const member = await User.findById(req.params.id).select('+refreshTokens');
+    const member = await User.findById(req.params.id).select('+refreshTokens +activeSessions');
     if (!member) return res.status(404).json({ success:false, message:'Staff not found.' });
     member.password      = newPassword;
     member.refreshTokens = [];
+    member.activeSessions = [];
     member.loginAttempts = 0;
     member.lockUntil     = undefined;
     await member.save();

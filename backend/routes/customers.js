@@ -1,9 +1,11 @@
 // routes/customers.js – /api/customers
 
 const express  = require('express');
+const mongoose = require('mongoose');
 const router   = express.Router();
 const Customer = require('../models/Customer');
 const Invoice  = require('../models/Invoice');
+const AuditLog = require('../models/AuditLog');
 const { protect, authorize } = require('../middleware/auth');
 const { log }  = require('../utils/auditLogger');
 const { getPaginationOptions, escapeRegExp } = require('../utils/queryPagination');
@@ -86,7 +88,16 @@ router.get('/:id', protect, async (req, res, next) => {
     const customer = await Customer.findOne({ _id: req.params.id, isDeleted: false });
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
 
-    const invoices = await Invoice.find({ customer: req.params.id }).sort({ date: -1 }).limit(20);
+    const mayViewCosts = ['admin', 'manager'].includes(req.user.role);
+    const invoiceFilter = { customer: req.params.id };
+    if (!mayViewCosts) {
+      invoiceFilter.soldBy = req.user._id;
+    }
+    const invoiceQuery = Invoice.find(invoiceFilter).sort({ date: -1 }).limit(20);
+    if (!mayViewCosts) {
+      invoiceQuery.select('-items.unitCost -items.costKnown');
+    }
+    const invoices = await invoiceQuery;
     res.json({ success: true, data: customer, invoices });
   } catch (err) { next(err); }
 });
@@ -104,9 +115,26 @@ router.post('/', protect, async (req, res, next) => {
 
 router.put('/:id', protect, async (req, res, next) => {
   try {
+    const updates = {};
+    for (const field of ['name', 'phone', 'email', 'address', 'notes']) {
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, field)) {
+        const value = req.body[field];
+        if (value !== null && typeof value !== 'string') {
+          return res.status(400).json({ success: false, message: `Invalid customer field: ${field}.` });
+        }
+        updates[field] = typeof value === 'string' ? value.trim() : '';
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No editable customer fields were supplied.' });
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'name') && !updates.name) {
+      return res.status(400).json({ success: false, message: 'Customer name cannot be empty.' });
+    }
+
     const customer = await Customer.findOneAndUpdate(
       { _id: req.params.id, isDeleted: false },
-      req.body,
+      { $set: updates },
       { new: true, runValidators: true }
     );
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
@@ -116,18 +144,69 @@ router.put('/:id', protect, async (req, res, next) => {
 });
 
 // Record a credit repayment
-router.post('/:id/pay', protect, async (req, res, next) => {
+router.post('/:id/pay', protect, authorize('admin', 'manager'), async (req, res, next) => {
   try {
-    const { amount } = req.body;
-    const pay = parseFloat(amount);
-    if (!pay || pay <= 0) return res.status(400).json({ success: false, message: 'Enter a valid payment amount.' });
+    const pay = Number(req.body?.amount);
+    if (!Number.isFinite(pay) || pay <= 0) {
+      return res.status(400).json({ success: false, message: 'Enter a valid positive payment amount.' });
+    }
 
-    const customer = await Customer.findById(req.params.id);
-    if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
+    const session = await mongoose.startSession();
+    let customer;
+    let beforeBalance = 0;
 
-    customer.creditBalance = Math.max(0, customer.creditBalance - pay);
-    await customer.save();
-    res.json({ success: true, data: customer, message: `$${pay.toFixed(2)} payment recorded for ${customer.name}.` });
+    try {
+      await session.withTransaction(async () => {
+        customer = await Customer.findOne({
+          _id: req.params.id,
+          isDeleted: false
+        }).session(session);
+
+        if (!customer) {
+          throw Object.assign(new Error('Customer not found.'), { statusCode: 404 });
+        }
+
+        beforeBalance = Number(customer.creditBalance || 0);
+        if (pay > beforeBalance) {
+          throw Object.assign(
+            new Error('Payment exceeds the customer’s outstanding credit balance.'),
+            { statusCode: 409 }
+          );
+        }
+
+        customer.creditBalance = Number((beforeBalance - pay).toFixed(2));
+        await customer.save({ session });
+
+        // Keep the financial change and its audit trail in one transaction.
+        await AuditLog.create([{
+          user: req.user._id,
+          userName: req.user.name,
+          action: 'CUSTOMER_CREDIT_REPAYMENT',
+          entity: 'Customer',
+          entityId: customer._id.toString(),
+          details: {
+            amount: pay,
+            beforeBalance,
+            afterBalance: customer.creditBalance
+          },
+          ip: req.ip || req.headers?.['x-forwarded-for'],
+          userAgent: req.headers?.['user-agent']
+        }], { session });
+      });
+
+      res.json({
+        success: true,
+        data: customer,
+        message: pay.toFixed(2) + ' payment recorded for ' + customer.name + '.'
+      });
+    } catch (err) {
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ success: false, message: err.message });
+      }
+      next(err);
+    } finally {
+      await session.endSession();
+    }
   } catch (err) { next(err); }
 });
 

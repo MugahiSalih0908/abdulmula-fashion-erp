@@ -299,12 +299,14 @@ router.post('/accept/:token', async (req, res, next) => {
     });
 
     // ── Generate tokens for auto-login ────────────────────────
-    const { generateAccessToken, generateRefreshToken } = require('../utils/tokenUtils');
-    const accessToken = generateAccessToken(newUser._id);
-    const refreshToken = generateRefreshToken(newUser._id);
+    const { generateAccessToken, generateRefreshToken, hashToken } = require('../utils/tokenUtils');
+    const sessionId = crypto.randomUUID();
+    const accessToken = generateAccessToken(newUser._id, sessionId);
+    const refreshToken = generateRefreshToken(newUser._id, sessionId);
 
-    // ── Store refresh token ────────────────────────────────────
-    newUser.refreshTokens = [refreshToken];
+    // Store only a one-way digest and register the invited user's device session.
+    newUser.refreshTokens = [hashToken(refreshToken)];
+    newUser.activeSessions = [sessionId];
     newUser.lastLogin = new Date();
     newUser.lastLoginIP = req.ip || req.headers['x-forwarded-for'];
     await newUser.save();

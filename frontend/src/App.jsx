@@ -1,5 +1,5 @@
 // Route-level code splitting keeps the first load focused on the screen being opened.
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
@@ -57,10 +57,21 @@ const GuestRoute = ({ children }) => {
 
 export default function App() {
   const fetchMe = useAuthStore(state => state.fetchMe);
+  const userId = useAuthStore(state => state.user?._id || state.user?.id || null);
+  const previousUserId = useRef(null);
 
   useEffect(() => {
     fetchMe();
   }, [fetchMe]);
+
+  // React Query is in-memory, but it survives SPA account changes.
+  // Drop customer, invoice and dashboard data when identity changes or signs out.
+  useEffect(() => {
+    if (previousUserId.current && previousUserId.current !== userId) {
+      queryClient.clear();
+    }
+    previousUserId.current = userId;
+  }, [userId]);
 
   return (
     <QueryClientProvider client={queryClient}>

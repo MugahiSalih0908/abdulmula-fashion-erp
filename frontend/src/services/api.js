@@ -6,6 +6,14 @@ const configuredApiUrl =
   import.meta.env.VITE_API_URL?.trim() ||
   'https://abdulmula-fashion-erp.onrender.com/api';
 
+const parsedApiUrl = new URL(configuredApiUrl);
+if (import.meta.env.PROD && parsedApiUrl.protocol !== 'https:') {
+  throw new Error('Production API connections must use HTTPS.');
+}
+if (!['http:', 'https:'].includes(parsedApiUrl.protocol)) {
+  throw new Error('The API URL must use HTTP(S).');
+}
+
 export const API_BASE_URL = `${configuredApiUrl
   .trim()
   .replace(/\/+$/, '')

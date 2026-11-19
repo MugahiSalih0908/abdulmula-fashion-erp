@@ -14,6 +14,17 @@ const { protect, authorize } = require('../middleware/auth');
 const { log }       = require('../utils/auditLogger');
 const { buildLineCostSnapshot } = require('../utils/costSnapshot');
 const invoiceCalculations = import('../../shared/invoiceCalculations.mjs');
+const invoiceForRole = (invoice, role) => {
+  const source = invoice?.toObject ? invoice.toObject() : invoice;
+  if (['admin', 'manager'].includes(role) || !source) return source;
+  return {
+    ...source,
+    items: Array.isArray(source.items)
+      ? source.items.map(({ unitCost, costKnown, ...item }) => item)
+      : []
+  };
+};
+
 const {
   assertApprovedPayloadMatchesOriginal,
   assertApprovedItemsMatch,
@@ -87,9 +98,19 @@ router.post('/', protect, async (req, res, next) => {
       ? await findOfflineIdRecords(Invoice, 'offlineId', offlineId, session)
       : [null];
     if (existingInvoice) {
+      if (
+        !['admin', 'manager'].includes(req.user.role) &&
+        String(existingInvoice.soldBy) !== String(req.user._id)
+      ) {
+        await session.abortTransaction();
+        return res.status(409).json({
+          success: false,
+          message: 'This offline sale ID is already assigned to another staff account.'
+        });
+      }
       await session.abortTransaction();
       const { invoice } = payloadIdentityResponse(existingInvoice, incomingFingerprint);
-      return res.status(200).json({ success: true, data: invoice, duplicate: true });
+      return res.status(200).json({ success: true, data: invoiceForRole(invoice, req.user.role), duplicate: true });
     }
 
     if (offlineId && (await findOfflineIdRecords(
@@ -380,12 +401,12 @@ router.post('/', protect, async (req, res, next) => {
 
     if (result.duplicate) {
       await session.abortTransaction();
-      return res.status(200).json({ success: true, data: result.invoice, duplicate: true });
+      return res.status(200).json({ success: true, data: invoiceForRole(result.invoice, req.user.role), duplicate: true });
     }
 
     await session.commitTransaction();
 
-    res.status(201).json({ success: true, data: result.invoice });
+    res.status(201).json({ success: true, data: invoiceForRole(result.invoice, req.user.role) });
 
   } catch (err) {
     if (session.inTransaction()) await session.abortTransaction();
@@ -709,6 +730,11 @@ router.get('/', protect, async (req, res, next) => {
     const { startDate, endDate, paymentMethod, paymentStatus, page = 1, limit = 50 } = req.query;
     const filter = {};
 
+    // Cashiers can review their own receipts only; managers/admins retain shop-wide access.
+    if (!['admin', 'manager'].includes(req.user.role)) {
+      filter.soldBy = req.user._id;
+    }
+
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
@@ -733,7 +759,7 @@ router.get('/', protect, async (req, res, next) => {
 
     res.json({
       success: true,
-      data:    invoices,
+      data:    invoices.map(invoice => invoiceForRole(invoice, req.user.role)),
       total,
       totalRevenue: revenue[0]?.total || 0,
       page: parseInt(page)
@@ -744,40 +770,31 @@ router.get('/', protect, async (req, res, next) => {
 /* ── GET /api/invoices/:id ───────────────────────────────────── */
 router.get('/:id', protect, async (req, res, next) => {
   try {
-    const invoice = await Invoice.findById(req.params.id)
+    const invoiceFilter = { _id: req.params.id };
+    // Prevent staff accounts from opening another employee's invoice by guessing its ID.
+    if (!['admin', 'manager'].includes(req.user.role)) {
+      invoiceFilter.soldBy = req.user._id;
+    }
+    const invoice = await Invoice.findOne(invoiceFilter)
                                  .populate('customer', 'name phone')
                                  .populate('soldBy', 'name');
     if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found.' });
-    res.json({ success: true, data: invoice });
+    res.json({ success: true, data: invoiceForRole(invoice, req.user.role) });
   } catch (err) { next(err); }
 });
 
 /* ── POST /api/invoices/sync-offline ─────────────────────────── */
-// Accepts an array of offline-queued invoices and processes each safely
-router.post('/sync-offline', protect, async (req, res, next) => {
-  try {
-    const { invoices } = req.body;
-    if (!invoices?.length)
-      return res.status(400).json({ success: false, message: 'No invoices to sync.' });
-
-    const results = [];
-
-    for (const inv of invoices) {
-      try {
-        // Reuse the single-invoice creation logic via internal call
-        const response = await createInvoiceInternal({ ...inv, soldBy: req.user._id, soldByName: req.user.name });
-        results.push({ offlineId: inv.offlineId, success: true, invoiceNumber: response.invoiceNumber });
-      } catch (err) {
-        results.push({ offlineId: inv.offlineId, success: false, error: err.message });
-      }
-    }
-
-    res.json({ success: true, data: results });
-  } catch (err) { next(err); }
+// The old batch handler referenced a removed helper. Current clients safely submit
+// each queued sale through the validated POST /api/invoices endpoint.
+router.post('/sync-offline', protect, (req, res) => {
+  res.status(410).json({
+    success: false,
+    message: 'Batch offline sync is retired. Submit queued sales individually to POST /api/invoices.'
+  });
 });
 
 /* ── DELETE /api/invoices/:id ────────────────────────────────── */
-router.delete('/:id', protect, async (req, res, next) => {
+router.delete('/:id', protect, authorize('admin', 'manager'), async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {

@@ -12,16 +12,30 @@ const mongoSanitize = require('express-mongo-sanitize');
 const morgan        = require('morgan');
 const connectDB     = require('./config/db');
 const errorHandler  = require('./middleware/errorHandler');
+const { isAllowedBrowserOrigin } = require('./config/corsOrigins');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
-
+const isProduction = process.env.NODE_ENV === 'production';
+const { validateProductionSecurity } = require('./config/securityConfig');
+validateProductionSecurity(process.env);
 connectDB();
 
 // ── Security headers ──────────────────────────────────────────
 app.use(helmet());
-app.use(mongoSanitize());
 app.set('trust proxy', 1);
+
+// Enforce HTTPS at the application edge as a second layer behind Render TLS.
+// The platform health probe is exempt so deployment health checks remain available.
+app.use((req, res, next) => {
+  if (isProduction && req.path !== '/api/health' && !req.secure) {
+    return res.status(426).json({
+      success: false,
+      message: 'HTTPS is required for all production API requests.'
+    });
+  }
+  next();
+});
 
 // ── CORS ──────────────────────────────────────────────────────
 const allowed = [
@@ -42,6 +56,7 @@ const allowed = [
 
     if (
       !['http:', 'https:'].includes(url.protocol) ||
+      (isProduction && url.protocol !== 'https:') ||
       url.origin !== origin.replace(/\/+$/, '')
     ) {
       throw new Error('CORS configuration must contain exact HTTP(S) origins.');
@@ -49,32 +64,12 @@ const allowed = [
     return url.origin;
   });
 
-const vercelPreviewHost =
-  /^abdulmula-fashion-[a-z0-9]+(?:-[a-z0-9]+)*-mugahid-s-projects\.vercel\.app$/i;
-
-const isApprovedVercelPreview = (origin) => {
-  let url;
-  try {
-    url = new URL(origin);
-  } catch {
-    return false;
-  }
-
-  return (
-    url.protocol === 'https:' &&
-    url.origin === origin &&
-    vercelPreviewHost.test(url.hostname)
-  );
-};
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (
-      !origin ||
-      allowed.includes(origin) ||
-      origin === 'http://localhost:5173' ||
-      isApprovedVercelPreview(origin)
-    ) return cb(null, true);
+    if (isAllowedBrowserOrigin({ origin, allowedOrigins: allowed, isProduction })) {
+      return cb(null, true);
+    }
     cb(new Error(`CORS blocked: ${origin}`));
   },
   credentials:    true,
@@ -91,6 +86,16 @@ app.use('/api/webhooks', require('./routes/webhooks'));
 
 app.use(express.json({ limit:'10mb' }));
 app.use(express.urlencoded({ extended:true }));
+// Sanitize after parsing so req.body is available before application routes run.
+app.use(mongoSanitize());
+
+// ERP API responses contain employee, customer and financial data.
+// Explicitly prevent browsers, service workers and intermediaries from caching them.
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, private');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
 
 // ── Logging ───────────────────────────────────────────────────
 const { redactRequestPath } = require('./utils/safeRequestPath');

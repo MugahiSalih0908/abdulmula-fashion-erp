@@ -8,10 +8,13 @@ const { protect, authorize } = require('../middleware/auth');
 const { log } = require('../utils/auditLogger');
 const { validateProductPayload } = require('../utils/productValidation');
 
+const canViewProductCosts = role => ['admin', 'manager'].includes(role);
+
 // GET – all authenticated users (staff need product list for POS)
 router.get('/', protect, async (req, res, next) => {
   try {
     const { search, category, lowStock, outOfStock, healthyStock, page = 1, limit = 500 } = req.query;
+    const mayViewCosts = canViewProductCosts(req.user.role);
     const filter = { isDeleted: false };
     if (search) filter.$text = { $search: search };
     if (category && category !== 'all' && category !== 'All') filter.category = category;
@@ -40,9 +43,13 @@ router.get('/', protect, async (req, res, next) => {
       .limit(pageSize);
 
     if (paginationRequested) {
-      findQuery.select('name sku barcode price costPrice quantity category description size color imageUrl lowStockThreshold supplier');
-    } else {
+      const fields = ['name', 'sku', 'barcode', 'price', 'quantity', 'category', 'description', 'size', 'color', 'imageUrl', 'lowStockThreshold'];
+      if (mayViewCosts) fields.push('costPrice', 'supplier');
+      findQuery.select(fields.join(' '));
+    } else if (mayViewCosts) {
       findQuery.populate('supplier', 'name');
+    } else {
+      findQuery.select('-costPrice -supplier');
     }
 
     const [products, total, summaryRows] = await Promise.all([
@@ -85,7 +92,8 @@ router.get('/', protect, async (req, res, next) => {
         : Promise.resolve([])
     ]);
 
-    const summary = summaryRows[0] || null;
+    const summary = summaryRows[0] ? { ...summaryRows[0] } : null;
+    if (summary && !mayViewCosts) delete summary.inventoryCostValue;
     res.json({
       success: true,
       data: products,
@@ -99,7 +107,7 @@ router.get('/', protect, async (req, res, next) => {
           unitsOnHand: 0,
           lowStockCount: 0,
           outOfStockCount: 0,
-          inventoryCostValue: 0
+          ...(mayViewCosts ? { inventoryCostValue: 0 } : {})
         }
       })
     });
@@ -108,7 +116,10 @@ router.get('/', protect, async (req, res, next) => {
 
 router.get('/barcode/:barcode', protect, async (req, res, next) => {
   try {
-    const product = await Product.findOne({ barcode: req.params.barcode, isDeleted: false });
+    const mayViewCosts = canViewProductCosts(req.user.role);
+    const productQuery = Product.findOne({ barcode: req.params.barcode, isDeleted: false });
+    if (!mayViewCosts) productQuery.select('-costPrice -supplier');
+    const product = await productQuery;
     if (!product) return res.status(404).json({ success: false, message: 'No product found for this barcode.' });
     res.json({ success: true, data: product });
   } catch (err) { next(err); }
@@ -116,7 +127,11 @@ router.get('/barcode/:barcode', protect, async (req, res, next) => {
 
 router.get('/:id', protect, async (req, res, next) => {
   try {
-    const product = await Product.findOne({ _id: req.params.id, isDeleted: false }).populate('supplier','name phone');
+    const mayViewCosts = canViewProductCosts(req.user.role);
+    const productQuery = Product.findOne({ _id: req.params.id, isDeleted: false });
+    if (mayViewCosts) productQuery.populate('supplier', 'name phone');
+    else productQuery.select('-costPrice -supplier');
+    const product = await productQuery;
     if (!product) return res.status(404).json({ success: false, message: 'Product not found.' });
     res.json({ success: true, data: product });
   } catch (err) { next(err); }

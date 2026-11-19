@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - security/audit-hardening-2026-11-19
       - release/premium-workspaces-contrast
       - feature/email-center-infrastructure
       - ui/phase-6-invoice-history
@@ -35,20 +36,41 @@ on:
       - ui/phase-14-authentication-experience
       - ui/phase-15-staff-cashbook-polish
 
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend syntax and tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 20
+          ref: ${{ github.head_ref || github.ref_name }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - name: Install backend dependencies
         working-directory: backend
         run: npm ci
+      - name: Report backend dependency advisories
+        working-directory: backend
+        shell: bash
+        run: |
+          npm audit --json > /tmp/backend-audit.json || true
+          node -e "const a=require('/tmp/backend-audit.json'); const items=Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,range:v.range,via:(v.via||[]).map(x=>typeof x==='string'?x:x.title),fixAvailable:v.fixAvailable})); console.log(JSON.stringify({totals:a.metadata?.vulnerabilities,packages:items},null,2));"
+      - name: Report backend production-only advisories
+        working-directory: backend
+        shell: bash
+        run: |
+          npm audit --omit=dev --json > /tmp/backend-production-audit.json || true
+          node -e "const a=require('/tmp/backend-production-audit.json'); const items=Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,range:v.range,via:(v.via||[]).map(x=>typeof x==='string'?x:x.title),fixAvailable:v.fixAvailable})); console.log(JSON.stringify({totals:a.metadata?.vulnerabilities,packages:items},null,2));"
+      - name: Preview non-breaking backend dependency fixes
+        working-directory: backend
+        shell: bash
+        run: npm audit fix --dry-run || true
       - name: Check backend JavaScript syntax
         run: find backend -type f -name '*.js' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 node --check
       - name: Run backend tests
@@ -59,15 +81,31 @@ jobs:
     name: Frontend tests and production build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+      - name: Report frontend dependency advisories
+        working-directory: frontend
+        shell: bash
+        run: |
+          npm audit --json > /tmp/frontend-audit.json || true
+          node -e "const a=require('/tmp/frontend-audit.json'); const items=Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,range:v.range,via:(v.via||[]).map(x=>typeof x==='string'?x:x.title),fixAvailable:v.fixAvailable})); console.log(JSON.stringify({totals:a.metadata?.vulnerabilities,packages:items},null,2));"
+      - name: Report frontend production-only advisories
+        working-directory: frontend
+        shell: bash
+        run: |
+          npm audit --omit=dev --json > /tmp/frontend-production-audit.json || true
+          node -e "const a=require('/tmp/frontend-production-audit.json'); const items=Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,range:v.range,via:(v.via||[]).map(x=>typeof x==='string'?x:x.title),fixAvailable:v.fixAvailable})); console.log(JSON.stringify({totals:a.metadata?.vulnerabilities,packages:items},null,2));"
+      - name: Preview non-breaking frontend dependency fixes
+        working-directory: frontend
+        shell: bash
+        run: npm audit fix --dry-run || true
       - name: Run frontend unit tests
         working-directory: frontend
         run: node --test src/pages/*.test.mjs src/store/*.test.js

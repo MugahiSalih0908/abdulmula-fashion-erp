@@ -27,6 +27,7 @@ import './adminWorkspace.css';
 
 export default function SettingsPage() {
   const user = useAuthStore(state => state.user);
+  const offlineUserId = useAuthStore(state => state.offlineUserId || state.user?._id || state.user?.id);
   const logout = useAuthStore(state => state.logout);
   const navigate = useNavigate();
   const { isOnline, pendingCount, isSyncing } = useOnlineStatus();
@@ -39,7 +40,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let active = true;
-    getOfflineSales()
+    getOfflineSales(offlineUserId, isManager)
       .then(sales => {
         if (!active) return;
         setOfflineSales(Array.isArray(sales) ? sales : []);
@@ -49,12 +50,15 @@ export default function SettingsPage() {
         if (active) setOfflineLoadError(error?.message || 'Offline sales could not be loaded.');
       });
     return () => { active = false; };
-  }, [pendingCount]);
+  }, [pendingCount, offlineUserId, isManager]);
 
   const reviewSales = offlineSales.filter(sale => ['blocked', 'rejected'].includes(sale.syncStatus));
+  const unassignedLegacySales = isManager
+    ? offlineSales.filter(sale => !sale.ownerUserId && sale.isSynced === false && !['blocked', 'rejected'].includes(sale.syncStatus))
+    : [];
 
   const refreshOfflineSales = async () => {
-    const sales = await getOfflineSales();
+    const sales = await getOfflineSales(offlineUserId, isManager);
     setOfflineSales(Array.isArray(sales) ? sales : []);
     setOfflineLoadError('');
   };
@@ -74,7 +78,7 @@ export default function SettingsPage() {
 
     setResolvingSaleId(saleId);
     try {
-      const invoice = await approveOfflinePriceConflict(saleId);
+      const invoice = await approveOfflinePriceConflict(saleId, offlineUserId, isManager);
       toast.success('Offline sale ' + invoice.invoiceNumber + ' approved and synced.');
       await refreshOfflineSales();
     } catch (error) {
@@ -96,7 +100,7 @@ export default function SettingsPage() {
 
     setResolvingSaleId(saleId);
     try {
-      const resolution = await rejectOfflinePriceConflict(saleId);
+      const resolution = await rejectOfflinePriceConflict(saleId, offlineUserId, isManager);
       toast.success('Offline sale rejected by ' + resolution.decidedBy + '.');
       await refreshOfflineSales();
     } catch (error) {
@@ -239,6 +243,15 @@ export default function SettingsPage() {
                 <div className="admin-settings-pending">
                   <div><strong>{pendingCount.toLocaleString()} sale(s) awaiting synchronization</strong><p>Keep this device online until the queue has been processed.</p></div>
                   <Badge variant="warning">Pending</Badge>
+                </div>
+              )}
+              {unassignedLegacySales.length > 0 && (
+                <div className="admin-settings-pending" role="alert">
+                  <div>
+                    <strong>{unassignedLegacySales.length.toLocaleString()} older offline sale(s) need manual attribution</strong>
+                    <p>These records were created before account-specific offline queues. They are held from automatic sync so they are not assigned to the wrong cashier.</p>
+                  </div>
+                  <Badge variant="warning">Review required</Badge>
                 </div>
               )}
               {offlineLoadError && (

@@ -22,11 +22,34 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Invalid token.' });
     }
 
-    const user = await User.findById(decoded.id).select('-password -refreshTokens');
+    const user = await User.findById(decoded.id).select('-password -refreshTokens +activeSessions');
     if (!user)
       return res.status(401).json({ success: false, message: 'Account not found.' });
     if (!user.isActive)
       return res.status(403).json({ success: false, message: 'Account is disabled. Contact admin.' });
+
+    // A session ID lets logout revoke an access JWT immediately instead of
+    // waiting for its 15-minute expiry. Legacy tokens without sid expire normally.
+    if (decoded.sid && !user.activeSessions?.includes(decoded.sid)) {
+      return res.status(401).json({
+        success: false,
+        message: 'This device session has been revoked. Please sign in again.',
+        code: 'SESSION_REVOKED'
+      });
+    }
+
+    // Password resets/change must invalidate access JWTs issued before the change.
+    if (
+      user.passwordChangedAt &&
+      Number.isFinite(decoded.iat) &&
+      decoded.iat < Math.floor(user.passwordChangedAt.getTime() / 1000)
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'Your password changed. Please sign in again.',
+        code: 'SESSION_INVALIDATED'
+      });
+    }
 
     req.user = user;
     next();

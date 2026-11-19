@@ -101,7 +101,27 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const s = await Supplier.findOneAndUpdate({ _id: req.params.id, isDeleted: false }, req.body, { new:true, runValidators:true });
+    const updates = {};
+    for (const field of ['name', 'phone', 'email', 'address', 'company', 'notes']) {
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, field)) {
+        const value = req.body[field];
+        if (value !== null && typeof value !== 'string') {
+          return res.status(400).json({ success: false, message: `Invalid supplier field: ${field}.` });
+        }
+        updates[field] = typeof value === 'string' ? value.trim() : '';
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No editable supplier fields were supplied.' });
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'name') && !updates.name) {
+      return res.status(400).json({ success: false, message: 'Supplier name cannot be empty.' });
+    }
+    const s = await Supplier.findOneAndUpdate(
+      { _id: req.params.id, isDeleted: false },
+      { $set: updates },
+      { new:true, runValidators:true }
+    );
     if (!s) return res.status(404).json({ success: false, message: 'Supplier not found.' });
     await log({ user: req.user, action:'SUPPLIER_UPDATE', entity:'Supplier', entityId: s._id, req });
     res.json({ success: true, data: s });
