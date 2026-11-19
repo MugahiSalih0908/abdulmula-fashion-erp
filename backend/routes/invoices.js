@@ -98,6 +98,16 @@ router.post('/', protect, async (req, res, next) => {
       ? await findOfflineIdRecords(Invoice, 'offlineId', offlineId, session)
       : [null];
     if (existingInvoice) {
+      if (
+        !['admin', 'manager'].includes(req.user.role) &&
+        String(existingInvoice.soldBy) !== String(req.user._id)
+      ) {
+        await session.abortTransaction();
+        return res.status(409).json({
+          success: false,
+          message: 'This offline sale ID is already assigned to another staff account.'
+        });
+      }
       await session.abortTransaction();
       const { invoice } = payloadIdentityResponse(existingInvoice, incomingFingerprint);
       return res.status(200).json({ success: true, data: invoiceForRole(invoice, req.user.role), duplicate: true });
