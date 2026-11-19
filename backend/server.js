@@ -12,6 +12,7 @@ const mongoSanitize = require('express-mongo-sanitize');
 const morgan        = require('morgan');
 const connectDB     = require('./config/db');
 const errorHandler  = require('./middleware/errorHandler');
+const { isAllowedBrowserOrigin } = require('./config/corsOrigins');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -64,32 +65,12 @@ const allowed = [
     return url.origin;
   });
 
-const vercelPreviewHost =
-  /^abdulmula-fashion-[a-z0-9]+(?:-[a-z0-9]+)*-mugahid-s-projects\.vercel\.app$/i;
-
-const isApprovedVercelPreview = (origin) => {
-  let url;
-  try {
-    url = new URL(origin);
-  } catch {
-    return false;
-  }
-
-  return (
-    url.protocol === 'https:' &&
-    url.origin === origin &&
-    vercelPreviewHost.test(url.hostname)
-  );
-};
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (
-      !origin ||
-      allowed.includes(origin) ||
-      (!isProduction && origin === 'http://localhost:5173') ||
-      isApprovedVercelPreview(origin)
-    ) return cb(null, true);
+    if (isAllowedBrowserOrigin({ origin, allowedOrigins: allowed, isProduction })) {
+      return cb(null, true);
+    }
     cb(new Error(`CORS blocked: ${origin}`));
   },
   credentials:    true,
