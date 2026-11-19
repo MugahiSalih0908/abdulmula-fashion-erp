@@ -55,6 +55,8 @@ jobs:
         run: |
           npm audit --json > "$RUNNER_TEMP/backend-audit.json" || true
           node -e "const fs=require('node:fs');const p=process.env.RUNNER_TEMP+'/backend-audit.json';try{const a=JSON.parse(fs.readFileSync(p,'utf8'));console.log('Backend audit totals:',JSON.stringify(a.metadata?.vulnerabilities||{}));for(const [name,v] of Object.entries(a.vulnerabilities||{})){console.log(JSON.stringify({package:name,severity:v.severity,range:v.range,direct:v.isDirect,fixAvailable:v.fixAvailable,advisories:(v.via||[]).filter(x=>typeof x==='object').map(x=>x.title).slice(0,3)}));}}catch(e){console.log('Backend audit report unavailable:',e.message)}"
+          npm audit --omit=dev --json > "$RUNNER_TEMP/backend-production-audit.json" || true
+          node -e "const fs=require('node:fs');const p=process.env.RUNNER_TEMP+'/backend-production-audit.json';try{const a=JSON.parse(fs.readFileSync(p,'utf8'));console.log('Backend production dependency audit totals:',JSON.stringify(a.metadata?.vulnerabilities||{}));for(const [name,v] of Object.entries(a.vulnerabilities||{})){console.log(JSON.stringify({package:name,severity:v.severity,direct:v.isDirect,fixAvailable:v.fixAvailable}));}}catch(e){console.log('Backend production audit report unavailable:',e.message)}"
       - name: Check backend JavaScript syntax
         run: find backend -type f -name '*.js' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 node --check
       - name: Run backend tests
@@ -81,6 +83,8 @@ jobs:
         run: |
           npm audit --json > "$RUNNER_TEMP/frontend-audit.json" || true
           node -e "const fs=require('node:fs');const p=process.env.RUNNER_TEMP+'/frontend-audit.json';try{const a=JSON.parse(fs.readFileSync(p,'utf8'));console.log('Frontend audit totals:',JSON.stringify(a.metadata?.vulnerabilities||{}));for(const [name,v] of Object.entries(a.vulnerabilities||{})){console.log(JSON.stringify({package:name,severity:v.severity,range:v.range,direct:v.isDirect,fixAvailable:v.fixAvailable,advisories:(v.via||[]).filter(x=>typeof x==='object').map(x=>x.title).slice(0,3)}));}}catch(e){console.log('Frontend audit report unavailable:',e.message)}"
+          npm audit --omit=dev --json > "$RUNNER_TEMP/frontend-production-audit.json" || true
+          node -e "const fs=require('node:fs');const p=process.env.RUNNER_TEMP+'/frontend-production-audit.json';try{const a=JSON.parse(fs.readFileSync(p,'utf8'));console.log('Frontend production dependency audit totals:',JSON.stringify(a.metadata?.vulnerabilities||{}));for(const [name,v] of Object.entries(a.vulnerabilities||{})){console.log(JSON.stringify({package:name,severity:v.severity,direct:v.isDirect,fixAvailable:v.fixAvailable}));}}catch(e){console.log('Frontend production audit report unavailable:',e.message)}"
       - name: Run frontend unit tests
         working-directory: frontend
         run: node --test src/pages/*.test.mjs src/store/*.test.js src/offline/*.test.mjs src/services/*.test.mjs
