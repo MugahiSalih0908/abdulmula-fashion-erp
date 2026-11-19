@@ -85,7 +85,7 @@ const useCartStore = create((set, get) => ({
     return { ok: true, status: capped < qty ? 'stock-limit' : 'updated', quantity: capped };
   },
 
-  setDiscount: (productId, discount, maxDiscountPercent = STAFF_MAX_DISCOUNT_PERCENT) => {
+  setDiscount: (productId, discount, maxDiscountPercent = 100) => {
     const amount = Number(discount);
     const item = get().items.find(i => i.product._id === productId);
     const maxDiscount = item ? item.unitPrice * item.quantity * (maxDiscountPercent / 100) : 0;
