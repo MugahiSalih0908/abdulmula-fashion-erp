@@ -3,6 +3,18 @@ import { resolveApiBaseUrl } from './apiUrl.mjs';
 
 export const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL, import.meta.env.PROD);
 
+export function getSessionAuthConfig(expectedUserId) {
+  const accessToken = localStorage.getItem('accessToken');
+  const activeUserId = localStorage.getItem('activeUserId');
+  if (!accessToken || !activeUserId) {
+    throw new Error('A verified staff session is required for this action.');
+  }
+  if (expectedUserId && String(activeUserId) !== String(expectedUserId)) {
+    throw new Error('The signed-in staff account changed. Sign in again before synchronizing this sale.');
+  }
+  return { headers: { Authorization: `Bearer ${accessToken}` } };
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
@@ -10,8 +22,12 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Preserve explicitly captured session credentials used by account-bound offline sync.
+  const suppliedAuthorization = config.headers?.Authorization || config.headers?.authorization;
+  if (!suppliedAuthorization) {
+    const token = localStorage.getItem('accessToken');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
@@ -51,6 +67,7 @@ api.interceptors.response.use(
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
+        localStorage.removeItem('activeUserId');
         window.location.href = '/login';
         return Promise.reject(refreshErr);
       } finally {
