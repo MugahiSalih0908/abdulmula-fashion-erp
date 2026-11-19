@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 
-const invoiceRoutes = readFileSync(path.join(__dirname, 'routes/invoices.js'), 'utf8');
+const invoiceRoutes = readFileSync(path.join(__dirname, 'invoices.js'), 'utf8');
 
 test('only admins and managers can delete invoices', () => {
   assert.match(
