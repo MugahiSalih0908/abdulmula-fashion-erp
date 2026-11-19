@@ -134,15 +134,18 @@ export const approveOfflinePriceConflict = async (saleId) => {
 
   const {
     id,
+    userId,
     createdAt,
     isSynced,
     syncStatus,
     syncError,
+    syncConflict,
+    resolution,
     ...payload
   } = sale;
   const offlineId = normalizeOfflineId(sale.offlineId);
   const offlineOriginalPayload = {
-    ...sale,
+    ...payload,
     offlineId,
     offlineCreatedAt: sale.offlineCreatedAt || sale.createdAt
   };
@@ -232,7 +235,13 @@ export const rejectOfflinePriceConflict = async (saleId) => {
   const { data } = await api.post('/invoices/offline-conflicts/reject', {
     offlineId,
     clientReportedOfflineAt: sale.offlineCreatedAt || sale.createdAt,
-    sale: { ...sale, offlineId, offlineCreatedAt: sale.offlineCreatedAt || sale.createdAt },
+    sale: (() => {
+      const {
+        id, userId, createdAt, isSynced, syncStatus, syncError,
+        syncConflict, resolution, ...original
+      } = sale;
+      return { ...original, offlineId, offlineCreatedAt: sale.offlineCreatedAt || sale.createdAt };
+    })(),
     reason: 'Rejected by an authenticated manager or admin.',
     items
   });
@@ -269,12 +278,29 @@ export const syncPendingSales = async (ownerUserId) => {
   for (const sale of pending) {
     try {
       const offlineId = normalizeOfflineId(sale.offlineId);
-      const saleWithoutPayment = { ...sale };
+      const {
+        id,
+        userId: storedOwnerUserId,
+        createdAt,
+        isSynced,
+        syncStatus,
+        syncError,
+        syncConflict,
+        resolution,
+        ...salePayload
+      } = sale;
+      if (String(storedOwnerUserId || '') !== userId) {
+        throw new Error('This offline sale belongs to another staff account.');
+      }
       const payload = {
-        ...saleWithoutPayment,
+        ...salePayload,
         items: sale.items.map(item => ({
-          ...item,
-          expectedUnitPrice: item.expectedUnitPrice ?? item.unitPrice
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          expectedUnitPrice: item.expectedUnitPrice ?? item.unitPrice,
+          discount: item.discount
         })),
         offlineId
       };
