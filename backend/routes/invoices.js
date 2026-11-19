@@ -777,7 +777,7 @@ router.post('/sync-offline', protect, async (req, res, next) => {
 });
 
 /* ── DELETE /api/invoices/:id ────────────────────────────────── */
-router.delete('/:id', protect, async (req, res, next) => {
+router.delete('/:id', protect, authorize('admin', 'manager'), async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
