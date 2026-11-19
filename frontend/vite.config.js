@@ -35,17 +35,9 @@ export default defineConfig({
         ]
       },
       workbox: {
-        runtimeCaching: [
-          {
-            urlPattern: /\/api\/products/,
-            handler:    'StaleWhileRevalidate',
-            options: {
-              cacheName:         'products-cache',
-              expiration:        { maxEntries: 500, maxAgeSeconds: 86400 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          },
-        ],
+        // Authenticated API data is cached through the app's controlled IndexedDB
+        // workflow only; Workbox must not persist user-specific API responses.
+        runtimeCaching: [],
         globPatterns:          ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback:      'index.html',
         cleanupOutdatedCaches: true,
