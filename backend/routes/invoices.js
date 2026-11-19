@@ -732,6 +732,7 @@ router.get('/', protect, async (req, res, next) => {
   try {
     const { startDate, endDate, paymentMethod, paymentStatus } = req.query;
     const filter = {};
+    if (req.user.role === 'staff') filter.soldBy = req.user._id;
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) {
@@ -761,7 +762,9 @@ router.get('/', protect, async (req, res, next) => {
       || { page: 1, limit: 50, skip: 0 };
     const { page, limit, skip } = pagination;
     const [invoices, total, revenue] = await Promise.all([
-      Invoice.find(filter)
+      (req.user.role === 'staff'
+        ? Invoice.find(filter).select('-items.unitCost -items.costKnown')
+        : Invoice.find(filter))
              .populate('customer', 'name phone')
              .sort({ date: -1 })
              .skip(skip)
@@ -787,9 +790,13 @@ router.get('/', protect, async (req, res, next) => {
 router.get('/:id', protect, async (req, res, next) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, message: 'Invoice not found.' });
-    const invoice = await Invoice.findById(req.params.id)
-                                 .populate('customer', 'name phone')
-                                 .populate('soldBy', 'name');
+    const invoiceFilter = { _id: req.params.id };
+    if (req.user.role === 'staff') invoiceFilter.soldBy = req.user._id;
+    const invoiceQuery = Invoice.findOne(invoiceFilter);
+    if (req.user.role === 'staff') invoiceQuery.select('-items.unitCost -items.costKnown');
+    const invoice = await invoiceQuery
+      .populate('customer', 'name phone')
+      .populate('soldBy', 'name');
     if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found.' });
     res.json({ success: true, data: invoice });
   } catch (err) { next(err); }
