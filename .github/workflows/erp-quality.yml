@@ -49,6 +49,12 @@ jobs:
       - name: Install backend dependencies
         working-directory: backend
         run: npm ci
+      - name: Report backend dependency advisories
+        working-directory: backend
+        shell: bash
+        run: |
+          npm audit --json > /tmp/backend-audit.json || true
+          node -e "const a=require('/tmp/backend-audit.json'); const items=Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,range:v.range,via:(v.via||[]).map(x=>typeof x==='string'?x:x.title),fixAvailable:v.fixAvailable})); console.log(JSON.stringify({totals:a.metadata?.vulnerabilities,packages:items},null,2));"
       - name: Check backend JavaScript syntax
         run: find backend -type f -name '*.js' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 node --check
       - name: Run backend tests
@@ -68,6 +74,12 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+      - name: Report frontend dependency advisories
+        working-directory: frontend
+        shell: bash
+        run: |
+          npm audit --json > /tmp/frontend-audit.json || true
+          node -e "const a=require('/tmp/frontend-audit.json'); const items=Object.entries(a.vulnerabilities||{}).map(([name,v])=>({name,severity:v.severity,range:v.range,via:(v.via||[]).map(x=>typeof x==='string'?x:x.title),fixAvailable:v.fixAvailable})); console.log(JSON.stringify({totals:a.metadata?.vulnerabilities,packages:items},null,2));"
       - name: Run frontend unit tests
         working-directory: frontend
         run: node --test src/pages/*.test.mjs src/store/*.test.js
