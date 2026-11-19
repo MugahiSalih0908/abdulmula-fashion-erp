@@ -108,9 +108,26 @@ router.post('/', protect, async (req, res, next) => {
 
 router.put('/:id', protect, async (req, res, next) => {
   try {
+    const updates = {};
+    for (const field of ['name', 'phone', 'email', 'address', 'notes']) {
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, field)) {
+        const value = req.body[field];
+        if (value !== null && typeof value !== 'string') {
+          return res.status(400).json({ success: false, message: `Invalid customer field: ${field}.` });
+        }
+        updates[field] = typeof value === 'string' ? value.trim() : '';
+      }
+    }
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'No editable customer fields were supplied.' });
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'name') && !updates.name) {
+      return res.status(400).json({ success: false, message: 'Customer name cannot be empty.' });
+    }
+
     const customer = await Customer.findOneAndUpdate(
       { _id: req.params.id, isDeleted: false },
-      req.body,
+      { $set: updates },
       { new: true, runValidators: true }
     );
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
@@ -120,18 +137,31 @@ router.put('/:id', protect, async (req, res, next) => {
 });
 
 // Record a credit repayment
-router.post('/:id/pay', protect, async (req, res, next) => {
+router.post('/:id/pay', protect, authorize('admin', 'manager'), async (req, res, next) => {
   try {
-    const { amount } = req.body;
-    const pay = parseFloat(amount);
-    if (!pay || pay <= 0) return res.status(400).json({ success: false, message: 'Enter a valid payment amount.' });
+    const pay = Number(req.body?.amount);
+    if (!Number.isFinite(pay) || pay <= 0) {
+      return res.status(400).json({ success: false, message: 'Enter a valid positive payment amount.' });
+    }
 
     const customer = await Customer.findById(req.params.id);
-    if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
+    if (!customer || customer.isDeleted) return res.status(404).json({ success: false, message: 'Customer not found.' });
+    const beforeBalance = Number(customer.creditBalance || 0);
+    if (pay > beforeBalance) {
+      return res.status(409).json({ success: false, message: 'Payment exceeds the customer’s outstanding credit balance.' });
+    }
 
-    customer.creditBalance = Math.max(0, customer.creditBalance - pay);
+    customer.creditBalance = Number((beforeBalance - pay).toFixed(2));
     await customer.save();
-    res.json({ success: true, data: customer, message: `$${pay.toFixed(2)} payment recorded for ${customer.name}.` });
+    await log({
+      user: req.user,
+      action: 'CUSTOMER_CREDIT_REPAYMENT',
+      entity: 'Customer',
+      entityId: customer._id,
+      details: { amount: pay, beforeBalance, afterBalance: customer.creditBalance },
+      req
+    });
+    res.json({ success: true, data: customer, message: `${pay.toFixed(2)} payment recorded for ${customer.name}.` });
   } catch (err) { next(err); }
 });
 
