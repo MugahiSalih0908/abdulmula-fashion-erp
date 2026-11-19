@@ -142,11 +142,13 @@ test('phase 17 directory screens use server-side pagination and debounced search
   assert.ok(pagination.includes('onPageChange'));
 });
 
-test('authentication profile fetch shares a single in-flight request', () => {
+test('authentication profile fetch shares work only for the same session token', () => {
   const authStore = read('src/store/authStore.js');
   assert.ok(authStore.includes('let fetchMeInFlight = null'));
-  assert.ok(authStore.includes('if (fetchMeInFlight) return fetchMeInFlight'));
-  assert.ok(authStore.includes('get().accessToken === token'));
+  assert.ok(authStore.includes('let fetchMeToken = null'));
+  assert.ok(authStore.includes('if (fetchMeInFlight && fetchMeToken === token) return fetchMeInFlight'));
+  assert.ok(authStore.includes('get().accessToken === requestToken'));
+  assert.ok(authStore.includes('if (fetchMeToken === requestToken)'));
 });
 
 
@@ -158,6 +160,10 @@ test('product catalogue uses server pagination without changing legacy POS calls
   assert.ok(products.includes('healthyStock'));
   assert.ok(route.includes('paginationRequested'));
   assert.ok(route.includes('totalPages: Math.max(1, Math.ceil(total / pageSize))'));
-  assert.ok(route.includes("findQuery.populate('supplier', 'name')"));
-  assert.ok(route.includes("findQuery.select('name sku barcode price costPrice quantity"));
+  assert.ok(route.includes("const isStaff = req.user.role === 'staff'"));
+  assert.ok(route.includes("if (isStaff) findQuery.select('-costPrice -supplier')"));
+  assert.ok(route.includes("if (!isStaff) findQuery.populate('supplier', 'name phone')"));
+  assert.ok(route.includes('...(isStaff ? {} : {'));
+  assert.ok(route.includes('inventoryCostValue'));
+  assert.ok(route.includes("name sku barcode price quantity category description size color imageUrl lowStockThreshold"));
 });
