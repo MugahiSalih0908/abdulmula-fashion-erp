@@ -28,7 +28,13 @@ const errorHandler = (err, req, res, next) => {
   // Mongoose bad ObjectId
   if (err.name === 'CastError') {
     statusCode = 400;
-    message = `Invalid ID format: ${err.value}`;
+    message = 'Invalid ID format.';
+  }
+
+  // Never return raw internal exception messages to production clients.
+  // Keep explicit, validated 4xx messages above, but hide unexpected server failures.
+  if (statusCode >= 500 && process.env.NODE_ENV === 'production') {
+    message = 'An unexpected server error occurred. Please try again or contact an administrator.';
   }
 
   // JWT errors (caught in middleware, but just in case)
