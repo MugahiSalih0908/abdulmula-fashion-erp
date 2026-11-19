@@ -6,7 +6,7 @@ const crypto    = require('crypto');
 const validator = require('validator');
 const User      = require('../models/User');
 const { protect } = require('../middleware/auth');
-const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/tokenUtils');
+const { generateAccessToken, generateRefreshToken, verifyRefreshToken, hashToken } = require('../utils/tokenUtils');
 const { log }   = require('../utils/auditLogger');
 const { sendEmail, templates } = require('../utils/sendEmail');
 
@@ -72,7 +72,10 @@ router.post('/login', async (req, res, next) => {
     user.lockUntil     = undefined;
     user.lastLogin     = new Date();
     user.lastLoginIP   = req.ip || req.headers['x-forwarded-for'];
-    user.refreshTokens.push(refreshToken);
+    user.refreshTokens = (user.refreshTokens || []).map(token =>
+      /^[a-f0-9]{64}$/i.test(token) ? token : hashToken(token)
+    );
+    user.refreshTokens.push(hashToken(refreshToken));
     if (user.refreshTokens.length > 5) user.refreshTokens = user.refreshTokens.slice(-5);
     await user.save();
 
@@ -237,14 +240,80 @@ router.post('/refresh', async (req, res, next) => {
     const user = await User.findById(decoded.id).select('+refreshTokens');
     if (!user || !user.isActive)
       return res.status(401).json({ success:false, message:'Account not found or disabled.' });
-    if (!user.refreshTokens.includes(refreshToken))
+
+    // Accept a legacy plaintext record once, so active sessions survive this upgrade.
+    const presentedHash = hashToken(refreshToken);
+    const storedToken = user.refreshTokens.find(value => value === presentedHash || value === refreshToken);
+    if (!storedToken)
       return res.status(401).json({ success:false, message:'Session revoked. Please log in again.' });
 
     const newAccess  = generateAccessToken(user._id);
     const newRefresh = generateRefreshToken(user._id);
-    user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken);
-    user.refreshTokens.push(newRefresh);
-    await user.save();
+    const rotation = await User.updateOne(
+      { _id: user._id, isActive: true, refreshTokens: storedToken },
+      { $set: { ['refreshTokens.' + '
+  } catch (err) { next(err); }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/auth/logout
+// ─────────────────────────────────────────────────────────────
+router.post('/logout', async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body || {};
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      return res.json({ success:true, message:'Logged out successfully.' });
+    }
+
+    // A valid, server-issued refresh token is sufficient to revoke its own session.
+    // This still works when the short-lived access token has already expired.
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(refreshToken);
+    } catch {
+      return res.json({ success:true, message:'Logged out successfully.' });
+    }
+
+    const user = await User.findById(decoded.id).select('+refreshTokens');
+    if (user) {
+      const presentedHash = hashToken(refreshToken);
+      const storedToken = user.refreshTokens.find(value => value === presentedHash || value === refreshToken);
+      if (storedToken) {
+        const revoked = await User.updateOne(
+          { _id: user._id, refreshTokens: storedToken },
+          { $pull: { refreshTokens: storedToken } }
+        );
+        if (revoked.modifiedCount === 1) await log({ user, action:'LOGOUT', req });
+      }
+    }
+
+    res.json({ success:true, message:'Logged out successfully.' });
+  } catch (err) { next(err); }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/auth/logout-all  – revoke every device
+// ─────────────────────────────────────────────────────────────
+router.post('/logout-all', protect, async (req, res, next) => {
+  try {
+    await User.findByIdAndUpdate(req.user._id, { $set: { refreshTokens:[] } });
+    await log({ user: req.user, action:'LOGOUT', details:{ allDevices:true }, req });
+    res.json({ success:true, message:'Logged out from all devices.' });
+  } catch (err) { next(err); }
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/auth/me
+// ─────────────────────────────────────────────────────────────
+router.get('/me', protect, (req, res) => {
+  res.json({ success:true, data: req.user });
+});
+
+module.exports = router;
+]: hashToken(newRefresh) } }
+    );
+    if (rotation.modifiedCount !== 1)
+      return res.status(401).json({ success:false, message:'Session already rotated or revoked. Please sign in again.' });
 
     res.json({ success:true, data:{ accessToken: newAccess, refreshToken: newRefresh } });
   } catch (err) { next(err); }
