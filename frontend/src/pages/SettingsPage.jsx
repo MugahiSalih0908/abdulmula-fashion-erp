@@ -39,7 +39,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let active = true;
-    getOfflineSales()
+    if (!user?._id) {
+      setOfflineSales([]);
+      return () => { active = false; };
+    }
+    getOfflineSales(user._id, { includeAllForReview: isManager })
       .then(sales => {
         if (!active) return;
         setOfflineSales(Array.isArray(sales) ? sales : []);
@@ -49,12 +53,14 @@ export default function SettingsPage() {
         if (active) setOfflineLoadError(error?.message || 'Offline sales could not be loaded.');
       });
     return () => { active = false; };
-  }, [pendingCount]);
+  }, [pendingCount, user?._id, isManager]);
 
-  const reviewSales = offlineSales.filter(sale => ['blocked', 'rejected'].includes(sale.syncStatus));
+  const reviewSales = offlineSales.filter(sale => ['blocked', 'rejected', 'owner_unknown'].includes(sale.syncStatus));
 
   const refreshOfflineSales = async () => {
-    const sales = await getOfflineSales();
+    const sales = user?._id
+      ? await getOfflineSales(user._id, { includeAllForReview: isManager })
+      : [];
     setOfflineSales(Array.isArray(sales) ? sales : []);
     setOfflineLoadError('');
   };
@@ -256,7 +262,9 @@ export default function SettingsPage() {
                         <div><strong>{sale.syncStatus === 'rejected' ? 'Rejected offline sale' : 'Price conflict'}</strong><span>{sale.offlineId}</span></div>
                         <Badge variant={sale.syncStatus === 'rejected' ? 'danger' : 'warning'}>{sale.syncStatus}</Badge>
                       </div>
-                      {sale.syncStatus === 'rejected' ? (
+                      {sale.syncStatus === 'owner_unknown' ? (
+                        <p className="admin-settings-conflict-copy">Ownership could not be verified for this older offline record. It has been preserved and will not sync automatically. An administrator must verify the original cashier and reconcile it manually before recovery.</p>
+                      ) : sale.syncStatus === 'rejected' ? (
                         <>
                           <p className="admin-settings-conflict-copy">Rejected by {sale.resolution?.decidedBy || 'manager/admin'} on {formatDate(sale.resolution?.decidedAt)}. This sale is retained for audit visibility and will not sync.</p>
                           <p className="admin-settings-conflict-meta">Client-reported saved time (unverified): {formatDate(sale.createdAt)}</p>
@@ -266,7 +274,7 @@ export default function SettingsPage() {
                           <p className="admin-settings-conflict-copy">{sale.syncError || 'The saved offline prices differ from the current product catalogue.'}</p>
                           <p className="admin-settings-conflict-meta">Client-reported saved time (unverified): {formatDate(sale.createdAt)}</p>
                           <OfflineConflictPrices sale={sale} />
-                          {isManager && sale.syncConflict?.items?.length > 0 && (
+                          {isManager && sale.userId && sale.syncStatus === 'blocked' && sale.syncConflict?.items?.length > 0 && (
                             <div className="admin-settings-conflict-actions">
                               <Button onClick={() => handleApproveOfflineSale(sale.id)} disabled={resolvingSaleId === sale.id || !isOnline}>
                                 <CheckCircle2 size={15} aria-hidden="true" />
