@@ -5,6 +5,33 @@ export const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL, impo
 
 export { getSessionAuthConfig } from './sessionAuth.mjs';
 
+export async function revokeSession(accessToken, refreshToken) {
+  if (!accessToken || !refreshToken) return;
+  const timeout = 3000;
+  const logout = (access, refresh) => axios.post(
+    `${API_BASE_URL}/auth/logout`,
+    { refreshToken: refresh },
+    { timeout, headers: { Authorization: `Bearer ${access}` } }
+  );
+
+  try {
+    await logout(accessToken, refreshToken);
+    return;
+  } catch (error) {
+    // An expired access token is the only reason to rotate and retry logout.
+    if (error?.response?.status !== 401 || error?.response?.data?.code !== 'TOKEN_EXPIRED') {
+      throw error;
+    }
+  }
+
+  const { data } = await axios.post(
+    `${API_BASE_URL}/auth/refresh`,
+    { refreshToken },
+    { timeout }
+  );
+  await logout(data.data.accessToken, data.data.refreshToken);
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
@@ -73,11 +100,6 @@ api.interceptors.response.use(
         localStorage.setItem('refreshToken', data.data.refreshToken);
         processQueue(null, data.data.accessToken);
 
-        // The logout body must revoke the newly rotated token, not the consumed token.
-        const requestPath = String(original.url || '').split('?')[0];
-        if (requestPath === '/auth/logout' && original.data && typeof original.data === 'object') {
-          original.data = { ...original.data, refreshToken: data.data.refreshToken };
-        }
         original.headers.Authorization = `Bearer ${data.data.accessToken}`;
         return api(original);
       } catch (refreshErr) {
