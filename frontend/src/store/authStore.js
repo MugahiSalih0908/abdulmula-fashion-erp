@@ -133,9 +133,19 @@ fetchMe: () => {
   // ─────────────────────────────
 
   logout: () => {
+    const { accessToken, refreshToken } = get();
+
+    // Revoke the server-side refresh session before clearing local credentials.
+    // The local logout still completes immediately when the API is offline.
+    if (accessToken && refreshToken) {
+      api.post('/auth/logout', { refreshToken }, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      }).catch(() => {});
+    }
 
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
 
     set({
       user: null,
