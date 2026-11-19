@@ -249,9 +249,15 @@ router.post('/refresh', async (req, res, next) => {
 
     const newAccess  = generateAccessToken(user._id);
     const newRefresh = generateRefreshToken(user._id);
+    // Replace the matched token entry atomically so a concurrent replay cannot succeed.
     const rotation = await User.updateOne(
       { _id: user._id, isActive: true, refreshTokens: storedToken },
-      { $set: { ['refreshTokens.' + '
+      { $set: { 'refreshTokens.$': hashToken(newRefresh) } }
+    );
+    if (rotation.modifiedCount !== 1)
+      return res.status(401).json({ success:false, message:'Session already rotated or revoked. Please sign in again.' });
+
+    res.json({ success:true, data:{ accessToken: newAccess, refreshToken: newRefresh } });
   } catch (err) { next(err); }
 });
 
