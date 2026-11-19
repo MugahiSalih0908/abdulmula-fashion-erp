@@ -55,6 +55,8 @@ jobs:
       - name: Run backend tests
         working-directory: backend
         run: npm test
+      - name: Run shared financial validation tests
+        run: node --test shared/*.test.mjs
 
   frontend:
     name: Frontend tests and production build
