@@ -23,7 +23,6 @@ connectDB();
 
 // ── Security headers ──────────────────────────────────────────
 app.use(helmet());
-app.use(mongoSanitize());
 app.set('trust proxy', 1);
 
 // Enforce HTTPS at the application edge as a second layer behind Render TLS.
@@ -87,6 +86,8 @@ app.use('/api/webhooks', require('./routes/webhooks'));
 
 app.use(express.json({ limit:'10mb' }));
 app.use(express.urlencoded({ extended:true }));
+// Sanitize after parsing so req.body is available before application routes run.
+app.use(mongoSanitize());
 
 // ERP API responses contain employee, customer and financial data.
 // Explicitly prevent browsers, service workers and intermediaries from caching them.
