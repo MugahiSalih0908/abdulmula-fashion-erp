@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import useCartStore from '../../store/cartStore';
-import { calculateInvoiceTotals } from '../../../../shared/invoiceCalculations.mjs';
+import useAuthStore from '../../store/authStore';
+import { calculateInvoiceTotals, STAFF_MAX_DISCOUNT_PERCENT } from '../../../../shared/invoiceCalculations.mjs';
 import {
   ArrowLeft, ArrowRight, Banknote, Check, CreditCard, Minus, Package,
   Plus, ShoppingBag, Smartphone, Tag, Trash2, UserRound, X
@@ -19,6 +20,8 @@ const money = value => `$${Number(value || 0).toFixed(2)}`;
 
 export default function CartDrawer({ open, onClose, customers, onCheckout, isCheckingOut }) {
   const cart = useCartStore();
+  const userRole = useAuthStore(state => state.user?.role);
+  const canManagePricing = ['admin', 'manager'].includes(userRole);
   const [step, setStep] = useState('items');
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
@@ -79,6 +82,10 @@ export default function CartDrawer({ open, onClose, customers, onCheckout, isChe
   const taxAmount = cart.taxAmount();
   const grandTotal = cart.grandTotal();
   const changeAmount = cart.changeAmount();
+
+  useEffect(() => {
+    if (!canManagePricing && cart.taxRate !== 0) cart.setTaxRate(0);
+  }, [canManagePricing, cart.taxRate]);
 
   const handleClose = () => {
     setStep('items');
@@ -337,7 +344,7 @@ export default function CartDrawer({ open, onClose, customers, onCheckout, isChe
                         />
                       </section>
 
-                      <section aria-labelledby="cart-tax-heading">
+                      {canManagePricing && <section aria-labelledby="cart-tax-heading">
                         <SectionHeading id="cart-tax-heading" icon={Tag} title="Tax rate" detail="Applied after discounts, matching invoice calculations." />
                         <label htmlFor="cart-tax-rate" className="sr-only">Tax rate percent</label>
                         <div className="relative mt-3">
@@ -354,7 +361,7 @@ export default function CartDrawer({ open, onClose, customers, onCheckout, isChe
                           />
                           <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-sm text-[var(--color-text-muted)]">%</span>
                         </div>
-                      </section>
+                      </section>}
                     </div>
                   )}
                 </div>
@@ -547,10 +554,12 @@ function CartItem({ item, cart }) {
                     min="0"
                     step="0.01"
                     value={item.discount || ''}
-                    max={item.unitPrice * item.quantity}
+                    max={item.unitPrice * item.quantity * (canManagePricing ? 1 : STAFF_MAX_DISCOUNT_PERCENT / 100)}
                     onChange={event => {
-                      if (!cart.setDiscount(product._id, event.target.value)) {
-                        toast.error('Discount must be between $0 and the line amount.');
+                      if (!cart.setDiscount(product._id, event.target.value, canManagePricing ? 100 : STAFF_MAX_DISCOUNT_PERCENT)) {
+                        toast.error(canManagePricing
+                          ? 'Discount must be between $0 and the line amount.'
+                          : `Staff discounts cannot exceed ${STAFF_MAX_DISCOUNT_PERCENT}% of the line amount.`);
                       }
                     }}
                     aria-describedby={`discount-help-${product._id}`}
@@ -559,7 +568,9 @@ function CartItem({ item, cart }) {
                   />
                 </div>
                 <p id={`discount-help-${product._id}`} className="mt-1 text-[11px] text-[var(--color-text-muted)]">
-                  Cannot exceed {money(item.unitPrice * item.quantity)}.
+                  {canManagePricing
+                    ? `Cannot exceed ${money(item.unitPrice * item.quantity)}.`
+                    : `Staff limit: ${STAFF_MAX_DISCOUNT_PERCENT}% (${money(item.unitPrice * item.quantity * STAFF_MAX_DISCOUNT_PERCENT / 100)}).`}
                 </p>
               </motion.div>
             )}
