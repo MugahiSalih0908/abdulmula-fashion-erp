@@ -300,14 +300,18 @@ router.post('/logout', async (req, res, next) => {
     if (user) {
       const presentedHash = hashToken(refreshToken);
       const storedToken = user.refreshTokens.find(value => value === presentedHash || value === refreshToken);
-      if (storedToken) {
-        const pull = { refreshTokens: storedToken };
-        if (decoded.sid) pull.activeSessions = decoded.sid;
+      const pull = {};
+      if (storedToken) pull.refreshTokens = storedToken;
+      if (decoded.sid) pull.activeSessions = decoded.sid;
+
+      // Revoke the session ID even if a concurrent refresh already rotated the
+      // presented token. The device must not remain active after logout wins.
+      if (Object.keys(pull).length > 0) {
         const revoked = await User.updateOne(
-          { _id: user._id, refreshTokens: storedToken },
+          { _id: user._id },
           { $pull: pull }
         );
-        if (revoked.modifiedCount === 1) await log({ user, action:'LOGOUT', req });
+        if (revoked.modifiedCount > 0) await log({ user, action:'LOGOUT', req });
       }
     }
 
