@@ -16,7 +16,8 @@ test('logout revokes both the refresh token and its device session', () => {
 test('refresh rotates stored token hashes atomically and rejects replay', () => {
   assert.ok(authRoutes.includes('const presentedHash = hashToken(refreshToken)'));
   assert.ok(authRoutes.includes('refreshTokens: storedToken'));
-  assert.ok(authRoutes.includes("'refreshTokens.$'"));
+  assert.ok(authRoutes.includes('const refreshTokenIndex = user.refreshTokens.indexOf(storedToken)'));
+  assert.ok(authRoutes.includes('`refreshTokens.${refreshTokenIndex}`'));
   assert.ok(authRoutes.includes('rotation.modifiedCount !== 1'));
   assert.ok(authRoutes.includes('decoded.sid && !user.activeSessions?.includes(decoded.sid)'));
 });
