@@ -4,12 +4,12 @@ const { isIssuedBeforePasswordChange } = require('./auth');
 
 test('access JWTs issued before a password change are rejected', () => {
   const changedAt = new Date('2026-11-19T12:00:05.900Z');
-  assert.equal(isIssuedBeforePasswordChange(1795099204, changedAt), true);
+  assert.equal(isIssuedBeforePasswordChange(1795089604, changedAt), true);
 });
 
 test('access JWTs issued in the same JWT second as a password change remain valid', () => {
   const changedAt = new Date('2026-11-19T12:00:05.900Z');
-  assert.equal(isIssuedBeforePasswordChange(1795099205, changedAt), false);
+  assert.equal(isIssuedBeforePasswordChange(1795089605, changedAt), false);
 });
 
 test('accounts without password-change timestamps retain normal access-token behavior', () => {
