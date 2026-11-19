@@ -90,17 +90,31 @@ api.interceptors.response.use(
       isRefreshing = true;
       refreshingUserId = activeUserId;
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
-        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
-        if (String(localStorage.getItem('activeUserId')) !== String(refreshingUserId)) {
-          throw new Error('The staff session changed during token refresh. Sign in again.');
-        }
-        localStorage.setItem('accessToken', data.data.accessToken);
-        localStorage.setItem('refreshToken', data.data.refreshToken);
-        processQueue(null, data.data.accessToken);
+        const rotateSession = async () => {
+          if (String(localStorage.getItem('activeUserId')) !== String(refreshingUserId)) {
+            throw new Error('The staff session changed during token refresh. Sign in again.');
+          }
+          // Read the latest refresh token after acquiring the cross-tab lock.
+          // A different tab may already have rotated the previous token.
+          const refreshToken = localStorage.getItem('refreshToken');
+          if (!refreshToken) throw new Error('No refresh token');
+          const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
+          if (String(localStorage.getItem('activeUserId')) !== String(refreshingUserId)) {
+            throw new Error('The staff session changed during token refresh. Sign in again.');
+          }
+          localStorage.setItem('accessToken', data.data.accessToken);
+          localStorage.setItem('refreshToken', data.data.refreshToken);
+          return data.data.accessToken;
+        };
 
-        original.headers.Authorization = `Bearer ${data.data.accessToken}`;
+        // Web Locks serialize token rotation across tabs on the same origin.
+        // Browsers without Web Locks retain the per-tab single-flight fallback.
+        const accessToken = typeof navigator !== 'undefined' && navigator.locks?.request
+          ? await navigator.locks.request(`abdulmula-refresh-${refreshingUserId}`, rotateSession)
+          : await rotateSession();
+
+        processQueue(null, accessToken);
+        original.headers.Authorization = `Bearer ${accessToken}`;
         return api(original);
       } catch (refreshErr) {
         processQueue(refreshErr, null);
