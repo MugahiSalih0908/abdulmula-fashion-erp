@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - security/full-app-hardening
       - release/premium-workspaces-contrast
       - feature/email-center-infrastructure
       - ui/phase-6-invoice-history
@@ -70,7 +71,7 @@ jobs:
         run: npm ci
       - name: Run frontend unit tests
         working-directory: frontend
-        run: node --test src/pages/*.test.mjs src/store/*.test.js
+        run: node --test src/pages/*.test.mjs src/store/*.test.js src/offline/*.test.mjs src/services/*.test.mjs
       - name: Build frontend
         working-directory: frontend
         run: npm run build
