@@ -5,6 +5,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const User = require('../models/User');
+const { validateNewPassword } = require('../utils/passwordValidation');
 
 async function main() {
   if (!process.env.MONGO_URI) {
@@ -26,8 +27,9 @@ async function main() {
   }
 
   const password = String(process.env.ADMIN_PASSWORD || '');
-  if (password.length < 12) {
-    throw new Error('Set ADMIN_PASSWORD to a unique password of at least 12 characters in the untracked environment file.');
+  const passwordError = validateNewPassword(password);
+  if (passwordError) {
+    throw new Error(`ADMIN_PASSWORD: ${passwordError}`);
   }
 
   const name = String(process.env.ADMIN_NAME || 'Abdulmula Fashion Admin').trim();
