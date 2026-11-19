@@ -236,17 +236,17 @@ router.post('/accept/:token', async (req, res, next) => {
     if (!token || token.length !== 64)
       return res.status(400).json({ success: false, message: 'Invalid token format.' });
 
-    if (!password || !confirmPassword)
+    if (typeof password !== 'string' || typeof confirmPassword !== 'string' || !password || !confirmPassword)
       return res.status(400).json({ success: false, message: 'Password and confirmation are required.' });
 
     if (password !== confirmPassword)
       return res.status(400).json({ success: false, message: 'Passwords do not match.' });
 
-    if (password.length < 8)
-      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+    if (password.length < 12 || password.length > 128)
+      return res.status(400).json({ success: false, message: 'Password must be between 12 and 128 characters.' });
 
-    if (!name || name.trim().length < 2)
-      return res.status(400).json({ success: false, message: 'Valid name is required.' });
+    if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 60)
+      return res.status(400).json({ success: false, message: 'Name must be between 2 and 60 characters.' });
 
     // ── Hash and find invitation ───────────────────────────────
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
