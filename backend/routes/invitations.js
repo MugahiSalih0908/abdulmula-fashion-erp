@@ -11,6 +11,7 @@ const { sendEmail, templates } = require('../utils/sendEmail');
 const { getEmailDeliveryError } = require('../utils/emailDeliveryError');
 const { isEmailDeliveryBlocked } = require('../utils/emailConfig');
 const { log }   = require('../utils/auditLogger');
+const { hashRefreshToken } = require('../utils/tokenUtils');
 
 // ─────────────────────────────────────────────────────────────
 // POST /api/invitations/create (Admin only)
@@ -304,7 +305,7 @@ router.post('/accept/:token', async (req, res, next) => {
     const refreshToken = generateRefreshToken(newUser._id);
 
     // ── Store refresh token ────────────────────────────────────
-    newUser.refreshTokens = [refreshToken];
+    newUser.refreshTokens = [hashRefreshToken(refreshToken)];
     newUser.lastLogin = new Date();
     newUser.lastLoginIP = req.ip || req.headers['x-forwarded-for'];
     await newUser.save();
