@@ -12,42 +12,56 @@ const mongoSanitize = require('express-mongo-sanitize');
 const morgan        = require('morgan');
 const connectDB     = require('./config/db');
 const errorHandler  = require('./middleware/errorHandler');
+const { isAllowedConfiguredOrigin, mustRejectInsecureRequest } = require('./middleware/transportSecurity');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
 connectDB();
 
-// ── Security headers ──────────────────────────────────────────
-app.use(helmet());
-app.use(mongoSanitize());
+const isProduction = process.env.NODE_ENV === 'production';
 app.set('trust proxy', 1);
 
+// Render terminates public TLS before forwarding requests to this service.
+// Require the trusted proxy to report HTTPS in production; never redirect a
+// state-changing API request over plaintext transport.
+app.use((req, res, next) => {
+  if (mustRejectInsecureRequest(req, isProduction)) {
+    return res.status(426).json({
+      success: false,
+      message: 'HTTPS is required for all production API requests.'
+    });
+  }
+  next();
+});
+
+// ── Security headers ──────────────────────────────────────────
+app.use(helmet({
+  hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: false } : false
+}));
+app.use(mongoSanitize());
+
 // ── CORS ──────────────────────────────────────────────────────
-const allowed = [
+const configuredOrigins = [
   process.env.CLIENT_URL,
   process.env.CLIENT_PREVIEW_URL,
+  ...(isProduction ? [
+    'https://abdulmulafashion.com',
+    'https://www.abdulmulafashion.com',
+    'https://abdulmula-fashion-erp.vercel.app'
+  ] : [])
 ]
   .filter(Boolean)
-  .flatMap((origins) => origins.split(','))
-  .map((origin) => origin.trim())
-  .filter(Boolean)
-  .map((origin) => {
-    let url;
-    try {
-      url = new URL(origin);
-    } catch {
-      throw new Error('CORS configuration must contain exact HTTP(S) origins.');
-    }
+  .flatMap(origins => origins.split(','))
+  .map(origin => origin.trim())
+  .filter(Boolean);
 
-    if (
-      !['http:', 'https:'].includes(url.protocol) ||
-      url.origin !== origin.replace(/\/+$/, '')
-    ) {
-      throw new Error('CORS configuration must contain exact HTTP(S) origins.');
-    }
-    return url.origin;
-  });
+const allowed = configuredOrigins.map(origin => {
+  if (!isAllowedConfiguredOrigin(origin, { production: isProduction })) {
+    throw new Error('CORS origins must be exact HTTPS origins in production; HTTP is allowed only for local development.');
+  }
+  return new URL(origin).origin;
+});
 
 const vercelPreviewHost =
   /^abdulmula-fashion-[a-z0-9]+(?:-[a-z0-9]+)*-mugahid-s-projects\.vercel\.app$/i;
@@ -72,7 +86,7 @@ app.use(cors({
     if (
       !origin ||
       allowed.includes(origin) ||
-      origin === 'http://localhost:5173' ||
+      (!isProduction && ['http://localhost:5173', 'http://127.0.0.1:5173'].includes(origin)) ||
       isApprovedVercelPreview(origin)
     ) return cb(null, true);
     cb(new Error(`CORS blocked: ${origin}`));
@@ -89,8 +103,8 @@ app.use('/api/auth/login', rateLimit({ windowMs:15*60*1000, max:20, message:{ su
 // ── Body parsing ──────────────────────────────────────────────
 app.use('/api/webhooks', require('./routes/webhooks'));
 
-app.use(express.json({ limit:'10mb' }));
-app.use(express.urlencoded({ extended:true }));
+app.use(express.json({ limit:'1mb' }));
+app.use(express.urlencoded({ extended:true, limit:'16kb', parameterLimit:50 }));
 
 // ── Logging ───────────────────────────────────────────────────
 const { redactRequestPath } = require('./utils/safeRequestPath');
