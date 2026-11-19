@@ -1,9 +1,11 @@
 // routes/customers.js – /api/customers
 
 const express  = require('express');
+const mongoose = require('mongoose');
 const router   = express.Router();
 const Customer = require('../models/Customer');
 const Invoice  = require('../models/Invoice');
+const AuditLog = require('../models/AuditLog');
 const { protect, authorize } = require('../middleware/auth');
 const { log }  = require('../utils/auditLogger');
 const { getPaginationOptions, escapeRegExp } = require('../utils/queryPagination');
@@ -144,24 +146,62 @@ router.post('/:id/pay', protect, authorize('admin', 'manager'), async (req, res,
       return res.status(400).json({ success: false, message: 'Enter a valid positive payment amount.' });
     }
 
-    const customer = await Customer.findById(req.params.id);
-    if (!customer || customer.isDeleted) return res.status(404).json({ success: false, message: 'Customer not found.' });
-    const beforeBalance = Number(customer.creditBalance || 0);
-    if (pay > beforeBalance) {
-      return res.status(409).json({ success: false, message: 'Payment exceeds the customer’s outstanding credit balance.' });
-    }
+    const session = await mongoose.startSession();
+    let customer;
+    let beforeBalance = 0;
 
-    customer.creditBalance = Number((beforeBalance - pay).toFixed(2));
-    await customer.save();
-    await log({
-      user: req.user,
-      action: 'CUSTOMER_CREDIT_REPAYMENT',
-      entity: 'Customer',
-      entityId: customer._id,
-      details: { amount: pay, beforeBalance, afterBalance: customer.creditBalance },
-      req
-    });
-    res.json({ success: true, data: customer, message: `${pay.toFixed(2)} payment recorded for ${customer.name}.` });
+    try {
+      await session.withTransaction(async () => {
+        customer = await Customer.findOne({
+          _id: req.params.id,
+          isDeleted: false
+        }).session(session);
+
+        if (!customer) {
+          throw Object.assign(new Error('Customer not found.'), { statusCode: 404 });
+        }
+
+        beforeBalance = Number(customer.creditBalance || 0);
+        if (pay > beforeBalance) {
+          throw Object.assign(
+            new Error('Payment exceeds the customer’s outstanding credit balance.'),
+            { statusCode: 409 }
+          );
+        }
+
+        customer.creditBalance = Number((beforeBalance - pay).toFixed(2));
+        await customer.save({ session });
+
+        // Keep the financial change and its audit trail in one transaction.
+        await AuditLog.create([{
+          user: req.user._id,
+          userName: req.user.name,
+          action: 'CUSTOMER_CREDIT_REPAYMENT',
+          entity: 'Customer',
+          entityId: customer._id.toString(),
+          details: {
+            amount: pay,
+            beforeBalance,
+            afterBalance: customer.creditBalance
+          },
+          ip: req.ip || req.headers?.['x-forwarded-for'],
+          userAgent: req.headers?.['user-agent']
+        }], { session });
+      });
+
+      res.json({
+        success: true,
+        data: customer,
+        message: pay.toFixed(2) + ' payment recorded for ' + customer.name + '.'
+      });
+    } catch (err) {
+      if (err.statusCode) {
+        return res.status(err.statusCode).json({ success: false, message: err.message });
+      }
+      next(err);
+    } finally {
+      await session.endSession();
+    }
   } catch (err) { next(err); }
 });
 
