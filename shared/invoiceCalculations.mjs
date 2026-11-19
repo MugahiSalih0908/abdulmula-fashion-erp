@@ -1,5 +1,9 @@
 const badRequest = (message) => Object.assign(new Error(message), { statusCode: 400 });
 
+// Cashiers may apply small courtesy discounts; larger discounts require a
+// manager or administrator. Keep this shared so POS and API use one rule.
+export const STAFF_MAX_DISCOUNT_PERCENT = 10;
+
 const requireFiniteNumber = (value, label) => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw badRequest(`${label} must be a valid number.`);
@@ -50,7 +54,7 @@ export function assertExpectedUnitPrice(expectedPrice, catalogPrice) {
   }
 }
 
-export function buildInvoiceLine(item, product, role, previouslyRequested = 0) {
+export function buildInvoiceLine(item, product, role, previouslyRequested = 0, options = {}) {
   if (!item || typeof item !== 'object') {
     throw badRequest('Each invoice item must be valid.');
   }
@@ -90,6 +94,20 @@ export function buildInvoiceLine(item, product, role, previouslyRequested = 0) {
   if (rawDiscount < 0) throw badRequest('Discount cannot be negative.');
   const discountCents = toCents(rawDiscount);
   if (discountCents > lineSubtotalCents) throw badRequest('Discount cannot exceed the line amount.');
+
+  const discountRole = options.discountRole || role;
+  if (!['admin', 'manager'].includes(discountRole)) {
+    const maxStaffDiscountCents = Number(roundRatio(
+      BigInt(lineSubtotalCents) * BigInt(STAFF_MAX_DISCOUNT_PERCENT),
+      100n
+    ));
+    if (discountCents > maxStaffDiscountCents) {
+      throw Object.assign(
+        new Error('Staff discounts cannot exceed ' + STAFF_MAX_DISCOUNT_PERCENT + '% of the line amount. Ask a manager for approval.'),
+        { statusCode: 403, code: 'DISCOUNT_LIMIT_EXCEEDED' }
+      );
+    }
+  }
 
   return {
     quantity,
