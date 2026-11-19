@@ -23,7 +23,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(400).json({ success:false, message:'Enter a valid email address.' });
 
     const user = await User.findOne({ email: email.toLowerCase().trim() })
-                           .select('+password +loginAttempts +lockUntil +refreshTokens +isVerified');
+                           .select('+password +loginAttempts +lockUntil +refreshTokens +activeSessions +isVerified');
 
     if (!user) {
       await log({ action:'LOGIN_FAILED', details:{ email, reason:'unknown_email' }, req });
@@ -65,8 +65,9 @@ router.post('/login', async (req, res, next) => {
     }
 
     // ── Success ───────────────────────────────────────────────
-    const accessToken  = generateAccessToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    const sessionId = crypto.randomUUID();
+    const accessToken  = generateAccessToken(user._id, sessionId);
+    const refreshToken = generateRefreshToken(user._id, sessionId);
 
     user.loginAttempts = 0;
     user.lockUntil     = undefined;
@@ -77,6 +78,7 @@ router.post('/login', async (req, res, next) => {
     );
     user.refreshTokens.push(hashToken(refreshToken));
     if (user.refreshTokens.length > 5) user.refreshTokens = user.refreshTokens.slice(-5);
+    user.activeSessions = [...(user.activeSessions || []), sessionId].slice(-5);
     await user.save();
 
     await log({ user, action:'LOGIN', details:{ ip: req.ip }, req });
@@ -194,7 +196,7 @@ router.post('/reset-password/:token', async (req, res, next) => {
     const user = await User.findOne({
       resetPasswordToken:  hashedToken,
       resetPasswordExpire: { $gt: Date.now() },
-    }).select('+resetPasswordToken +resetPasswordExpire +refreshTokens');
+    }).select('+resetPasswordToken +resetPasswordExpire +refreshTokens +activeSessions');
 
     if (!user)
       return res.status(400).json({ success:false, message:'Reset link is invalid or has expired.', code:'INVALID_TOKEN' });
@@ -203,6 +205,7 @@ router.post('/reset-password/:token', async (req, res, next) => {
     user.resetPasswordToken  = undefined;
     user.resetPasswordExpire = undefined;
     user.refreshTokens       = [];            // force re-login on all devices
+    user.activeSessions      = [];
     user.loginAttempts       = 0;
     user.lockUntil           = undefined;
     await user.save();
@@ -237,9 +240,13 @@ router.post('/refresh', async (req, res, next) => {
     try { decoded = verifyRefreshToken(refreshToken); }
     catch { return res.status(401).json({ success:false, message:'Invalid or expired refresh token.', code:'REFRESH_EXPIRED' }); }
 
-    const user = await User.findById(decoded.id).select('+refreshTokens');
+    const user = await User.findById(decoded.id).select('+refreshTokens +activeSessions');
     if (!user || !user.isActive)
       return res.status(401).json({ success:false, message:'Account not found or disabled.' });
+    if (user.passwordChangedAt && Number.isFinite(decoded.iat) && decoded.iat < Math.floor(user.passwordChangedAt.getTime() / 1000))
+      return res.status(401).json({ success:false, message:'Password changed. Please sign in again.', code:'SESSION_INVALIDATED' });
+    if (decoded.sid && !user.activeSessions?.includes(decoded.sid))
+      return res.status(401).json({ success:false, message:'Device session revoked. Please sign in again.', code:'SESSION_REVOKED' });
 
     // Accept a legacy plaintext record once, so active sessions survive this upgrade.
     const presentedHash = hashToken(refreshToken);
@@ -247,12 +254,80 @@ router.post('/refresh', async (req, res, next) => {
     if (!storedToken)
       return res.status(401).json({ success:false, message:'Session revoked. Please log in again.' });
 
-    const newAccess  = generateAccessToken(user._id);
-    const newRefresh = generateRefreshToken(user._id);
+    const sessionId = decoded.sid || crypto.randomUUID();
+    const newAccess  = generateAccessToken(user._id, sessionId);
+    const newRefresh = generateRefreshToken(user._id, sessionId);
     // Replace the matched token entry atomically so a concurrent replay cannot succeed.
+    const rotationUpdate = { $set: { 'refreshTokens.
+    if (rotation.modifiedCount !== 1)
+      return res.status(401).json({ success:false, message:'Session already rotated or revoked. Please sign in again.' });
+
+    res.json({ success:true, data:{ accessToken: newAccess, refreshToken: newRefresh } });
+  } catch (err) { next(err); }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/auth/logout
+// ─────────────────────────────────────────────────────────────
+router.post('/logout', async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body || {};
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      return res.json({ success:true, message:'Logged out successfully.' });
+    }
+
+    // A valid, server-issued refresh token is sufficient to revoke its own session.
+    // This still works when the short-lived access token has already expired.
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(refreshToken);
+    } catch {
+      return res.json({ success:true, message:'Logged out successfully.' });
+    }
+
+    const user = await User.findById(decoded.id).select('+refreshTokens +activeSessions');
+    if (user) {
+      const presentedHash = hashToken(refreshToken);
+      const storedToken = user.refreshTokens.find(value => value === presentedHash || value === refreshToken);
+      if (storedToken) {
+        const pull = { refreshTokens: storedToken };
+        if (decoded.sid) pull.activeSessions = decoded.sid;
+        const revoked = await User.updateOne(
+          { _id: user._id, refreshTokens: storedToken },
+          { $pull: pull }
+        );
+        if (revoked.modifiedCount === 1) await log({ user, action:'LOGOUT', req });
+      }
+    }
+
+    res.json({ success:true, message:'Logged out successfully.' });
+  } catch (err) { next(err); }
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /api/auth/logout-all  – revoke every device
+// ─────────────────────────────────────────────────────────────
+router.post('/logout-all', protect, async (req, res, next) => {
+  try {
+    await User.findByIdAndUpdate(req.user._id, { $set: { refreshTokens:[], activeSessions:[] } });
+    await log({ user: req.user, action:'LOGOUT', details:{ allDevices:true }, req });
+    res.json({ success:true, message:'Logged out from all devices.' });
+  } catch (err) { next(err); }
+});
+
+// ─────────────────────────────────────────────────────────────
+// GET /api/auth/me
+// ─────────────────────────────────────────────────────────────
+router.get('/me', protect, (req, res) => {
+  res.json({ success:true, data: req.user });
+});
+
+module.exports = router;
+: hashToken(newRefresh) } };
+    if (!decoded.sid) rotationUpdate.$addToSet = { activeSessions: sessionId };
     const rotation = await User.updateOne(
       { _id: user._id, isActive: true, refreshTokens: storedToken },
-      { $set: { 'refreshTokens.$': hashToken(newRefresh) } }
+      rotationUpdate
     );
     if (rotation.modifiedCount !== 1)
       return res.status(401).json({ success:false, message:'Session already rotated or revoked. Please sign in again.' });
