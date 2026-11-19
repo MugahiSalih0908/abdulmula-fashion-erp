@@ -25,7 +25,7 @@ function validateProductionSecurity(env = process.env) {
         throw new Error(`${key} must contain valid HTTPS URL(s) in production.`);
       }
 
-      if (parsed.protocol !== 'https:' || parsed.origin !== candidate.replace(/\\/+$/, '')) {
+      if (parsed.protocol !== 'https:' || parsed.origin !== (candidate.endsWith('/') ? candidate.slice(0, -1) : candidate)) {
         throw new Error(`${key} must contain HTTPS origin(s) only in production.`);
       }
     }
