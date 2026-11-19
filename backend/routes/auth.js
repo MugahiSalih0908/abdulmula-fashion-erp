@@ -17,9 +17,11 @@ router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password)
+    if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password)
       return res.status(400).json({ success:false, message:'Email and password are required.' });
-    if (!validator.isEmail(email))
+    if (email.length > 254 || password.length > 128)
+      return res.status(400).json({ success:false, message:'Email or password exceeds the supported length.' });
+    if (!validator.isEmail(email.trim()))
       return res.status(400).json({ success:false, message:'Enter a valid email address.' });
 
     const user = await User.findOne({ email: email.toLowerCase().trim() })
@@ -93,8 +95,8 @@ router.post('/activate/:token', async (req, res, next) => {
       return res.status(400).json({ success:false, message:'Password and confirmation are required.' });
     if (password !== confirmPassword)
       return res.status(400).json({ success:false, message:'Passwords do not match.' });
-    if (password.length < 8)
-      return res.status(400).json({ success:false, message:'Password must be at least 8 characters.' });
+    if (password.length < 12 || password.length > 128)
+      return res.status(400).json({ success:false, message:'Password must be between 12 and 128 characters.' });
 
     // Hash the token from the URL and find matching user
     const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
@@ -184,8 +186,8 @@ router.post('/reset-password/:token', async (req, res, next) => {
       return res.status(400).json({ success:false, message:'Password and confirmation are required.' });
     if (password !== confirmPassword)
       return res.status(400).json({ success:false, message:'Passwords do not match.' });
-    if (password.length < 8)
-      return res.status(400).json({ success:false, message:'Password must be at least 8 characters.' });
+    if (password.length < 12 || password.length > 128)
+      return res.status(400).json({ success:false, message:'Password must be between 12 and 128 characters.' });
 
     const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
     const user = await User.findOne({
