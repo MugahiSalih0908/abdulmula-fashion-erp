@@ -20,6 +20,8 @@ const PORT = process.env.PORT || 5000;
 connectDB();
 
 const isProduction = process.env.NODE_ENV === 'production';
+const { validateProductionJwtSecrets } = require('./config/securityConfig');
+validateProductionJwtSecrets(process.env);
 app.set('trust proxy', 1);
 
 // Render terminates public TLS before forwarding requests to this service.
