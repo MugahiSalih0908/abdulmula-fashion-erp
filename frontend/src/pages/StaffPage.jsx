@@ -21,7 +21,7 @@ import './staffWorkspace.css';
 
 function getStrength(password) {
   return [
-    password.length >= 8,
+    password.length >= 12,
     /[A-Z]/.test(password),
     /[a-z]/.test(password),
     /\d/.test(password),
@@ -379,7 +379,7 @@ function ResetPwdForm({ member, onSaved }) {
       <div className="staff-field">
         <label htmlFor="staff-reset-password">New password <span>*</span></label>
         <div className="staff-password-input">
-          <input id="staff-reset-password" type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="At least 8 characters" aria-invalid={!!errors.newPassword} aria-describedby={errors.newPassword ? 'staff-reset-password-error' : 'staff-reset-password-strength'} {...register('newPassword', { required: 'Enter a new password.', minLength: { value: 8, message: 'Use at least 8 characters.' } })} />
+          <input id="staff-reset-password" type={show ? 'text' : 'password'} autoComplete="new-password" placeholder="At least 12 characters" aria-invalid={!!errors.newPassword} aria-describedby={errors.newPassword ? 'staff-reset-password-error' : 'staff-reset-password-strength'} {...register('newPassword', { required: 'Enter a new password.', minLength: { value: 12, message: 'Use at least 12 characters.' } })} />
           <button type="button" onClick={() => setShow(value => !value)} aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show}>
             {show ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
           </button>
