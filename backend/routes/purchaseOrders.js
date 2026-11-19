@@ -116,7 +116,15 @@ router.get('/:id', async (req, res, next) => {
 /* ── POST /api/purchase-orders ────────────────────────────────── */
 router.post('/', async (req, res, next) => {
   try {
-    const { supplierId, items, discount, note } = req.body || {};
+    const body = req.body || {};
+    if (!body || typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(body).some(key => !['supplierId', 'items', 'discount', 'note'].includes(key))) {
+      return res.status(400).json({ success: false, message: 'Unsupported purchase order field.' });
+    }
+    const { supplierId, items, discount, note } = body;
+    if (note !== undefined && (typeof note !== 'string' || note.length > 400)) {
+      return res.status(400).json({ success: false, message: 'Purchase order note must be text of at most 400 characters.' });
+    }
     if (!mongoose.isValidObjectId(supplierId)) {
       return res.status(400).json({ success: false, message: 'Choose a valid supplier.' });
     }
@@ -125,9 +133,7 @@ router.post('/', async (req, res, next) => {
     if (!supplier) return res.status(404).json({ success: false, message: 'Supplier not found.' });
 
     const totals = calculatePurchaseOrderTotals(items, discount);
-    if (String(note || '').trim().length > 400) {
-      return res.status(400).json({ success: false, message: 'Purchase order note must be 400 characters or fewer.' });
-    }
+    const normalizedNote = (note || '').trim();
 
     const { lineItems } = await resolveOrderLines(totals.items);
     const po = await PurchaseOrder.create({
@@ -140,7 +146,7 @@ router.post('/', async (req, res, next) => {
       amountPaid: 0,
       balanceDue: totals.grandTotal,
       status: 'draft',
-      note: String(note || '').trim(),
+      note: normalizedNote,
       createdBy: req.user._id
     });
 
@@ -173,20 +179,28 @@ router.put('/:id', authorize('admin'), async (req, res, next) => {
       return res.status(409).json({ success: false, message: 'Only unpaid draft purchase orders can be edited.' });
     }
 
-    const supplierId = req.body?.supplierId || String(po.supplier);
+    const body = req.body || {};
+    if (typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(body).some(key => !['supplierId', 'items', 'discount', 'note'].includes(key))) {
+      return res.status(400).json({ success: false, message: 'Unsupported purchase order field.' });
+    }
+    if (body.note !== undefined && (typeof body.note !== 'string' || body.note.length > 400)) {
+      return res.status(400).json({ success: false, message: 'Purchase order note must be text of at most 400 characters.' });
+    }
+    const supplierId = body.supplierId || String(po.supplier);
     if (!mongoose.isValidObjectId(supplierId)) {
       return res.status(400).json({ success: false, message: 'Choose a valid supplier.' });
     }
     const supplier = await Supplier.findOne({ _id: supplierId, isDeleted: { $ne: true } });
     if (!supplier) return res.status(404).json({ success: false, message: 'Supplier not found.' });
 
-    const items = req.body?.items || po.items.map(item => ({
+    const items = body.items || po.items.map(item => ({
       productId: String(item.product),
       quantity: item.quantity,
       unitCost: item.unitCost
     }));
-    const totals = calculatePurchaseOrderTotals(items, req.body?.discount ?? po.discount);
-    const note = req.body?.note === undefined ? po.note : String(req.body.note || '').trim();
+    const totals = calculatePurchaseOrderTotals(items, body.discount ?? po.discount);
+    const note = body.note === undefined ? po.note : body.note.trim();
     if (note.length > 400) {
       return res.status(400).json({ success: false, message: 'Purchase order note must be 400 characters or fewer.' });
     }
@@ -247,6 +261,7 @@ router.delete('/:id', authorize('admin'), async (req, res, next) => {
 /* ── PATCH /api/purchase-orders/:id/order – draft to ordered ─── */
 router.patch('/:id/order', async (req, res, next) => {
   try {
+    if (req.body && Object.keys(req.body).length) return res.status(400).json({ success: false, message: 'This action does not accept a request body.' });
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ success: false, message: 'Invalid purchase order ID.' });
     }
@@ -274,6 +289,7 @@ router.patch('/:id/order', async (req, res, next) => {
 
 /* ── PATCH /api/purchase-orders/:id/receive – ordered only ───── */
 router.patch('/:id/receive', async (req, res, next) => {
+  if (req.body && Object.keys(req.body).length) return res.status(400).json({ success: false, message: 'This action does not accept a request body.' });
   const session = await mongoose.startSession();
   try {
     let receivedOrder;
@@ -355,7 +371,12 @@ router.patch('/:id/pay', async (req, res, next) => {
       const po = await PurchaseOrder.findById(req.params.id).session(session);
       if (!po) throw Object.assign(new Error('Purchase order not found.'), { statusCode: 404 });
 
-      payment = normalizeSupplierPayment(req.body, {
+      const paymentBody = req.body || {};
+      if (!paymentBody || typeof paymentBody !== 'object' || Array.isArray(paymentBody) ||
+          Object.keys(paymentBody).some(key => !['amount', 'paymentMethod', 'date', 'reference', 'note'].includes(key))) {
+        throw Object.assign(new Error('Unsupported supplier payment field.'), { statusCode: 400 });
+      }
+      payment = normalizeSupplierPayment(paymentBody, {
         balanceDue: po.balanceDue,
         status: po.status
       });
