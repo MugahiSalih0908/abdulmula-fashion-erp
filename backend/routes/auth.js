@@ -8,6 +8,7 @@ const User      = require('../models/User');
 const { protect } = require('../middleware/auth');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/tokenUtils');
 const { log }   = require('../utils/auditLogger');
+const { validateNewPassword, isValidOpaqueToken } = require('../utils/passwordValidation');
 const { sendEmail, templates } = require('../utils/sendEmail');
 
 // ─────────────────────────────────────────────────────────────
@@ -89,14 +90,15 @@ router.post('/login', async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 router.post('/activate/:token', async (req, res, next) => {
   try {
-    const { password, confirmPassword } = req.body;
-
-    if (!password || !confirmPassword)
+    const { password, confirmPassword } = req.body || {};
+    if (typeof password !== 'string' || typeof confirmPassword !== 'string' || !password || !confirmPassword)
       return res.status(400).json({ success:false, message:'Password and confirmation are required.' });
     if (password !== confirmPassword)
       return res.status(400).json({ success:false, message:'Passwords do not match.' });
-    if (password.length < 12 || password.length > 128)
-      return res.status(400).json({ success:false, message:'Password must be between 12 and 128 characters.' });
+    const passwordError = validateNewPassword(password);
+    if (passwordError) return res.status(400).json({ success:false, message:passwordError });
+    if (!isValidOpaqueToken(req.params.token))
+      return res.status(400).json({ success:false, message:'Activation link is invalid or has expired.', code:'INVALID_TOKEN' });
 
     // Hash the token from the URL and find matching user
     const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
@@ -129,11 +131,12 @@ router.post('/activate/:token', async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 router.post('/forgot-password', async (req, res, next) => {
   try {
-    const { email } = req.body;
-    if (!email || !validator.isEmail(email))
+    const { email } = req.body || {};
+    if (typeof email !== 'string' || email.trim().length > 254 || !validator.isEmail(email.trim()))
       return res.status(400).json({ success:false, message:'Enter a valid email address.' });
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() })
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: normalizedEmail })
                            .select('+resetPasswordToken +resetPasswordExpire');
 
     // Always return success to prevent email enumeration
@@ -180,14 +183,15 @@ router.post('/forgot-password', async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 router.post('/reset-password/:token', async (req, res, next) => {
   try {
-    const { password, confirmPassword } = req.body;
-
-    if (!password || !confirmPassword)
+    const { password, confirmPassword } = req.body || {};
+    if (typeof password !== 'string' || typeof confirmPassword !== 'string' || !password || !confirmPassword)
       return res.status(400).json({ success:false, message:'Password and confirmation are required.' });
     if (password !== confirmPassword)
       return res.status(400).json({ success:false, message:'Passwords do not match.' });
-    if (password.length < 12 || password.length > 128)
-      return res.status(400).json({ success:false, message:'Password must be between 12 and 128 characters.' });
+    const passwordError = validateNewPassword(password);
+    if (passwordError) return res.status(400).json({ success:false, message:passwordError });
+    if (!isValidOpaqueToken(req.params.token))
+      return res.status(400).json({ success:false, message:'Reset link is invalid or has expired.', code:'INVALID_TOKEN' });
 
     const hashedToken = crypto.createHash('sha256').update(req.params.token).digest('hex');
     const user = await User.findOne({
@@ -257,7 +261,9 @@ router.post('/refresh', async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 router.post('/logout', protect, async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
+    const refreshToken = req.body?.refreshToken;
+    if (refreshToken !== undefined && (typeof refreshToken !== 'string' || refreshToken.length > 4096))
+      return res.status(400).json({ success:false, message:'Invalid refresh token.' });
     const user = await User.findById(req.user._id).select('+refreshTokens');
     if (user && refreshToken) {
       user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken);
