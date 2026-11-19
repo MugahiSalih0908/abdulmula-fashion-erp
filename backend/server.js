@@ -15,6 +15,36 @@ const errorHandler  = require('./middleware/errorHandler');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Production browser origins and email links must never use plaintext HTTP.
+// Render terminates public TLS before requests reach this Express process.
+if (isProduction) {
+  if (!process.env.CLIENT_URL) {
+    throw new Error('CLIENT_URL must be configured in production.');
+  }
+
+  for (const key of ['CLIENT_URL', 'CLIENT_PREVIEW_URL', 'FRONTEND_URL']) {
+    const configured = String(process.env[key] || '').trim();
+    if (!configured) continue;
+
+    const values = key === 'CLIENT_URL' || key === 'CLIENT_PREVIEW_URL'
+      ? configured.split(',')
+      : [configured];
+
+    for (const value of values) {
+      let parsed;
+      try {
+        parsed = new URL(value.trim());
+      } catch {
+        throw new Error(`${key} must contain valid HTTPS URL(s) in production.`);
+      }
+      if (parsed.protocol !== 'https:' || parsed.origin !== value.trim().replace(/\\/+$/, '')) {
+        throw new Error(`${key} must contain HTTPS origin(s) only in production.`);
+      }
+    }
+  }
+}
 
 connectDB();
 
@@ -42,6 +72,7 @@ const allowed = [
 
     if (
       !['http:', 'https:'].includes(url.protocol) ||
+      (isProduction && url.protocol !== 'https:') ||
       url.origin !== origin.replace(/\/+$/, '')
     ) {
       throw new Error('CORS configuration must contain exact HTTP(S) origins.');
@@ -72,7 +103,7 @@ app.use(cors({
     if (
       !origin ||
       allowed.includes(origin) ||
-      origin === 'http://localhost:5173' ||
+      (!isProduction && origin === 'http://localhost:5173') ||
       isApprovedVercelPreview(origin)
     ) return cb(null, true);
     cb(new Error(`CORS blocked: ${origin}`));
