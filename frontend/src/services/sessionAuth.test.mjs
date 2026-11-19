@@ -14,6 +14,7 @@ test('captures the active session token for the expected staff owner', () => {
     activeUserId: '64c000000000000000000001'
   }));
   assert.equal(result.headers.Authorization, 'Bearer signed-access-token');
+  assert.equal(result.expectedUserId, '64c000000000000000000001');
 });
 
 test('refuses to synchronize a queued sale under another staff account', () => {
