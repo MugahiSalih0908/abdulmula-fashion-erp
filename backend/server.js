@@ -42,7 +42,8 @@ const allowed = [
 
     if (
       !['http:', 'https:'].includes(url.protocol) ||
-      url.origin !== origin.replace(/\/+$/, '')
+      url.origin !== origin.replace(/\/+$/, '') ||
+      (process.env.NODE_ENV === 'production' && url.protocol !== 'https:')
     ) {
       throw new Error('CORS configuration must contain exact HTTP(S) origins.');
     }
@@ -85,6 +86,35 @@ app.use(cors({
 // ── Rate limiting ──────────────────────────────────────────────
 app.use('/api/', rateLimit({ windowMs:15*60*1000, max:500, standardHeaders:true, legacyHeaders:false }));
 app.use('/api/auth/login', rateLimit({ windowMs:15*60*1000, max:20, message:{ success:false, message:'Too many login attempts. Wait 15 minutes.' } }));
+// Additional throttles for public token and account-recovery endpoints.
+app.use('/api/auth/forgot-password', rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many password-reset requests. Try again later.' }
+}));
+app.use('/api/auth/reset-password', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many password-reset attempts. Try again later.' }
+}));
+app.use('/api/auth/activate', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many activation attempts. Try again later.' }
+}));
+app.use('/api/auth/refresh', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many session refresh requests. Try again later.' }
+}));
 
 // ── Body parsing ──────────────────────────────────────────────
 app.use('/api/webhooks', require('./routes/webhooks'));
@@ -110,7 +140,6 @@ app.get('/', (req, res) => {
 app.get('/api/health', (req, res) => res.json({
   success: true,
   version: '5.0',
-  env: process.env.NODE_ENV,
   time: new Date().toISOString(),
   service: 'Abdulmula Fashion ERP'
 }));
