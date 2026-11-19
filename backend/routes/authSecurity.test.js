@@ -11,6 +11,8 @@ test('logout revokes both the refresh token and its device session', () => {
   assert.ok(authRoutes.includes('hashToken(refreshToken)'));
   assert.ok(authRoutes.includes('$pull: pull'));
   assert.ok(authRoutes.includes('pull.activeSessions = decoded.sid'));
+  assert.ok(authRoutes.includes('{ _id: user._id },'));
+  assert.ok(authRoutes.includes('if (revoked.modifiedCount > 0)'));
 });
 
 test('refresh rotates stored token hashes atomically and rejects replay', () => {
