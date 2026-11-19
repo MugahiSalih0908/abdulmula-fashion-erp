@@ -45,19 +45,6 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] }
             }
           },
-          {
-            urlPattern: /\/api\/customers/,
-            handler:    'StaleWhileRevalidate',
-            options: {
-              cacheName:  'customers-cache',
-              expiration: { maxEntries: 300, maxAgeSeconds: 86400 }
-            }
-          },
-          {
-            urlPattern: /\/api\/dashboard/,
-            handler:    'NetworkFirst',
-            options:    { cacheName: 'dashboard-cache', networkTimeoutSeconds: 5 }
-          }
         ],
         globPatterns:          ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback:      'index.html',
