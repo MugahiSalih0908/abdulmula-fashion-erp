@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import api from '../services/api';
 import useCartStore from '../store/cartStore';
+import useAuthStore from '../store/authStore';
 import { calculateCashChange } from '../../../shared/invoiceCalculations.mjs';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import {
@@ -13,6 +14,12 @@ import {
   getOfflineProducts,
   cacheProducts
 } from '../offline/syncManager';
+import {
+  pendingCheckoutStorageKey,
+  readPendingCheckout,
+  writePendingCheckout,
+  clearPendingCheckout
+} from '../offline/offlineSaleOwnership.mjs';
 import db from '../offline/db';
 import CartDrawer from '../components/pos/CartDrawer';
 import ReceiptModal from '../components/pos/ReceiptModal';
@@ -35,8 +42,17 @@ export default function POSPage() {
   const [scanning, setScanning] = useState(false);
   const scannerTriggerRef = useRef(null);
   const scannerWasOpenedRef = useRef(false);
-  const checkoutId = useRef(localStorage.getItem('pos.pendingCheckoutId'));
-  const checkoutCreatedAt = useRef(localStorage.getItem('pos.pendingCheckoutCreatedAt'));
+  const user = useAuthStore(state => state.user);
+  const ownerUserId = user?._id;
+  const checkoutKey = ownerUserId ? pendingCheckoutStorageKey(ownerUserId) : null;
+  const checkoutId = useRef(null);
+  const checkoutCreatedAt = useRef(null);
+
+  useEffect(() => {
+    const pending = readPendingCheckout(checkoutKey);
+    checkoutId.current = pending?.offlineId || null;
+    checkoutCreatedAt.current = pending?.createdAt || null;
+  }, [checkoutKey]);
 
   const cart = useCartStore();
   const { isOnline } = useOnlineStatus();
@@ -132,10 +148,10 @@ export default function POSPage() {
   const { mutate: checkout, isPending: isCheckingOut } = useMutation({
     mutationFn: async (payload) => {
       if (isOnline) {
-        const offlineId = await saveSaleOffline(payload, payload.offlineId);
+        const offlineId = await saveSaleOffline(payload, payload.offlineId, ownerUserId);
         try {
           const { data } = await api.post('/invoices', payload);
-          await markSaleSynced(offlineId);
+          await markSaleSynced(offlineId, ownerUserId);
           return data.data;
         } catch (err) {
           const status = err?.response?.status;
@@ -154,9 +170,8 @@ export default function POSPage() {
           throw err;
         }
       }
-      const offlineId = await saveSaleOffline(payload, payload.offlineId);
-      localStorage.removeItem('pos.pendingCheckoutId');
-      localStorage.removeItem('pos.pendingCheckoutCreatedAt');
+      const offlineId = await saveSaleOffline(payload, payload.offlineId, ownerUserId);
+      clearPendingCheckout(checkoutKey, offlineId);
       checkoutId.current = null;
       checkoutCreatedAt.current = null;
       return {
@@ -179,8 +194,7 @@ export default function POSPage() {
       const cash = cart.cashReceived;
       const change = calculateCashChange(cash, invoice.grandTotal);
       checkoutId.current = null;
-      localStorage.removeItem('pos.pendingCheckoutId');
-      localStorage.removeItem('pos.pendingCheckoutCreatedAt');
+      clearPendingCheckout(checkoutKey, checkoutId.current);
       checkoutCreatedAt.current = null;
       queryClient.invalidateQueries(['pos-products']);
       cart.clearCart();
@@ -198,14 +212,17 @@ export default function POSPage() {
   });
 
   const handleCheckout = () => {
+    if (!ownerUserId || !checkoutKey) {
+      toast.error('Your staff account is not fully loaded. Refresh the page before checkout.');
+      return;
+    }
     const payload = cart.toInvoicePayload();
     checkoutCreatedAt.current ||= new Date().toISOString();
     payload.offlineCreatedAt = checkoutCreatedAt.current;
     if (isOnline) {
       checkoutId.current ||= globalThis.crypto?.randomUUID?.()
         || `pos_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      localStorage.setItem('pos.pendingCheckoutId', checkoutId.current);
-      localStorage.setItem('pos.pendingCheckoutCreatedAt', checkoutCreatedAt.current);
+      writePendingCheckout(checkoutKey, { offlineId: checkoutId.current, createdAt: checkoutCreatedAt.current });
       payload.offlineId = checkoutId.current;
       payload.items = payload.items.map(({ unitPrice, ...item }) => ({
         ...item,
@@ -216,8 +233,7 @@ export default function POSPage() {
     } else {
       checkoutId.current ||= globalThis.crypto?.randomUUID?.()
         || `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      localStorage.setItem('pos.pendingCheckoutId', checkoutId.current);
-      localStorage.setItem('pos.pendingCheckoutCreatedAt', checkoutCreatedAt.current);
+      writePendingCheckout(checkoutKey, { offlineId: checkoutId.current, createdAt: checkoutCreatedAt.current });
       payload.offlineId = checkoutId.current;
     }
     checkout(payload);
