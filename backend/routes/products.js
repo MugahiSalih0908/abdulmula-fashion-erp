@@ -1,6 +1,7 @@
 // routes/products.js – v5 with strict role guards
 
 const express       = require('express');
+const mongoose      = require('mongoose');
 const router        = express.Router();
 const Product       = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
@@ -34,15 +35,20 @@ router.get('/', protect, async (req, res, next) => {
       : 500;
     const skip = (pageNumber - 1) * pageSize;
 
+    const isStaff = req.user.role === 'staff';
     const findQuery = Product.find(filter)
       .sort(search ? { score: { $meta: 'textScore' } } : { name: 1, _id: 1 })
       .skip(skip)
       .limit(pageSize);
 
     if (paginationRequested) {
-      findQuery.select('name sku barcode price costPrice quantity category description size color imageUrl lowStockThreshold supplier');
+      findQuery.select(isStaff
+        ? 'name sku barcode price quantity category description size color imageUrl lowStockThreshold'
+        : 'name sku barcode price costPrice quantity category description size color imageUrl lowStockThreshold supplier');
+      if (!isStaff) findQuery.populate('supplier', 'name phone');
     } else {
-      findQuery.populate('supplier', 'name');
+      if (isStaff) findQuery.select('-costPrice -supplier');
+      else findQuery.populate('supplier', 'name phone');
     }
 
     const [products, total, summaryRows] = await Promise.all([
@@ -71,14 +77,16 @@ router.get('/', protect, async (req, res, next) => {
                 outOfStockCount: {
                   $sum: { $cond: [{ $eq: [{ $ifNull: ['$quantity', 0] }, 0] }, 1, 0] }
                 },
-                inventoryCostValue: {
-                  $sum: {
-                    $multiply: [
-                      { $ifNull: ['$costPrice', 0] },
-                      { $ifNull: ['$quantity', 0] }
-                    ]
+                ...(isStaff ? {} : {
+                  inventoryCostValue: {
+                    $sum: {
+                      $multiply: [
+                        { $ifNull: ['$costPrice', 0] },
+                        { $ifNull: ['$quantity', 0] }
+                      ]
+                    }
                   }
-                }
+                })
               }
             }
           ])
@@ -108,7 +116,10 @@ router.get('/', protect, async (req, res, next) => {
 
 router.get('/barcode/:barcode', protect, async (req, res, next) => {
   try {
-    const product = await Product.findOne({ barcode: req.params.barcode, isDeleted: false });
+    const productQuery = Product.findOne({ barcode: req.params.barcode, isDeleted: false });
+    if (req.user.role === 'staff') productQuery.select('-costPrice -supplier');
+    else productQuery.populate('supplier', 'name phone');
+    const product = await productQuery;
     if (!product) return res.status(404).json({ success: false, message: 'No product found for this barcode.' });
     res.json({ success: true, data: product });
   } catch (err) { next(err); }
@@ -116,7 +127,11 @@ router.get('/barcode/:barcode', protect, async (req, res, next) => {
 
 router.get('/:id', protect, async (req, res, next) => {
   try {
-    const product = await Product.findOne({ _id: req.params.id, isDeleted: false }).populate('supplier','name phone');
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, message: 'Product not found.' });
+    const productQuery = Product.findOne({ _id: req.params.id, isDeleted: false });
+    if (req.user.role === 'staff') productQuery.select('-costPrice -supplier');
+    else productQuery.populate('supplier', 'name phone');
+    const product = await productQuery;
     if (!product) return res.status(404).json({ success: false, message: 'Product not found.' });
     res.json({ success: true, data: product });
   } catch (err) { next(err); }
