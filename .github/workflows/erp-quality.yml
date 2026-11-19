@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - security/audit-hardening-2026-11-19
       - release/premium-workspaces-contrast
       - feature/email-center-infrastructure
       - ui/phase-6-invoice-history
