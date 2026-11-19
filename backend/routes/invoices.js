@@ -14,6 +14,17 @@ const { protect, authorize } = require('../middleware/auth');
 const { log }       = require('../utils/auditLogger');
 const { buildLineCostSnapshot } = require('../utils/costSnapshot');
 const invoiceCalculations = import('../../shared/invoiceCalculations.mjs');
+const invoiceForRole = (invoice, role) => {
+  const source = invoice?.toObject ? invoice.toObject() : invoice;
+  if (['admin', 'manager'].includes(role) || !source) return source;
+  return {
+    ...source,
+    items: Array.isArray(source.items)
+      ? source.items.map(({ unitCost, costKnown, ...item }) => item)
+      : []
+  };
+};
+
 const {
   assertApprovedPayloadMatchesOriginal,
   assertApprovedItemsMatch,
@@ -89,7 +100,7 @@ router.post('/', protect, async (req, res, next) => {
     if (existingInvoice) {
       await session.abortTransaction();
       const { invoice } = payloadIdentityResponse(existingInvoice, incomingFingerprint);
-      return res.status(200).json({ success: true, data: invoice, duplicate: true });
+      return res.status(200).json({ success: true, data: invoiceForRole(invoice, req.user.role), duplicate: true });
     }
 
     if (offlineId && (await findOfflineIdRecords(
@@ -380,12 +391,12 @@ router.post('/', protect, async (req, res, next) => {
 
     if (result.duplicate) {
       await session.abortTransaction();
-      return res.status(200).json({ success: true, data: result.invoice, duplicate: true });
+      return res.status(200).json({ success: true, data: invoiceForRole(result.invoice, req.user.role), duplicate: true });
     }
 
     await session.commitTransaction();
 
-    res.status(201).json({ success: true, data: result.invoice });
+    res.status(201).json({ success: true, data: invoiceForRole(result.invoice, req.user.role) });
 
   } catch (err) {
     if (session.inTransaction()) await session.abortTransaction();
@@ -738,7 +749,7 @@ router.get('/', protect, async (req, res, next) => {
 
     res.json({
       success: true,
-      data:    invoices,
+      data:    invoices.map(invoice => invoiceForRole(invoice, req.user.role)),
       total,
       totalRevenue: revenue[0]?.total || 0,
       page: parseInt(page)
@@ -758,7 +769,7 @@ router.get('/:id', protect, async (req, res, next) => {
                                  .populate('customer', 'name phone')
                                  .populate('soldBy', 'name');
     if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found.' });
-    res.json({ success: true, data: invoice });
+    res.json({ success: true, data: invoiceForRole(invoice, req.user.role) });
   } catch (err) { next(err); }
 });
 
