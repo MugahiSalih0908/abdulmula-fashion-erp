@@ -26,3 +26,10 @@ test('invitation auto-login stores only a refresh-token digest', () => {
   assert.match(invitations, /refreshTokens: hashRefreshToken\(refreshToken\)/);
   assert.doesNotMatch(invitations, /refreshTokens\s*=\s*\[refreshToken\]/);
 });
+
+test('staff invoice creation cannot bypass manager discount or tax permissions', () => {
+  const auth = read('./auth.js');
+  const invoices = read('./invoices.js');
+  assert.match(invoices, /\{ discountRole: req\.user\.role \}/);
+  assert.match(invoices, /req\.user\.role === 'staff'[\s\S]*?Number\(req\.body\.taxRate\) !== 0[\s\S]*?TAX_RATE_FORBIDDEN/);
+});
