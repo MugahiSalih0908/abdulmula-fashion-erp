@@ -36,3 +36,11 @@ frontend/.env.local
 
 # Local VS Code settings
 .vscode/
+
+# Ignore all local environment files; keep safe templates tracked.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
