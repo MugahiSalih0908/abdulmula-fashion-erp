@@ -9,6 +9,7 @@ const { validateNewPassword, isValidOpaqueToken } = require('../utils/passwordVa
 const Invitation = require('../models/Invitation');
 const User      = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
+const { generateAccessToken, generateRefreshToken, hashRefreshToken } = require('../utils/tokenUtils');
 const { sendEmail, templates } = require('../utils/sendEmail');
 const { getEmailDeliveryError } = require('../utils/emailDeliveryError');
 const { isEmailDeliveryBlocked } = require('../utils/emailConfig');
@@ -304,15 +305,21 @@ router.post('/accept/:token', async (req, res, next) => {
     });
 
     // ── Generate tokens for auto-login ────────────────────────
-    const { generateAccessToken, generateRefreshToken } = require('../utils/tokenUtils');
     const accessToken = generateAccessToken(newUser._id);
     const refreshToken = generateRefreshToken(newUser._id);
 
-    // ── Store refresh token ────────────────────────────────────
-    newUser.refreshTokens = [refreshToken];
-    newUser.lastLogin = new Date();
-    newUser.lastLoginIP = req.ip || req.headers['x-forwarded-for'];
-    await newUser.save();
+    // ── Store refresh token digest atomically ───────────────────
+    const lastLogin = new Date();
+    const lastLoginIP = req.ip || req.headers['x-forwarded-for'];
+    newUser.lastLogin = lastLogin;
+    newUser.lastLoginIP = lastLoginIP;
+    await User.updateOne(
+      { _id: newUser._id },
+      {
+        $set: { lastLogin, lastLoginIP },
+        $push: { refreshTokens: hashRefreshToken(refreshToken) }
+      }
+    );
 
     res.status(201).json({
       success: true,
