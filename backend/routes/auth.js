@@ -6,7 +6,7 @@ const crypto    = require('crypto');
 const validator = require('validator');
 const User      = require('../models/User');
 const { protect } = require('../middleware/auth');
-const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/tokenUtils');
+const { generateAccessToken, generateRefreshToken, verifyRefreshToken, hashRefreshToken } = require('../utils/tokenUtils');
 const { log }   = require('../utils/auditLogger');
 const { validateNewPassword, isValidOpaqueToken } = require('../utils/passwordValidation');
 const { sendEmail, templates } = require('../utils/sendEmail');
@@ -16,7 +16,7 @@ const { sendEmail, templates } = require('../utils/sendEmail');
 // ─────────────────────────────────────────────────────────────
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
     if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password)
       return res.status(400).json({ success:false, message:'Email and password are required.' });
@@ -75,7 +75,7 @@ router.post('/login', async (req, res, next) => {
     user.lockUntil     = undefined;
     user.lastLogin     = new Date();
     user.lastLoginIP   = req.ip || req.headers['x-forwarded-for'];
-    user.refreshTokens.push(refreshToken);
+    user.refreshTokens.push(hashRefreshToken(refreshToken));
     if (user.refreshTokens.length > 5) user.refreshTokens = user.refreshTokens.slice(-5);
     await user.save();
 
@@ -232,8 +232,8 @@ router.post('/reset-password/:token', async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 router.post('/refresh', async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
-    if (!refreshToken)
+    const refreshToken = req.body?.refreshToken;
+    if (typeof refreshToken !== 'string' || !refreshToken || refreshToken.length > 4096)
       return res.status(400).json({ success:false, message:'Refresh token required.' });
 
     let decoded;
@@ -243,13 +243,16 @@ router.post('/refresh', async (req, res, next) => {
     const user = await User.findById(decoded.id).select('+refreshTokens');
     if (!user || !user.isActive)
       return res.status(401).json({ success:false, message:'Account not found or disabled.' });
-    if (!user.refreshTokens.includes(refreshToken))
+    const refreshDigest = hashRefreshToken(refreshToken);
+    // Accept legacy raw tokens only for the remaining lifetime of existing sessions.
+    const hasLegacyToken = user.refreshTokens.includes(refreshToken);
+    if (!user.refreshTokens.includes(refreshDigest) && !hasLegacyToken)
       return res.status(401).json({ success:false, message:'Session revoked. Please log in again.' });
 
     const newAccess  = generateAccessToken(user._id);
     const newRefresh = generateRefreshToken(user._id);
-    user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken);
-    user.refreshTokens.push(newRefresh);
+    user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken && t !== refreshDigest);
+    user.refreshTokens.push(hashRefreshToken(newRefresh));
     await user.save();
 
     res.json({ success:true, data:{ accessToken: newAccess, refreshToken: newRefresh } });
@@ -266,7 +269,8 @@ router.post('/logout', protect, async (req, res, next) => {
       return res.status(400).json({ success:false, message:'Invalid refresh token.' });
     const user = await User.findById(req.user._id).select('+refreshTokens');
     if (user && refreshToken) {
-      user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken);
+      const digest = hashRefreshToken(refreshToken);
+      user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken && t !== digest);
       await user.save();
     }
     await log({ user: req.user, action:'LOGOUT', req });
