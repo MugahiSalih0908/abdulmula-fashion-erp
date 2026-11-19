@@ -6,7 +6,7 @@ const crypto    = require('crypto');
 const validator = require('validator');
 const User      = require('../models/User');
 const { protect } = require('../middleware/auth');
-const { generateAccessToken, generateRefreshToken, verifyRefreshToken, hashRefreshToken } = require('../utils/tokenUtils');
+const { generateAccessToken, generateRefreshToken, verifyRefreshToken, hashRefreshToken, buildRefreshTokenRotationPipeline } = require('../utils/tokenUtils');
 const { log }   = require('../utils/auditLogger');
 const { validateNewPassword, isValidOpaqueToken } = require('../utils/passwordValidation');
 const { sendEmail, templates } = require('../utils/sendEmail');
@@ -26,7 +26,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(400).json({ success:false, message:'Enter a valid email address.' });
 
     const user = await User.findOne({ email: email.toLowerCase().trim() })
-                           .select('+password +loginAttempts +lockUntil +refreshTokens +isVerified');
+                           .select('+password +loginAttempts +lockUntil +isVerified');
 
     if (!user) {
       await log({ action:'LOGIN_FAILED', details:{ email, reason:'unknown_email' }, req });
@@ -75,9 +75,12 @@ router.post('/login', async (req, res, next) => {
     user.lockUntil     = undefined;
     user.lastLogin     = new Date();
     user.lastLoginIP   = req.ip || req.headers['x-forwarded-for'];
-    user.refreshTokens.push(hashRefreshToken(refreshToken));
-    if (user.refreshTokens.length > 5) user.refreshTokens = user.refreshTokens.slice(-5);
     await user.save();
+    // Atomic append protects concurrent logins on different shop devices.
+    await User.updateOne(
+      { _id: user._id },
+      { $push: { refreshTokens: { $each: [hashRefreshToken(refreshToken)], $slice: -5 } } }
+    );
 
     await log({ user, action:'LOGIN', details:{ ip: req.ip }, req });
 
@@ -240,20 +243,25 @@ router.post('/refresh', async (req, res, next) => {
     try { decoded = verifyRefreshToken(refreshToken); }
     catch { return res.status(401).json({ success:false, message:'Invalid or expired refresh token.', code:'REFRESH_EXPIRED' }); }
 
-    const user = await User.findById(decoded.id).select('+refreshTokens');
-    if (!user || !user.isActive)
-      return res.status(401).json({ success:false, message:'Account not found or disabled.' });
     const refreshDigest = hashRefreshToken(refreshToken);
-    // Accept legacy raw tokens only for the remaining lifetime of existing sessions.
-    const hasLegacyToken = user.refreshTokens.includes(refreshToken);
-    if (!user.refreshTokens.includes(refreshDigest) && !hasLegacyToken)
-      return res.status(401).json({ success:false, message:'Session revoked. Please log in again.' });
+    // Legacy raw values are accepted only to migrate existing sessions. Both
+    // forms are consumed in the same atomic update so replay cannot create a
+    // second live token and concurrent device rotations cannot overwrite peers.
+    const consumedTokens = [refreshDigest, refreshToken];
+    const newAccess  = generateAccessToken(decoded.id);
+    const newRefresh = generateRefreshToken(decoded.id);
+    const rotatedUser = await User.findOneAndUpdate(
+      {
+        _id: decoded.id,
+        isActive: true,
+        refreshTokens: { $in: consumedTokens }
+      },
+      buildRefreshTokenRotationPipeline(consumedTokens, hashRefreshToken(newRefresh)),
+      { new: true, projection: { _id: 1 } }
+    );
 
-    const newAccess  = generateAccessToken(user._id);
-    const newRefresh = generateRefreshToken(user._id);
-    user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken && t !== refreshDigest);
-    user.refreshTokens.push(hashRefreshToken(newRefresh));
-    await user.save();
+    if (!rotatedUser)
+      return res.status(401).json({ success:false, message:'Session revoked. Please log in again.' });
 
     res.json({ success:true, data:{ accessToken: newAccess, refreshToken: newRefresh } });
   } catch (err) { next(err); }
@@ -267,11 +275,14 @@ router.post('/logout', protect, async (req, res, next) => {
     const refreshToken = req.body?.refreshToken;
     if (refreshToken !== undefined && (typeof refreshToken !== 'string' || refreshToken.length > 4096))
       return res.status(400).json({ success:false, message:'Invalid refresh token.' });
-    const user = await User.findById(req.user._id).select('+refreshTokens');
-    if (user && refreshToken) {
+    if (refreshToken) {
       const digest = hashRefreshToken(refreshToken);
-      user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken && t !== digest);
-      await user.save();
+      // $pull is a single atomic write and cannot overwrite another device's
+      // concurrent token rotation.
+      await User.updateOne(
+        { _id: req.user._id },
+        { $pull: { refreshTokens: { $in: [refreshToken, digest] } } }
+      );
     }
     await log({ user: req.user, action:'LOGOUT', req });
     res.json({ success:true, message:'Logged out successfully.' });
