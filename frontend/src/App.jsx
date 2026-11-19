@@ -65,6 +65,21 @@ export default function App() {
   }, [fetchMe]);
 
   useEffect(() => {
+    const handleSessionStorageChange = event => {
+      if (!['accessToken', 'refreshToken', 'activeUserId'].includes(event.key)) return;
+      // A shared till may have multiple tabs open. Synchronize the auth store
+      // and clear protected query data when another tab changes accounts.
+      queryClient.clear();
+      const accessToken = localStorage.getItem('accessToken');
+      const refreshToken = localStorage.getItem('refreshToken');
+      useAuthStore.setState({ user: null, accessToken, refreshToken });
+      if (accessToken) useAuthStore.getState().fetchMe();
+    };
+    window.addEventListener('storage', handleSessionStorageChange);
+    return () => window.removeEventListener('storage', handleSessionStorageChange);
+  }, []);
+
+  useEffect(() => {
     if (previousUserId.current !== userId && previousUserId.current !== null) {
       // Avoid showing one staff member's cached protected data to the next.
       queryClient.clear();
