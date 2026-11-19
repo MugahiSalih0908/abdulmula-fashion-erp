@@ -159,5 +159,8 @@ test('product catalogue uses server pagination without changing legacy POS calls
   assert.ok(route.includes('paginationRequested'));
   assert.ok(route.includes('totalPages: Math.max(1, Math.ceil(total / pageSize))'));
   assert.ok(route.includes("findQuery.populate('supplier', 'name')"));
-  assert.ok(route.includes("findQuery.select('name sku barcode price costPrice quantity"));
+  assert.ok(route.includes("const productFields = ["));
+  assert.ok(route.includes("if (isManager) productFields.push('costPrice')"));
+  assert.ok(route.includes("if (!isManager) findQuery.select('-costPrice')"));
+  assert.ok(route.includes("if (req.user.role === 'staff') productQuery.select('-costPrice')"));
 });
