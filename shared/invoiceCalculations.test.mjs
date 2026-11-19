@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   assertExpectedUnitPrice,
+  STAFF_MAX_DISCOUNT_PERCENT,
   addCurrency,
   buildInvoiceLine,
   calculateCashChange,
@@ -93,6 +94,38 @@ test('validates quantities, stock and submitted prices', () => {
   assert.equal(buildInvoiceLine(
     { quantity: 2, discount: 20 }, product, 'staff'
   ).lineTotal, 180);
+});
+
+test('limits staff discounts to the configured percentage while managers may exceed it', () => {
+  assert.equal(STAFF_MAX_DISCOUNT_PERCENT, 10);
+  assert.equal(buildInvoiceLine(
+    { quantity: 2, discount: 20 }, product, 'staff'
+  ).discount, 20);
+
+  assert.throws(() => buildInvoiceLine(
+    { quantity: 2, discount: 20.01 }, product, 'staff'
+  ), {
+    statusCode: 403,
+    code: 'DISCOUNT_LIMIT_EXCEEDED',
+    message: /Staff discounts cannot exceed 10%/
+  });
+
+  assert.equal(buildInvoiceLine(
+    { quantity: 2, discount: 40 }, product, 'manager'
+  ).discount, 40);
+});
+
+test('offline price approval does not grant staff additional discount authority', () => {
+  assert.throws(() => buildInvoiceLine(
+    { quantity: 2, unitPrice: 90, discount: 20.01 },
+    product,
+    'manager',
+    0,
+    { discountRole: 'staff' }
+  ), {
+    statusCode: 403,
+    code: 'DISCOUNT_LIMIT_EXCEEDED'
+  });
 });
 
 test('restricts and reports price overrides while using the catalog price by default', () => {
