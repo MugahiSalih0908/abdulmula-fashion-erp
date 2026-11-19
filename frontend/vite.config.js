@@ -35,30 +35,9 @@ export default defineConfig({
         ]
       },
       workbox: {
-        runtimeCaching: [
-          {
-            urlPattern: /\/api\/products/,
-            handler:    'StaleWhileRevalidate',
-            options: {
-              cacheName:         'products-cache',
-              expiration:        { maxEntries: 500, maxAgeSeconds: 86400 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          },
-          {
-            urlPattern: /\/api\/customers/,
-            handler:    'StaleWhileRevalidate',
-            options: {
-              cacheName:  'customers-cache',
-              expiration: { maxEntries: 300, maxAgeSeconds: 86400 }
-            }
-          },
-          {
-            urlPattern: /\/api\/dashboard/,
-            handler:    'NetworkFirst',
-            options:    { cacheName: 'dashboard-cache', networkTimeoutSeconds: 5 }
-          }
-        ],
+        // Authenticated API responses are never cached in shared browser Cache Storage.
+        // POS uses its explicit IndexedDB product catalogue and pending-sale queue instead.
+        runtimeCaching: [],
         globPatterns:          ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback:      'index.html',
         cleanupOutdatedCaches: true,
