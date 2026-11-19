@@ -60,6 +60,9 @@ jobs:
         run: |
           npm ci
           npm audit fix || true
+      - name: Reconcile frontend lockfile after intentional major upgrades
+        working-directory: frontend
+        run: npm install --package-lock-only --ignore-scripts
       - name: Apply frontend fixes within declared semver ranges
         working-directory: frontend
         run: |
