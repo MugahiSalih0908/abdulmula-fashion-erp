@@ -6,7 +6,7 @@ const crypto    = require('crypto');
 const validator = require('validator');
 const User      = require('../models/User');
 const { protect } = require('../middleware/auth');
-const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/tokenUtils');
+const { generateAccessToken, generateRefreshToken, verifyRefreshToken, hashRefreshToken } = require('../utils/tokenUtils');
 const { log }   = require('../utils/auditLogger');
 const { sendEmail, templates } = require('../utils/sendEmail');
 
@@ -72,7 +72,7 @@ router.post('/login', async (req, res, next) => {
     user.lockUntil     = undefined;
     user.lastLogin     = new Date();
     user.lastLoginIP   = req.ip || req.headers['x-forwarded-for'];
-    user.refreshTokens.push(refreshToken);
+    user.refreshTokens.push(hashRefreshToken(refreshToken));
     if (user.refreshTokens.length > 5) user.refreshTokens = user.refreshTokens.slice(-5);
     await user.save();
 
@@ -237,13 +237,19 @@ router.post('/refresh', async (req, res, next) => {
     const user = await User.findById(decoded.id).select('+refreshTokens');
     if (!user || !user.isActive)
       return res.status(401).json({ success:false, message:'Account not found or disabled.' });
-    if (!user.refreshTokens.includes(refreshToken))
+    const refreshTokenHash = hashRefreshToken(refreshToken);
+    // Accept a legacy raw token once so existing sessions can rotate safely;
+    // replace it with a digest immediately after successful validation.
+    const storedRefreshToken = user.refreshTokens.find(
+      stored => stored === refreshTokenHash || stored === refreshToken
+    );
+    if (!storedRefreshToken)
       return res.status(401).json({ success:false, message:'Session revoked. Please log in again.' });
 
     const newAccess  = generateAccessToken(user._id);
     const newRefresh = generateRefreshToken(user._id);
-    user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken);
-    user.refreshTokens.push(newRefresh);
+    user.refreshTokens = user.refreshTokens.filter(t => t !== storedRefreshToken);
+    user.refreshTokens.push(hashRefreshToken(newRefresh));
     await user.save();
 
     res.json({ success:true, data:{ accessToken: newAccess, refreshToken: newRefresh } });
@@ -258,7 +264,10 @@ router.post('/logout', protect, async (req, res, next) => {
     const { refreshToken } = req.body;
     const user = await User.findById(req.user._id).select('+refreshTokens');
     if (user && refreshToken) {
-      user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken);
+      const refreshTokenHash = hashRefreshToken(refreshToken);
+      user.refreshTokens = user.refreshTokens.filter(
+        stored => stored !== refreshTokenHash && stored !== refreshToken
+      );
       await user.save();
     }
     await log({ user: req.user, action:'LOGOUT', req });
