@@ -22,10 +22,16 @@ const generatePendingPassword = () => crypto.randomBytes(32).toString('hex');
 /* ── GET /api/staff ────────────────────── admin + manager ───── */
 router.get('/', authorize('admin','manager'), async (req, res, next) => {
   try {
+    // Managers can view operational staff details but must not receive salary,
+    // login IPs, lock state, or authentication metadata from this endpoint.
+    // Administrators retain salary visibility for staff administration.
+    const staffProjection = req.user.role === 'admin'
+      ? 'name email role isActive isVerified salary lastLogin createdAt updatedAt'
+      : 'name email role isActive isVerified lastLogin createdAt updatedAt';
+
     // Fetch staff and all sales summaries in two independent queries.
-    // The previous per-member count + aggregate loop grew by two queries per staff member.
     const [staff, salesRows] = await Promise.all([
-      User.find({}).select('-password -refreshTokens').sort({ createdAt:-1 }),
+      User.find({}).select(staffProjection).sort({ createdAt:-1 }),
       Invoice.aggregate([
         { $match: { soldBy: { $ne: null } } },
         {
@@ -57,7 +63,10 @@ router.get('/', authorize('admin','manager'), async (req, res, next) => {
 router.get('/:id', authorize('admin','manager'), async (req, res, next) => {
   try {
     if (req.params.id === 'system') return next(); // skip for /system/audit-logs
-    const member = await User.findById(req.params.id).select('-password -refreshTokens');
+    const memberProjection = req.user.role === 'admin'
+      ? 'name email role isActive isVerified salary lastLogin createdAt updatedAt'
+      : 'name email role isActive isVerified lastLogin createdAt updatedAt';
+    const member = await User.findById(req.params.id).select(memberProjection);
     if (!member) return res.status(404).json({ success:false, message:'Staff not found.' });
     const [recent, logs, month] = await Promise.all([
       Invoice.find({ soldBy: req.params.id }).sort({ date:-1 }).limit(10),
@@ -205,7 +214,7 @@ router.put('/:id', authorize('admin'), async (req, res, next) => {
     const member = await User.findByIdAndUpdate(
       req.params.id,
       { name, email: email?.toLowerCase().trim(), role, salary },
-      { new:true, runValidators:true, select:'-password -refreshTokens' }
+      { new:true, runValidators:true, select:'-password -refreshTokens -lastLoginIP -loginAttempts -lockUntil' }
     );
     if (!member) return res.status(404).json({ success:false, message:'Staff not found.' });
     await log({ user: req.user, action:'USER_UPDATE', entity:'User', entityId: member._id, details:{ name, role }, req });
