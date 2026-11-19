@@ -35,30 +35,8 @@ export default defineConfig({
         ]
       },
       workbox: {
-        runtimeCaching: [
-          {
-            urlPattern: /\/api\/products/,
-            handler:    'StaleWhileRevalidate',
-            options: {
-              cacheName:         'products-cache',
-              expiration:        { maxEntries: 500, maxAgeSeconds: 86400 },
-              cacheableResponse: { statuses: [0, 200] }
-            }
-          },
-          {
-            urlPattern: /\/api\/customers/,
-            handler:    'StaleWhileRevalidate',
-            options: {
-              cacheName:  'customers-cache',
-              expiration: { maxEntries: 300, maxAgeSeconds: 86400 }
-            }
-          },
-          {
-            urlPattern: /\/api\/dashboard/,
-            handler:    'NetworkFirst',
-            options:    { cacheName: 'dashboard-cache', networkTimeoutSeconds: 5 }
-          }
-        ],
+        // Never cache authenticated ERP API responses in the shared service worker.
+        // Offline POS data is deliberately managed in the owner-aware IndexedDB queue.
         globPatterns:          ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback:      'index.html',
         cleanupOutdatedCaches: true,
