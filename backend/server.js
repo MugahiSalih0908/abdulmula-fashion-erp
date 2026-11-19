@@ -72,7 +72,7 @@ app.use(cors({
     if (
       !origin ||
       allowed.includes(origin) ||
-      (!isProduction && ['http://localhost:5173', 'http://127.0.0.1:5173'].includes(origin)) ||
+      (!isProduction && ['http://localhost:5173', 'http://127.0.0.1:5173'].includes(origin))
     ) return cb(null, true);
     cb(new Error(`CORS blocked: ${origin}`));
   },
