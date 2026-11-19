@@ -1,6 +1,7 @@
 // routes/cashbook.js – daily cashbook and admin-approved closing workflow
 
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const CashBook = require('../models/CashBook');
 const CashClosing = require('../models/CashClosing');
