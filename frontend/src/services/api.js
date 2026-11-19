@@ -3,17 +3,8 @@ import { resolveApiBaseUrl } from './apiUrl.mjs';
 
 export const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_URL, import.meta.env.PROD);
 
-export function getSessionAuthConfig(expectedUserId) {
-  const accessToken = localStorage.getItem('accessToken');
-  const activeUserId = localStorage.getItem('activeUserId');
-  if (!accessToken || !activeUserId) {
-    throw new Error('A verified staff session is required for this action.');
-  }
-  if (expectedUserId && String(activeUserId) !== String(expectedUserId)) {
-    throw new Error('The signed-in staff account changed. Sign in again before synchronizing this sale.');
-  }
-  return { headers: { Authorization: `Bearer ${accessToken}` } };
-}
+export { getSessionAuthConfig } from './sessionAuth.mjs';
+import { getSessionAuthConfig } from './sessionAuth.mjs';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
