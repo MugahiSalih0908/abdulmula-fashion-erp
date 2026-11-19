@@ -84,7 +84,7 @@ export default function CartDrawer({ open, onClose, customers, onCheckout, isChe
   const changeAmount = cart.changeAmount();
 
   useEffect(() => {
-    if (!canManagePricing && cart.taxRate !== 0) cart.setTaxRate(0);
+    if (userRole && !canManagePricing && cart.taxRate !== 0) cart.setTaxRate(0);
   }, [canManagePricing, cart.taxRate]);
 
   const handleClose = () => {
