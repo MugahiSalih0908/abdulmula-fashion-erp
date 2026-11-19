@@ -1,12 +1,14 @@
 // routes/customers.js – /api/customers
 
 const express  = require('express');
+const mongoose = require('mongoose');
 const router   = express.Router();
 const Customer = require('../models/Customer');
 const Invoice  = require('../models/Invoice');
 const { protect, authorize } = require('../middleware/auth');
 const { log }  = require('../utils/auditLogger');
 const { getPaginationOptions, escapeRegExp } = require('../utils/queryPagination');
+const { validateCustomerPayload } = require('../utils/customerValidation');
 
 router.get('/', protect, async (req, res, next) => {
   try {
@@ -83,6 +85,7 @@ router.get('/', protect, async (req, res, next) => {
 
 router.get('/:id', protect, async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, message: 'Customer not found.' });
     const customer = await Customer.findOne({ _id: req.params.id, isDeleted: false });
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
 
@@ -93,10 +96,9 @@ router.get('/:id', protect, async (req, res, next) => {
 
 router.post('/', protect, async (req, res, next) => {
   try {
-    const { name, phone, email, address, notes } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: 'Name is required.' });
-
-    const customer = await Customer.create({ name: name.trim(), phone, email, address, notes, addedBy: req.user._id });
+    const validation = validateCustomerPayload(req.body);
+    if (validation.error) return res.status(400).json({ success: false, message: validation.error, field: validation.field });
+    const customer = await Customer.create({ ...validation.value, addedBy: req.user._id });
     await log({ user: req.user, action: 'CUSTOMER_CREATE', entity: 'Customer', entityId: customer._id, req });
     res.status(201).json({ success: true, data: customer });
   } catch (err) { next(err); }
@@ -104,9 +106,12 @@ router.post('/', protect, async (req, res, next) => {
 
 router.put('/:id', protect, async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, message: 'Customer not found.' });
+    const validation = validateCustomerPayload(req.body, { partial: true });
+    if (validation.error) return res.status(400).json({ success: false, message: validation.error, field: validation.field });
     const customer = await Customer.findOneAndUpdate(
       { _id: req.params.id, isDeleted: false },
-      req.body,
+      { $set: validation.value },
       { new: true, runValidators: true }
     );
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
@@ -118,22 +123,36 @@ router.put('/:id', protect, async (req, res, next) => {
 // Record a credit repayment
 router.post('/:id/pay', protect, async (req, res, next) => {
   try {
-    const { amount } = req.body;
-    const pay = parseFloat(amount);
-    if (!pay || pay <= 0) return res.status(400).json({ success: false, message: 'Enter a valid payment amount.' });
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, message: 'Customer not found.' });
+    if (!req.body || Object.keys(req.body).some(key => key !== 'amount')) {
+      return res.status(400).json({ success: false, message: 'Only an amount can be submitted for a repayment.' });
+    }
+    const rawAmount = req.body.amount;
+    const pay = typeof rawAmount === 'number' || (typeof rawAmount === 'string' && rawAmount.trim() !== '')
+      ? Number(rawAmount)
+      : Number.NaN;
+    if (!Number.isFinite(pay) || pay <= 0 || !Number.isSafeInteger(Math.round(pay * 100))) {
+      return res.status(400).json({ success: false, message: 'Enter a valid positive payment amount.' });
+    }
 
-    const customer = await Customer.findById(req.params.id);
+    const customer = await Customer.findOne({ _id: req.params.id, isDeleted: false });
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
+    if (pay > Number(customer.creditBalance || 0)) {
+      return res.status(409).json({ success: false, message: 'Repayment cannot exceed the outstanding customer balance.' });
+    }
 
-    customer.creditBalance = Math.max(0, customer.creditBalance - pay);
+    const roundedPayment = Math.round(pay * 100) / 100;
+    customer.creditBalance = Math.round((Number(customer.creditBalance || 0) - roundedPayment) * 100) / 100;
     await customer.save();
-    res.json({ success: true, data: customer, message: `$${pay.toFixed(2)} payment recorded for ${customer.name}.` });
+    await log({ user: req.user, action: 'CUSTOMER_UPDATE', entity: 'Customer', entityId: customer._id, details: { action: 'credit_repayment_recorded', amount: roundedPayment }, req });
+    res.json({ success: true, data: customer, message: `${roundedPayment.toFixed(2)} repayment recorded for ${customer.name}.` });
   } catch (err) { next(err); }
 });
 
 router.delete('/:id', protect, authorize('admin', 'manager'), async (req, res, next) => {
   try {
-    const customer = await Customer.findByIdAndUpdate(req.params.id, { isDeleted: true }, { new: true });
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, message: 'Customer not found.' });
+    const customer = await Customer.findOneAndUpdate({ _id: req.params.id, isDeleted: false }, { $set: { isDeleted: true } }, { new: true, runValidators: true });
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
     await log({ user: req.user, action: 'CUSTOMER_DELETE', entity: 'Customer', entityId: customer._id, req });
     res.json({ success: true, message: 'Customer deleted.' });
