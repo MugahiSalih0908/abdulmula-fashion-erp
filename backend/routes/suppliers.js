@@ -101,7 +101,27 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const s = await Supplier.findOneAndUpdate({ _id: req.params.id, isDeleted: false }, req.body, { new:true, runValidators:true });
+    // Supplier balances and deletion state must only change through controlled
+    // purchase-order/payment workflows, never arbitrary profile updates.
+    const allowedFields = ['name', 'phone', 'email', 'address', 'company', 'notes'];
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? req.body
+      : {};
+    const updates = Object.fromEntries(
+      allowedFields
+        .filter(field => Object.prototype.hasOwnProperty.call(body, field))
+        .map(field => [field, body[field]])
+    );
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ success: false, message: 'No editable supplier fields were supplied.' });
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'name') &&
+        (typeof updates.name !== 'string' || !updates.name.trim())) {
+      return res.status(400).json({ success: false, message: 'Supplier name cannot be empty.' });
+    }
+
+    const s = await Supplier.findOneAndUpdate({ _id: req.params.id, isDeleted: false }, updates, { new:true, runValidators:true });
     if (!s) return res.status(404).json({ success: false, message: 'Supplier not found.' });
     await log({ user: req.user, action:'SUPPLIER_UPDATE', entity:'Supplier', entityId: s._id, req });
     res.json({ success: true, data: s });
