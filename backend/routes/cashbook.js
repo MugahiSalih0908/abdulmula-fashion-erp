@@ -80,6 +80,9 @@ router.get('/today', async (req, res, next) => {
 /* ── POST open today ─────────────────────────────────────────── */
 router.post('/open', async (req, res, next) => {
   try {
+    if (req.body && (typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length)) {
+      return res.status(400).json({ success: false, message: 'This action does not accept a request body.' });
+    }
     const date = todayStr();
     let entry = await CashBook.findOne({ date });
     let created = false;
@@ -124,10 +127,21 @@ router.post('/open', async (req, res, next) => {
 /* ── POST close day (submit for approval) ────────────────────── */
 router.post('/close', async (req, res, next) => {
   try {
-    const actual = Number(req.body?.actualCash);
-    const notes = String(req.body?.notes || '').trim();
+    const body = req.body || {};
+    if (!body || typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(body).some(key => !['actualCash', 'notes'].includes(key))) {
+      return res.status(400).json({ success: false, message: 'Unsupported cash closing field.' });
+    }
+    const rawActual = body.actualCash;
+    const actual = typeof rawActual === 'number' || (typeof rawActual === 'string' && rawActual.trim() !== '')
+      ? Number(rawActual)
+      : Number.NaN;
+    if (typeof body.notes !== 'undefined' && typeof body.notes !== 'string') {
+      return res.status(400).json({ success: false, message: 'Closing notes must be text.' });
+    }
+    const notes = String(body.notes || '').trim();
 
-    if (!Number.isFinite(actual) || actual < 0) {
+    if (!Number.isFinite(actual) || actual < 0 || !Number.isSafeInteger(Math.round(actual * 100))) {
       return res.status(400).json({ success: false, message: 'Enter a valid non-negative cash count.' });
     }
     if (notes.length > 500) {
@@ -189,6 +203,7 @@ router.post('/close', async (req, res, next) => {
 /* ── POST approve closing – admin only ───────────────────────── */
 router.post('/approve/:id', authorize('admin'), async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success: false, message: 'Closing not found.' });
     const closing = await CashClosing.findById(req.params.id);
     if (!closing) return res.status(404).json({ success: false, message: 'Closing not found.' });
     if (closing.status === 'approved') return res.status(409).json({ success: false, message: 'Already approved.' });
@@ -250,8 +265,16 @@ router.get('/rate', async (req, res, next) => {
 
 router.post('/rate', async (req, res, next) => {
   try {
-    const usdToSsp = Number(req.body?.usdToSsp);
-    if (!Number.isFinite(usdToSsp) || usdToSsp < 1) {
+    const body = req.body || {};
+    if (!body || typeof body !== 'object' || Array.isArray(body) ||
+        Object.keys(body).some(key => key !== 'usdToSsp')) {
+      return res.status(400).json({ success: false, message: 'Only usdToSsp may be supplied.' });
+    }
+    const rawRate = body.usdToSsp;
+    const usdToSsp = typeof rawRate === 'number' || (typeof rawRate === 'string' && rawRate.trim() !== '')
+      ? Number(rawRate)
+      : Number.NaN;
+    if (!Number.isFinite(usdToSsp) || usdToSsp < 1 || usdToSsp > 100000) {
       return res.status(400).json({ success: false, message: 'Enter a valid exchange rate of at least 1.' });
     }
     const rate = await ExchangeRate.create({
