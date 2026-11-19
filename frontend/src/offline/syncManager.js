@@ -301,7 +301,7 @@ export const getPendingCount = () =>
  */
 export const cacheProducts = async (products) => {
   await db.products.clear();
-  await db.products.bulkPut(products.map(p => ({ ...p, _id: p._id.toString() })));
+  await db.products.bulkPut(products.map(({ costPrice, ...product }) => ({ ...product, _id: product._id.toString() })));
   await db.syncMeta.put({ key: 'productsLastSync', value: new Date().toISOString() });
 };
 
