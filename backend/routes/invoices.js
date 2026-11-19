@@ -74,6 +74,18 @@ router.post('/', protect, async (req, res, next) => {
       }
     }
 
+    if (
+      req.user.role === 'staff' &&
+      req.body.taxRate !== undefined &&
+      req.body.taxRate !== null &&
+      Number(req.body.taxRate) !== 0
+    ) {
+      throw Object.assign(new Error('Only managers and administrators can set an invoice tax rate.'), {
+        statusCode: 403,
+        code: 'TAX_RATE_FORBIDDEN'
+      });
+    }
+
     const {
       items,           // [{ productId, quantity, unitPrice, discount }]
       paymentMethod,
@@ -212,7 +224,8 @@ router.post('/', protect, async (req, res, next) => {
         lineInput,
         product,
         approvedDecision ? 'manager' : req.user.role,
-        previouslyRequested
+        previouslyRequested,
+        { discountRole: req.user.role }
       );
       requestedQuantities.set(productId, previouslyRequested + calculatedLine.quantity);
       lineItems.push({
