@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import useAuthStore from '../store/authStore';
 
 export const useOnlineStatus = () => {
+  const ownerUserId = useAuthStore(state => state.offlineUserId || state.user?._id || state.user?.id);
   const [isOnline, setIsOnline]       = useState(navigator.onLine);
   const [pendingCount, setPendingCount] = useState(0);
   const [isSyncing, setIsSyncing]     = useState(false);
