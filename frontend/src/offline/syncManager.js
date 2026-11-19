@@ -121,7 +121,7 @@ export const getOfflineSales = async (ownerUserId, { includeAllForReview = false
     .toArray();
   return records.filter(sale =>
     String(sale.userId || '') === userId ||
-    (includeAllForReview && (!sale.userId || sale.syncStatus === 'owner_unknown'))
+    includeAllForReview
   );
 };
 
