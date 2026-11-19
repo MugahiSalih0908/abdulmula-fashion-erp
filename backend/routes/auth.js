@@ -253,15 +253,29 @@ router.post('/refresh', async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 // POST /api/auth/logout
 // ─────────────────────────────────────────────────────────────
-router.post('/logout', protect, async (req, res, next) => {
+router.post('/logout', async (req, res, next) => {
   try {
-    const { refreshToken } = req.body;
-    const user = await User.findById(req.user._id).select('+refreshTokens');
-    if (user && refreshToken) {
-      user.refreshTokens = user.refreshTokens.filter(t => t !== refreshToken);
-      await user.save();
+    const { refreshToken } = req.body || {};
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      return res.json({ success:true, message:'Logged out successfully.' });
     }
-    await log({ user: req.user, action:'LOGOUT', req });
+
+    // A valid, server-issued refresh token is sufficient to revoke its own session.
+    // This still works when the short-lived access token has already expired.
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(refreshToken);
+    } catch {
+      return res.json({ success:true, message:'Logged out successfully.' });
+    }
+
+    const user = await User.findById(decoded.id).select('+refreshTokens');
+    if (user && user.refreshTokens.includes(refreshToken)) {
+      user.refreshTokens = user.refreshTokens.filter(token => token !== refreshToken);
+      await user.save();
+      await log({ user, action:'LOGOUT', req });
+    }
+
     res.json({ success:true, message:'Logged out successfully.' });
   } catch (err) { next(err); }
 });
