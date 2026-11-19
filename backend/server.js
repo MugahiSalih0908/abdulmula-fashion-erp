@@ -16,42 +16,26 @@ const errorHandler  = require('./middleware/errorHandler');
 const app  = express();
 const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
-
-// Production browser origins and email links must never use plaintext HTTP.
-// Render terminates public TLS before requests reach this Express process.
-if (isProduction) {
-  if (!process.env.CLIENT_URL) {
-    throw new Error('CLIENT_URL must be configured in production.');
-  }
-
-  for (const key of ['CLIENT_URL', 'CLIENT_PREVIEW_URL', 'FRONTEND_URL']) {
-    const configured = String(process.env[key] || '').trim();
-    if (!configured) continue;
-
-    const values = key === 'CLIENT_URL' || key === 'CLIENT_PREVIEW_URL'
-      ? configured.split(',')
-      : [configured];
-
-    for (const value of values) {
-      let parsed;
-      try {
-        parsed = new URL(value.trim());
-      } catch {
-        throw new Error(`${key} must contain valid HTTPS URL(s) in production.`);
-      }
-      if (parsed.protocol !== 'https:' || parsed.origin !== value.trim().replace(/\\/+$/, '')) {
-        throw new Error(`${key} must contain HTTPS origin(s) only in production.`);
-      }
-    }
-  }
-}
-
+const { validateProductionSecurity } = require('./config/securityConfig');
+validateProductionSecurity(process.env);
 connectDB();
 
 // ── Security headers ──────────────────────────────────────────
 app.use(helmet());
 app.use(mongoSanitize());
 app.set('trust proxy', 1);
+
+// Enforce HTTPS at the application edge as a second layer behind Render TLS.
+// The platform health probe is exempt so deployment health checks remain available.
+app.use((req, res, next) => {
+  if (isProduction && req.path !== '/api/health' && !req.secure) {
+    return res.status(426).json({
+      success: false,
+      message: 'HTTPS is required for all production API requests.'
+    });
+  }
+  next();
+});
 
 // ── CORS ──────────────────────────────────────────────────────
 const allowed = [
