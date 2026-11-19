@@ -25,10 +25,10 @@ test('refresh rotation pipeline consumes only supplied token values and appends 
 
   assert.equal(pipeline.length, 1);
   const update = pipeline[0].$set.refreshTokens;
-  assert.deepEqual(update.$concatArrays[0].$filter.input, { $ifNull: ['$refreshTokens', []] });
-  assert.deepEqual(update.$concatArrays[0].$filter.cond, {
-    $not: [{ $in: ['$$storedToken', [oldDigest, 'legacy-raw-refresh-token']] }]
-  });
+  assert.deepEqual(update.$concatArrays[0].$setDifference, [
+    { $ifNull: ['$refreshTokens', []] },
+    [oldDigest, 'legacy-raw-refresh-token']
+  ]);
   assert.deepEqual(update.$concatArrays[1], [nextDigest]);
 });
 
