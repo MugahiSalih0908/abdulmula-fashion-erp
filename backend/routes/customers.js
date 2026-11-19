@@ -104,9 +104,29 @@ router.post('/', protect, async (req, res, next) => {
 
 router.put('/:id', protect, async (req, res, next) => {
   try {
+    // Only profile fields may be edited here. Credit balances, purchase totals,
+    // deletion state, and ownership are changed by their dedicated workflows.
+    const allowedFields = ['name', 'phone', 'email', 'address', 'notes'];
+    const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+      ? req.body
+      : {};
+    const updates = Object.fromEntries(
+      allowedFields
+        .filter(field => Object.prototype.hasOwnProperty.call(body, field))
+        .map(field => [field, body[field]])
+    );
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ success: false, message: 'No editable customer fields were supplied.' });
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'name') &&
+        (typeof updates.name !== 'string' || !updates.name.trim())) {
+      return res.status(400).json({ success: false, message: 'Customer name cannot be empty.' });
+    }
+
     const customer = await Customer.findOneAndUpdate(
       { _id: req.params.id, isDeleted: false },
-      req.body,
+      updates,
       { new: true, runValidators: true }
     );
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
