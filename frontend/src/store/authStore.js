@@ -9,6 +9,20 @@ let fetchMeInFlight = null;
 const storedAccessToken = localStorage.getItem('accessToken');
 const storedRefreshToken = localStorage.getItem('refreshToken');
 
+const getTokenUserId = token => {
+  try {
+    const encoded = token?.split('.')?.[1];
+    if (!encoded) return null;
+    const normalized = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(normalized)).id || null;
+  } catch {
+    return null;
+  }
+};
+
+const storedOfflineUserId = localStorage.getItem('offlineUserId') || getTokenUserId(storedAccessToken);
+if (storedOfflineUserId) localStorage.setItem('offlineUserId', storedOfflineUserId);
+
 if (
   storedAccessToken === 'undefined' ||
   storedAccessToken === 'null'
@@ -31,6 +45,8 @@ const useAuthStore = create((set, get) => ({
   // ─────────────────────────────
 
   user: null,
+  // Used only to partition local offline data. API authorization still relies on signed JWTs.
+  offlineUserId: storedOfflineUserId,
 
   accessToken: (
   localStorage.getItem('accessToken') &&
@@ -65,7 +81,9 @@ fetchMe: () => {
 
       // Ignore stale results if the user signed out or changed accounts mid-request.
       if (get().accessToken === token) {
-        set({ user: data.data });
+        const offlineUserId = data.data?._id || data.data?.id || getTokenUserId(token);
+        if (offlineUserId) localStorage.setItem('offlineUserId', String(offlineUserId));
+        set({ user: data.data, offlineUserId: offlineUserId ? String(offlineUserId) : null });
       }
     } catch (error) {
       if (error.response?.status === 401 && get().accessToken === token) {
@@ -98,9 +116,12 @@ fetchMe: () => {
 
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
+      const offlineUserId = user?._id || user?.id || getTokenUserId(accessToken);
+      if (offlineUserId) localStorage.setItem('offlineUserId', String(offlineUserId));
 
       set({
         user,
+        offlineUserId: offlineUserId ? String(offlineUserId) : null,
         accessToken,
         refreshToken,
         isLoading: false,
@@ -136,11 +157,33 @@ fetchMe: () => {
 
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('offlineUserId');
+    // Prevent a different cashier inheriting the previous cashier's unfinished checkout ID.
+    localStorage.removeItem('pos.pendingCheckoutId');
+    localStorage.removeItem('pos.pendingCheckoutCreatedAt');
 
     set({
       user: null,
+      offlineUserId: null,
       accessToken: null,
       refreshToken: null,
+    });
+  },
+
+  // ─────────────────────────────
+  // SET AUTH (invitation auto-login)
+  // ─────────────────────────────
+
+  setAuth: ({ accessToken, refreshToken, user }) => {
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
+    const offlineUserId = user?._id || user?.id || getTokenUserId(accessToken);
+    if (offlineUserId) localStorage.setItem('offlineUserId', String(offlineUserId));
+    set({
+      user,
+      offlineUserId: offlineUserId ? String(offlineUserId) : null,
+      accessToken,
+      refreshToken
     });
   },
 
@@ -152,8 +195,11 @@ fetchMe: () => {
 
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+    const offlineUserId = getTokenUserId(accessToken);
+    if (offlineUserId) localStorage.setItem('offlineUserId', offlineUserId);
 
     set({
+      offlineUserId: offlineUserId || get().offlineUserId,
       accessToken,
       refreshToken,
     });
