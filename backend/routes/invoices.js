@@ -709,6 +709,11 @@ router.get('/', protect, async (req, res, next) => {
     const { startDate, endDate, paymentMethod, paymentStatus, page = 1, limit = 50 } = req.query;
     const filter = {};
 
+    // Cashiers can review their own receipts only; managers/admins retain shop-wide access.
+    if (!['admin', 'manager'].includes(req.user.role)) {
+      filter.soldBy = req.user._id;
+    }
+
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = new Date(startDate);
@@ -744,7 +749,12 @@ router.get('/', protect, async (req, res, next) => {
 /* ── GET /api/invoices/:id ───────────────────────────────────── */
 router.get('/:id', protect, async (req, res, next) => {
   try {
-    const invoice = await Invoice.findById(req.params.id)
+    const invoiceFilter = { _id: req.params.id };
+    // Prevent staff accounts from opening another employee's invoice by guessing its ID.
+    if (!['admin', 'manager'].includes(req.user.role)) {
+      invoiceFilter.soldBy = req.user._id;
+    }
+    const invoice = await Invoice.findOne(invoiceFilter)
                                  .populate('customer', 'name phone')
                                  .populate('soldBy', 'name');
     if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found.' });
