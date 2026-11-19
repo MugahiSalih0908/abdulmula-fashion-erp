@@ -107,6 +107,14 @@ app.use('/api/webhooks', require('./routes/webhooks'));
 app.use(express.json({ limit:'10mb' }));
 app.use(express.urlencoded({ extended:true }));
 
+// ERP API responses contain employee, customer and financial data.
+// Explicitly prevent browsers, service workers and intermediaries from caching them.
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, private');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
+
 // ── Logging ───────────────────────────────────────────────────
 const { redactRequestPath } = require('./utils/safeRequestPath');
 morgan.token('safe-url', req => redactRequestPath(req));
