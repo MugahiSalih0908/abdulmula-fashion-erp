@@ -29,8 +29,11 @@ const userSchema = new mongoose.Schema({
   lastLogin:     { type: Date },
   lastLoginIP:   { type: String },
 
-  // ── Refresh tokens (multi-device) ──────────────────────────
+  // ── Refresh tokens and active device sessions ───────────────
+  // Refresh token JWTs are stored only as SHA-256 digests.
   refreshTokens: [{ type: String, select: false }],
+  // Session IDs let the server revoke already-issued access JWTs immediately.
+  activeSessions: [{ type: String, select: false }],
 
   passwordChangedAt: { type: Date },
 }, { timestamps: true });
@@ -87,6 +90,7 @@ userSchema.methods.toJSON = function () {
   const obj = this.toObject({ virtuals: true });
   delete obj.password;
   delete obj.refreshTokens;
+  delete obj.activeSessions;
   delete obj.verificationToken;
   delete obj.verificationTokenExpire;
   delete obj.resetPasswordToken;
