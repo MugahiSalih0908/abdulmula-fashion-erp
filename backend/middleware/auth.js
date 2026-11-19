@@ -3,6 +3,15 @@
 const jwt  = require('jsonwebtoken');
 const User = require('../models/User');
 
+const isIssuedBeforePasswordChange = (issuedAt, passwordChangedAt) => {
+  if (!passwordChangedAt) return false;
+  const issuedAtSeconds = Number(issuedAt);
+  const changedAt = new Date(passwordChangedAt).getTime();
+  return !Number.isFinite(issuedAtSeconds) ||
+    !Number.isFinite(changedAt) ||
+    issuedAtSeconds < Math.floor(changedAt / 1000);
+};
+
 /**
  * protect – verifies Bearer JWT, attaches req.user
  */
@@ -30,11 +39,7 @@ const protect = async (req, res, next) => {
 
     // Password resets/change invalidate already-issued access JWTs as well as
     // refresh sessions. Compare whole seconds because JWT iat is second-based.
-    if (
-      user.passwordChangedAt &&
-      (!Number.isFinite(decoded.iat) ||
-        decoded.iat < Math.floor(new Date(user.passwordChangedAt).getTime() / 1000))
-    ) {
+    if (isIssuedBeforePasswordChange(decoded.iat, user.passwordChangedAt)) {
       return res.status(401).json({
         success: false,
         message: 'Your password changed. Please sign in again.',
@@ -65,4 +70,4 @@ const authorize = (...roles) => (req, res, next) => {
   next();
 };
 
-module.exports = { protect, authorize };
+module.exports = { protect, authorize, isIssuedBeforePasswordChange };
