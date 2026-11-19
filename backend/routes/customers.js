@@ -88,11 +88,16 @@ router.get('/:id', protect, async (req, res, next) => {
     const customer = await Customer.findOne({ _id: req.params.id, isDeleted: false });
     if (!customer) return res.status(404).json({ success: false, message: 'Customer not found.' });
 
+    const mayViewCosts = ['admin', 'manager'].includes(req.user.role);
     const invoiceFilter = { customer: req.params.id };
-    if (!['admin', 'manager'].includes(req.user.role)) {
+    if (!mayViewCosts) {
       invoiceFilter.soldBy = req.user._id;
     }
-    const invoices = await Invoice.find(invoiceFilter).sort({ date: -1 }).limit(20);
+    const invoiceQuery = Invoice.find(invoiceFilter).sort({ date: -1 }).limit(20);
+    if (!mayViewCosts) {
+      invoiceQuery.select('-items.unitCost -items.costKnown');
+    }
+    const invoices = await invoiceQuery;
     res.json({ success: true, data: customer, invoices });
   } catch (err) { next(err); }
 });
