@@ -1,5 +1,6 @@
 // routes/expenses.js – v6 (safe, non‑crashing)
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Expense = require('../models/Expense');
 const { protect, authorize } = require('../middleware/auth');
@@ -111,99 +112,86 @@ router.get('/', async (req, res, next) => {
 });
 
 /**
- * POST /api/expenses – main create endpoint (used by frontend)
- * Body: { title, amount, category, description?, date? }
+ * Create an expense using a strict allowlist; /add remains a compatibility alias.
  */
-router.post('/', async (req, res, next) => {
+const createExpense = async (req, res, next) => {
   try {
-    const { title, amount, category, description, date } = req.body;
-
-    // Input validation
-    if (!title || typeof title !== 'string' || title.trim().length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Expense title is required and must be a non‑empty string.'
-      });
+    const allowed = ['title', 'amount', 'category', 'description', 'date'];
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({ success: false, message: 'An expense object is required.' });
     }
-    if (amount === undefined || amount === null) {
-      return res.status(400).json({
-        success: false,
-        message: 'Amount is required.'
-      });
-    }
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Amount must be a positive number.'
-      });
+    const unknown = Object.keys(req.body).filter(key => !allowed.includes(key));
+    if (unknown.length) {
+      return res.status(400).json({ success: false, message: `Unsupported expense field(s): ${unknown.join(', ')}.` });
     }
 
-    // Prepare expense data
-    const expenseData = {
+    const { title, amount, category = 'Other', description = '', date } = req.body;
+    if (typeof title !== 'string' || !title.trim() || title.trim().length > 120) {
+      return res.status(400).json({ success: false, message: 'Expense title is required and must be 120 characters or fewer.' });
+    }
+    const parsedAmount = typeof amount === 'number' || (typeof amount === 'string' && amount.trim() !== '')
+      ? Number(amount)
+      : Number.NaN;
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0 || !Number.isSafeInteger(Math.round(parsedAmount * 100))) {
+      return res.status(400).json({ success: false, message: 'Amount must be a finite positive number.' });
+    }
+    const categories = ['Rent', 'Transport', 'Salaries', 'Electricity', 'Stock Purchase', 'Marketing', 'Maintenance', 'Other'];
+    if (!categories.includes(category)) {
+      return res.status(400).json({ success: false, message: 'Choose a valid expense category.' });
+    }
+    if (typeof description !== 'string' || description.trim().length > 300) {
+      return res.status(400).json({ success: false, message: 'Description must be 300 characters or fewer.' });
+    }
+    const expenseDate = date === undefined || date === null || date === '' ? new Date() : new Date(date);
+    if (Number.isNaN(expenseDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Enter a valid expense date.' });
+    }
+
+    const expense = await Expense.create({
       title: title.trim(),
-      amount: parsedAmount,
-      category: category || 'Other',
-      description: description ? description.trim() : '',
+      amount: Math.round(parsedAmount * 100) / 100,
+      category,
+      description: description.trim(),
       addedBy: req.user._id,
-      date: date ? new Date(date) : new Date()
-    };
+      date: expenseDate
+    });
 
-    const expense = await Expense.create(expenseData);
-
-    // Audit log (if log function exists, otherwise skip)
-    if (typeof log === 'function') {
-      await log({
-        user: req.user,
-        action: 'EXPENSE_CREATE',
-        entity: 'Expense',
-        entityId: expense._id,
-        req
-      }).catch(e => console.error('Audit log failed:', e));
-    }
-
+    await log({
+      user: req.user,
+      action: 'EXPENSE_CREATE',
+      entity: 'Expense',
+      entityId: expense._id,
+      req
+    });
     res.status(201).json({ success: true, data: expense });
   } catch (err) {
     next(err);
   }
-});
+};
 
-/**
- * POST /api/expenses/add – legacy endpoint (kept for compatibility)
- * Same as POST / – just forwards logic
- */
-router.post('/add', async (req, res, next) => {
-  // Reuse the same handler by calling the route handler
-  // This avoids code duplication and ensures same behaviour
-  router.handle(req, res, next);
-});
+router.post('/', createExpense);
+router.post('/add', createExpense);
 
 /**
  * DELETE /api/expenses/:id
+ * Financial record deletion remains restricted to administrators.
  */
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', authorize('admin'), async (req, res, next) => {
   try {
-    const expense = await Expense.findById(req.params.id);
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(404).json({ success: false, message: 'Expense not found.' });
+    }
+    const expense = await Expense.findByIdAndDelete(req.params.id);
     if (!expense) {
-      return res.status(404).json({
-        success: false,
-        message: 'Expense not found.'
-      });
+      return res.status(404).json({ success: false, message: 'Expense not found.' });
     }
-
-    await Expense.findByIdAndDelete(req.params.id);
-
-    // Audit log
-    if (typeof log === 'function') {
-      await log({
-        user: req.user,
-        action: 'EXPENSE_DELETE',
-        entity: 'Expense',
-        entityId: expense._id,
-        req
-      }).catch(e => console.error('Audit log failed:', e));
-    }
-
+    await log({
+      user: req.user,
+      action: 'EXPENSE_DELETE',
+      entity: 'Expense',
+      entityId: expense._id,
+      req
+    });
     res.json({ success: true, message: 'Expense deleted successfully.' });
   } catch (err) {
     next(err);
