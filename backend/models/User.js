@@ -7,7 +7,7 @@ const crypto   = require('crypto');
 const userSchema = new mongoose.Schema({
   name:     { type: String, required: true, trim: true, maxlength: 60 },
   email:    { type: String, required: true, unique: true, lowercase: true, trim: true },
-  password: { type: String, required: true, minlength: 6, select: false },
+  password: { type: String, required: true, minlength: 12, select: false },
   role:     { type: String, enum: ['admin','manager','staff'], default: 'staff' },
 
   // ── Account status ─────────────────────────────────────────
