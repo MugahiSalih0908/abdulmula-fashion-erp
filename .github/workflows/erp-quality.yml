@@ -40,51 +40,7 @@ permissions:
   contents: read
 
 jobs:
-  refresh-lockfiles:
-    name: Apply non-breaking dependency security fixes
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'security/audit-hardening-2026-11-19'
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.head_ref }}
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-      - name: Remove unused legacy mail dependency
-        working-directory: backend
-        run: npm uninstall nodemailer --save --package-lock-only --ignore-scripts
-      - name: Apply backend fixes within declared semver ranges
-        working-directory: backend
-        run: |
-          npm ci
-          npm audit fix || true
-      - name: Reconcile frontend lockfile after intentional major upgrades
-        working-directory: frontend
-        run: npm install --package-lock-only --ignore-scripts
-      - name: Apply frontend fixes within declared semver ranges
-        working-directory: frontend
-        run: |
-          npm ci
-          npm audit fix || true
-      - name: Commit updated lockfiles to the security branch
-        shell: bash
-        run: |
-          if git diff --quiet -- backend/package-lock.json frontend/package-lock.json; then
-            echo "No dependency lockfile updates were needed."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add backend/package.json backend/package-lock.json frontend/package-lock.json
-            git commit -m "chore(deps): apply non-breaking security updates"
-            git push origin "HEAD:${GITHUB_HEAD_REF}"
-          fi
-
   backend:
-    needs: refresh-lockfiles
-    if: ${{ always() && (needs.refresh-lockfiles.result == 'success' || needs.refresh-lockfiles.result == 'skipped') }}
     name: Backend syntax and tests
     runs-on: ubuntu-latest
     steps:
@@ -122,8 +78,6 @@ jobs:
         run: npm test
 
   frontend:
-    needs: refresh-lockfiles
-    if: ${{ always() && (needs.refresh-lockfiles.result == 'success' || needs.refresh-lockfiles.result == 'skipped') }}
     name: Frontend tests and production build
     runs-on: ubuntu-latest
     steps:
