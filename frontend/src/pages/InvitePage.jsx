@@ -12,7 +12,7 @@ import AuthShell from '../components/AuthShell';
 function calculatePasswordStrength(password) {
   if (!password) return 0;
   let score = 0;
-  if (password.length >= 12) score++;
+  if (password.length >= 8) score++;
   if (password.length >= 12) score++;
   if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
   if (/\d/.test(password)) score++;
@@ -271,7 +271,7 @@ export default function InvitePage() {
 
         <div className="auth-requirements">
           {[
-            ['At least 12 characters', formData.password.length >= 8],
+            ['At least 12 characters', formData.password.length >= 12],
             ['Uppercase and lowercase letters', /[a-z]/.test(formData.password) && /[A-Z]/.test(formData.password)],
             ['A number', /\d/.test(formData.password)],
             ['A symbol', /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password)]
