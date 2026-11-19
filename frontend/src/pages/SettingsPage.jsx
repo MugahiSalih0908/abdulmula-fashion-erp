@@ -438,7 +438,7 @@ function ChangePasswordForm({ onClose }) {
       <div className="admin-settings-form-field">
         <label htmlFor="settings-new-password">New password</label>
         <div className="admin-settings-password-field">
-          <input id="settings-new-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="At least 8 characters" {...register('newPassword', { required: 'Enter a new password.', minLength: { value: 8, message: 'Use at least 8 characters.' } })} />
+          <input id="settings-new-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" placeholder="At least 12 characters" {...register('newPassword', { required: 'Enter a new password.', minLength: { value: 12, message: 'Use at least 12 characters.' } })} />
           <button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>
             {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
           </button>
