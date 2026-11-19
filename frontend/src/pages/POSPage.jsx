@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import api from '../services/api';
+import api, { getSessionAuthConfig } from '../services/api';
 import useCartStore from '../store/cartStore';
 import useAuthStore from '../store/authStore';
 import { calculateCashChange } from '../../../shared/invoiceCalculations.mjs';
@@ -150,7 +150,7 @@ export default function POSPage() {
       if (isOnline) {
         const offlineId = await saveSaleOffline(payload, payload.offlineId, ownerUserId);
         try {
-          const { data } = await api.post('/invoices', payload);
+          const { data } = await api.post('/invoices', payload, getSessionAuthConfig(ownerUserId));
           await markSaleSynced(offlineId, ownerUserId);
           return data.data;
         } catch (err) {
