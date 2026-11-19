@@ -12,16 +12,28 @@ router.get('/', protect, async (req, res, next) => {
   try {
     const today      = new Date(); today.setHours(0,0,0,0);
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const isManager  = ['admin','manager'].includes(req.user.role);
+    const isManager = ['admin','manager'].includes(req.user.role);
+    const invoiceOwnerFilter = isManager ? {} : { soldBy: req.user._id };
+    const recentInvoiceQuery = Invoice.find(invoiceOwnerFilter).sort({ date: -1 }).limit(5).populate('customer', 'name');
+    if (!isManager) recentInvoiceQuery.select('-items.unitCost -items.costKnown');
+    const lowStockQuery = Product.find({
+      isDeleted: false,
+      $expr: { $and: [{ $gt: ['$quantity', 0] }, { $lte: ['$quantity', '$lowStockThreshold'] }] }
+    }).limit(8);
+    if (!isManager) lowStockQuery.select('-costPrice -supplier');
 
-    // Base queries all roles see
+    // Staff dashboards show only their own sales; managers/admins see shop-wide totals.
     const baseQueries = [
-      Product.countDocuments({ isDeleted:false }),
-      Invoice.aggregate([{ $group:{ _id:null, total:{ $sum:'$grandTotal' }, count:{ $sum:1 } } }]),
-      Invoice.aggregate([{ $match:{ date:{ $gte:today } } }, { $group:{ _id:null, total:{ $sum:'$grandTotal' }, count:{ $sum:1 } } }]),
-      Invoice.find().sort({ date:-1 }).limit(5).populate('customer','name'),
-      Product.find({ isDeleted:false, $expr:{ $and:[{ $gt:['$quantity',0] },{ $lte:['$quantity','$lowStockThreshold'] }] } }).limit(8),
-      Invoice.aggregate([{ $match:{ date:{ $gte: new Date(Date.now()-180*24*60*60*1000) } } }, { $group:{ _id:{ year:{ $year:'$date' }, month:{ $month:'$date' } }, revenue:{ $sum:'$grandTotal' }, count:{ $sum:1 } } }, { $sort:{ '_id.year':1, '_id.month':1 } }])
+      Product.countDocuments({ isDeleted: false }),
+      Invoice.aggregate([{ $match: invoiceOwnerFilter }, { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } }]),
+      Invoice.aggregate([{ $match: { ...invoiceOwnerFilter, date: { $gte: today } } }, { $group: { _id: null, total: { $sum: '$grandTotal' }, count: { $sum: 1 } } }]),
+      recentInvoiceQuery,
+      lowStockQuery,
+      Invoice.aggregate([
+        { $match: { ...invoiceOwnerFilter, date: { $gte: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000) } } },
+        { $group: { _id: { year: { $year: '$date' }, month: { $month: '$date' } }, revenue: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+        { $sort: { '_id.year': 1, '_id.month': 1 } }
+      ])
     ];
 
     // Manager/Admin additional queries
