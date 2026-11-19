@@ -40,6 +40,10 @@ app.use(helmet({
   hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: false } : false
 }));
 app.use(mongoSanitize());
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), payment=(), usb=()');
+  next();
+});
 
 // ── CORS ──────────────────────────────────────────────────────
 const configuredOrigins = [
@@ -63,31 +67,12 @@ const allowed = configuredOrigins.map(origin => {
   return new URL(origin).origin;
 });
 
-const vercelPreviewHost =
-  /^abdulmula-fashion-[a-z0-9]+(?:-[a-z0-9]+)*-mugahid-s-projects\.vercel\.app$/i;
-
-const isApprovedVercelPreview = (origin) => {
-  let url;
-  try {
-    url = new URL(origin);
-  } catch {
-    return false;
-  }
-
-  return (
-    url.protocol === 'https:' &&
-    url.origin === origin &&
-    vercelPreviewHost.test(url.hostname)
-  );
-};
-
 app.use(cors({
   origin: (origin, cb) => {
     if (
       !origin ||
       allowed.includes(origin) ||
       (!isProduction && ['http://localhost:5173', 'http://127.0.0.1:5173'].includes(origin)) ||
-      isApprovedVercelPreview(origin)
     ) return cb(null, true);
     cb(new Error(`CORS blocked: ${origin}`));
   },
