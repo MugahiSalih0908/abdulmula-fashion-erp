@@ -154,6 +154,16 @@ fetchMe: () => {
   // ─────────────────────────────
 
   logout: () => {
+    const accessToken = localStorage.getItem('accessToken') || get().accessToken;
+    const refreshToken = localStorage.getItem('refreshToken') || get().refreshToken;
+
+    // Revoke this device's refresh token on the server; local sign-out never waits for the network.
+    if (accessToken && refreshToken) {
+      api.post('/auth/logout', { refreshToken }, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 3000
+      }).catch(() => {});
+    }
 
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
