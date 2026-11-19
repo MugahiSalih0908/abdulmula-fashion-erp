@@ -28,6 +28,19 @@ const protect = async (req, res, next) => {
     if (!user.isActive)
       return res.status(403).json({ success: false, message: 'Account is disabled. Contact admin.' });
 
+    // Password resets/change must invalidate access JWTs issued before the change.
+    if (
+      user.passwordChangedAt &&
+      Number.isFinite(decoded.iat) &&
+      decoded.iat < Math.floor(user.passwordChangedAt.getTime() / 1000)
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'Your password changed. Please sign in again.',
+        code: 'SESSION_INVALIDATED'
+      });
+    }
+
     req.user = user;
     next();
   } catch (err) {
