@@ -23,6 +23,7 @@ on:
   pull_request:
     branches:
       - main
+      - security/full-app-hardening
       - ui/phase-5-premium-pos-products-cart-staff
       - feature/email-center-infrastructure
       - ui/phase-6-invoice-history
