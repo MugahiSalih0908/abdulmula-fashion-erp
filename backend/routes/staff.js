@@ -4,6 +4,8 @@ const express   = require('express');
 const router    = express.Router();
 const crypto    = require('crypto');
 const validator = require('validator');
+const mongoose = require('mongoose');
+const { validateNewPassword } = require('../utils/passwordValidation');
 const User      = require('../models/User');
 const Invoice   = require('../models/Invoice');
 const AuditLog  = require('../models/AuditLog');
@@ -57,6 +59,7 @@ router.get('/', authorize('admin'), async (req, res, next) => {
 router.get('/:id', authorize('admin'), async (req, res, next) => {
   try {
     if (req.params.id === 'system') return next(); // skip for /system/audit-logs
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success:false, message:'Staff not found.' });
     const member = await User.findById(req.params.id).select('-password -refreshTokens');
     if (!member) return res.status(404).json({ success:false, message:'Staff not found.' });
     const [recent, logs, month] = await Promise.all([
@@ -166,6 +169,7 @@ router.post('/', authorize('admin'), async (req, res, next) => {
 /* ── POST /api/staff/:id/resend-activation ── admin ─────────── */
 router.post('/:id/resend-activation', authorize('admin'), async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success:false, message:'Staff not found.' });
     const member = await User.findById(req.params.id)
                              .select('+verificationToken +verificationTokenExpire');
     if (!member) return res.status(404).json({ success:false, message:'Staff not found.' });
@@ -205,7 +209,7 @@ router.post('/:id/resend-activation', authorize('admin'), async (req, res, next)
 /* ── PUT /api/staff/:id ──────────────────── admin only ──────── */
 router.put('/:id', authorize('admin'), async (req, res, next) => {
   try {
-    if (!require('mongoose').isValidObjectId(req.params.id)) return res.status(404).json({ success:false, message:'Staff not found.' });
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success:false, message:'Staff not found.' });
     const allowed = ['name', 'email', 'role', 'salary'];
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length === 0 || Object.keys(req.body).some(key => !allowed.includes(key))) {
       return res.status(400).json({ success:false, message:'Provide only name, email, role or salary fields.' });
@@ -250,6 +254,7 @@ router.put('/:id', authorize('admin'), async (req, res, next) => {
 /* ── PATCH /api/staff/:id/toggle ─────────── admin only ──────── */
 router.patch('/:id/toggle', authorize('admin'), async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success:false, message:'Staff not found.' });
     if (req.params.id === req.user._id.toString())
       return res.status(400).json({ success:false, message:'Cannot disable your own account.' });
     const member = await User.findById(req.params.id).select('+refreshTokens');
@@ -266,8 +271,9 @@ router.patch('/:id/toggle', authorize('admin'), async (req, res, next) => {
 router.patch('/:id/reset-password', authorize('admin'), async (req, res, next) => {
   try {
     const newPassword = req.body?.newPassword;
-    if (typeof newPassword !== 'string' || newPassword.length < 12 || newPassword.length > 128)
-      return res.status(400).json({ success:false, message:'New password must be between 12 and 128 characters.' });
+    const passwordError = validateNewPassword(newPassword);
+    if (passwordError) return res.status(400).json({ success:false, message:passwordError });
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success:false, message:'Staff not found.' });
     const member = await User.findById(req.params.id).select('+refreshTokens');
     if (!member) return res.status(404).json({ success:false, message:'Staff not found.' });
     member.password      = newPassword;
@@ -283,28 +289,47 @@ router.patch('/:id/reset-password', authorize('admin'), async (req, res, next) =
 /* ── GET /api/staff/:id/sales ──────────── admin + manager ───── */
 router.get('/:id/sales', authorize('admin','manager'), async (req, res, next) => {
   try {
-    const { startDate, endDate, page=1, limit=30 } = req.query;
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ success:false, message:'Staff not found.' });
+    const { startDate, endDate } = req.query;
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 30));
     const filter = { soldBy: req.params.id };
-    if (startDate||endDate) { filter.date={}; if (startDate) filter.date.$gte=new Date(startDate); if (endDate) { const e=new Date(endDate); e.setHours(23,59,59,999); filter.date.$lte=e; } }
-    const skip = (parseInt(page)-1)*parseInt(limit);
+    if (startDate || endDate) {
+      filter.date = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        if (Number.isNaN(start.getTime())) return res.status(400).json({ success:false, message:'Invalid start date.' });
+        filter.date.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        if (Number.isNaN(end.getTime())) return res.status(400).json({ success:false, message:'Invalid end date.' });
+        end.setHours(23, 59, 59, 999);
+        filter.date.$lte = end;
+      }
+      if (filter.date.$gte && filter.date.$lte && filter.date.$gte > filter.date.$lte) return res.status(400).json({ success:false, message:'Start date cannot be after end date.' });
+    }
+    const skip = (page - 1) * limit;
     const [invoices, total, revenue] = await Promise.all([
-      Invoice.find(filter).sort({ date:-1 }).skip(skip).limit(parseInt(limit)),
+      Invoice.find(filter).sort({ date:-1 }).skip(skip).limit(limit),
       Invoice.countDocuments(filter),
       Invoice.aggregate([{ $match:filter }, { $group:{ _id:null, total:{ $sum:'$grandTotal' } } }])
     ]);
-    res.json({ success:true, data:invoices, total, totalRevenue: revenue[0]?.total||0 });
+    res.json({ success:true, data:invoices, total, totalRevenue: revenue[0]?.total||0, page, limit });
   } catch (err) { next(err); }
 });
 
 /* ── GET /api/staff/system/audit-logs ──── admin only ────────── */
 router.get('/system/audit-logs', authorize('admin'), async (req, res, next) => {
   try {
-    const { page=1, limit=50, action } = req.query;
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
+    const { action } = req.query;
     const filter = {};
     if (action && action !== 'all') filter.action = action;
-    const skip = (parseInt(page)-1)*parseInt(limit);
+    const skip = (page - 1) * limit;
     const [logs, total] = await Promise.all([
-      AuditLog.find(filter).populate('user','name email role').sort({ createdAt:-1 }).skip(skip).limit(parseInt(limit)),
+      AuditLog.find(filter).populate('user','name email role').sort({ createdAt:-1 }).skip(skip).limit(limit),
       AuditLog.countDocuments(filter)
     ]);
     res.json({ success:true, data:logs, total });
