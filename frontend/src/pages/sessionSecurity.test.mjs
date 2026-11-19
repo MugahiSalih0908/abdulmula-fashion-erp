@@ -21,5 +21,6 @@ const cartStoreSource = readFileSync(new URL('../store/cartStore.js', import.met
 test('staff POS controls enforce the shared discount cap and hide tax-rate editing', () => {
   assert.match(cartDrawerSource, /canManagePricing && <section aria-labelledby="cart-tax-heading">/);
   assert.match(cartDrawerSource, /STAFF_MAX_DISCOUNT_PERCENT/);
-  assert.match(cartStoreSource, /maxDiscountPercent = STAFF_MAX_DISCOUNT_PERCENT/);
+  assert.match(cartDrawerSource, /cart\.setDiscount\(product\.\_id, event\.target\.value, canManagePricing \? 100 : STAFF_MAX_DISCOUNT_PERCENT\)/);
+  assert.match(cartStoreSource, /maxDiscountPercent = 100/);
 });
