@@ -1,7 +1,7 @@
 // src/store/authStore.js
 
 import { create } from 'zustand';
-import api from '../services/api';
+import api, { revokeSession } from '../services/api';
 
 // React StrictMode and protected route transitions may request the current user together.
 // Share one in-flight request so the same access token is not checked multiple times.
@@ -140,27 +140,21 @@ fetchMe: () => {
   // LOGOUT
   // ─────────────────────────────
 
-  logout: async () => {
+  logout: () => {
     const { accessToken, refreshToken } = get();
 
-    // Revoke while the current session is still available. The API client can
-    // rotate an expired access token and update the logout body to the new
-    // refresh token before the server revokes this device session.
-    if (accessToken && refreshToken) {
-      try {
-        await api.post('/auth/logout', { refreshToken }, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          timeout: 4000
-        });
-      } catch {
-        // Always complete local sign-out, including when the device is offline.
-      }
-    }
-
+    // Clear the shared till immediately, then best-effort revoke the captured
+    // session without reading credentials from a subsequently signed-in user.
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('activeUserId');
     set({ user: null, accessToken: null, refreshToken: null });
+
+    if (accessToken && refreshToken) {
+      revokeSession(accessToken, refreshToken).catch(() => {
+        // Local sign-out still completes when the device is offline.
+      });
+    }
   },
 
   // ─────────────────────────────
