@@ -20,8 +20,11 @@ router.get('/', protect, async (req, res, next) => {
       Product.countDocuments({ isDeleted:false }),
       Invoice.aggregate([{ $match: invoiceScope }, { $group:{ _id:null, total:{ $sum:'$grandTotal' }, count:{ $sum:1 } } }]),
       Invoice.aggregate([{ $match:{ ...invoiceScope, date:{ $gte:today } } }, { $group:{ _id:null, total:{ $sum:'$grandTotal' }, count:{ $sum:1 } } }]),
-      Invoice.find(invoiceScope).sort({ date:-1 }).limit(5).populate('customer','name'),
-      Product.find({ isDeleted:false, $expr:{ $and:[{ $gt:['$quantity',0] },{ $lte:['$quantity','$lowStockThreshold'] }] } }).limit(8),
+      Invoice.find(invoiceScope)
+        .select(isManager ? '' : '-items.unitCost -items.costKnown')
+        .sort({ date:-1 }).limit(5).populate('customer','name'),
+      Product.find({ isDeleted:false, $expr:{ $and:[{ $gt:['$quantity',0] },{ $lte:['$quantity','$lowStockThreshold'] }] } })
+        .select(isManager ? '' : '-costPrice -supplier').limit(8),
       Invoice.aggregate([{ $match:{ ...invoiceScope, date:{ $gte: new Date(Date.now()-180*24*60*60*1000) } } }, { $group:{ _id:{ year:{ $year:'$date' }, month:{ $month:'$date' } }, revenue:{ $sum:'$grandTotal' }, count:{ $sum:1 } } }, { $sort:{ '_id.year':1, '_id.month':1 } }])
     ];
 
