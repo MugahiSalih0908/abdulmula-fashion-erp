@@ -10,5 +10,8 @@ export function getSessionAuthConfig(expectedUserId, storage = globalThis.localS
   if (expectedUserId && String(activeUserId) !== String(expectedUserId)) {
     throw new Error('The signed-in staff account changed. Sign in again before synchronizing this sale.');
   }
-  return { headers: { Authorization: `Bearer ${accessToken}` } };
+  return {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    expectedUserId: String(expectedUserId || activeUserId)
+  };
 }
