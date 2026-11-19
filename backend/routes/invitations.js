@@ -4,6 +4,8 @@ const express   = require('express');
 const router    = express.Router();
 const crypto    = require('crypto');
 const validator = require('validator');
+const mongoose = require('mongoose');
+const { validateNewPassword, isValidOpaqueToken } = require('../utils/passwordValidation');
 const Invitation = require('../models/Invitation');
 const User      = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
@@ -18,16 +20,19 @@ const { log }   = require('../utils/auditLogger');
 // ─────────────────────────────────────────────────────────────
 router.post('/create', protect, authorize('admin'), async (req, res, next) => {
   try {
-    const { email, role } = req.body;
-
-    if (!email || !validator.isEmail(email))
+    const body = req.body || {};
+    if (Object.keys(body).some(key => !['email', 'role'].includes(key))) {
+      return res.status(400).json({ success: false, message: 'Only email and role may be supplied.' });
+    }
+    const { email, role } = body;
+    if (typeof email !== 'string' || email.trim().length > 254 || !validator.isEmail(email.trim()))
       return res.status(400).json({ success: false, message: 'Valid email is required.' });
 
     const validRoles = ['admin', 'manager', 'staff'];
     if (!role || !validRoles.includes(role))
       return res.status(400).json({ success: false, message: 'Valid role is required.' });
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail = email.trim().toLowerCase();
     const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser)
       return res.status(409).json({ success: false, message: 'User with this email already exists.' });
@@ -175,7 +180,7 @@ router.post('/validate/:token', async (req, res, next) => {
     const { token } = req.params;
 
     // ── Validate token format ──────────────────────────────────
-    if (!token || token.length !== 64)
+    if (!isValidOpaqueToken(token))
       return res.status(400).json({ success: false, message: 'Invalid token format.' });
 
     // ── Hash the token ─────────────────────────────────────────
@@ -230,10 +235,10 @@ router.post('/validate/:token', async (req, res, next) => {
 router.post('/accept/:token', async (req, res, next) => {
   try {
     const { token } = req.params;
-    const { password, confirmPassword, name } = req.body;
+    const { password, confirmPassword, name } = req.body || {};
 
     // ── Validation ─────────────────────────────────────────────
-    if (!token || token.length !== 64)
+    if (!isValidOpaqueToken(token))
       return res.status(400).json({ success: false, message: 'Invalid token format.' });
 
     if (typeof password !== 'string' || typeof confirmPassword !== 'string' || !password || !confirmPassword)
@@ -242,8 +247,8 @@ router.post('/accept/:token', async (req, res, next) => {
     if (password !== confirmPassword)
       return res.status(400).json({ success: false, message: 'Passwords do not match.' });
 
-    if (password.length < 12 || password.length > 128)
-      return res.status(400).json({ success: false, message: 'Password must be between 12 and 128 characters.' });
+    const passwordError = validateNewPassword(password);
+    if (passwordError) return res.status(400).json({ success: false, message: passwordError });
 
     if (typeof name !== 'string' || name.trim().length < 2 || name.trim().length > 60)
       return res.status(400).json({ success: false, message: 'Name must be between 2 and 60 characters.' });
@@ -330,9 +335,9 @@ router.post('/accept/:token', async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 router.post('/resend', protect, authorize('admin'), async (req, res, next) => {
   try {
-    const { invitationId } = req.body;
-    if (!invitationId)
-      return res.status(400).json({ success: false, message: 'Invitation ID is required.' });
+    const { invitationId } = req.body || {};
+    if (!mongoose.isValidObjectId(invitationId))
+      return res.status(400).json({ success: false, message: 'A valid invitation ID is required.' });
 
     const invitation = await Invitation.findById(invitationId);
     if (!invitation)
@@ -454,6 +459,8 @@ router.post('/resend', protect, authorize('admin'), async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 router.delete('/:id', protect, authorize('admin'), async (req, res, next) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id))
+      return res.status(404).json({ success: false, message: 'Invitation not found.' });
     const invitation = await Invitation.findById(req.params.id);
 
     if (!invitation)
