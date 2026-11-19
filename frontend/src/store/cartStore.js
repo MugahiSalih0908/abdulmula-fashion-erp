@@ -1,7 +1,7 @@
 // src/store/cartStore.js – full POS cart with cash/change logic
 
 import { create } from 'zustand';
-import { calculateCashChange, calculateInvoiceTotals } from '../../../shared/invoiceCalculations.mjs';
+import { calculateCashChange, calculateInvoiceTotals, STAFF_MAX_DISCOUNT_PERCENT } from '../../../shared/invoiceCalculations.mjs';
 import { getSellableUnitCount, getStockStatus } from '../utils/posStock.mjs';
 
 const getTotals = (state) => calculateInvoiceTotals(
@@ -85,10 +85,11 @@ const useCartStore = create((set, get) => ({
     return { ok: true, status: capped < qty ? 'stock-limit' : 'updated', quantity: capped };
   },
 
-  setDiscount: (productId, discount) => {
+  setDiscount: (productId, discount, maxDiscountPercent = 100) => {
     const amount = Number(discount);
     const item = get().items.find(i => i.product._id === productId);
-    if (!item || !Number.isFinite(amount) || amount < 0 || amount > item.unitPrice * item.quantity) return false;
+    const maxDiscount = item ? item.unitPrice * item.quantity * (maxDiscountPercent / 100) : 0;
+    if (!item || !Number.isFinite(amount) || amount < 0 || amount > maxDiscount) return false;
     set({ items: get().items.map(i =>
       i.product._id === productId ? { ...i, discount: amount } : i
     ) });
