@@ -134,17 +134,25 @@ fetchMe: () => {
   // LOGOUT
   // ─────────────────────────────
 
-  logout: () => {
-
+  logout: async () => {
+    // Capture the current session, clear the shared device immediately, then
+    // best-effort revoke this refresh token on the server.
+    const { accessToken, refreshToken } = get();
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('activeUserId');
+    set({ user: null, accessToken: null, refreshToken: null });
 
-    set({
-      user: null,
-      accessToken: null,
-      refreshToken: null,
-    });
+    if (accessToken && refreshToken) {
+      try {
+        await api.post('/auth/logout', { refreshToken }, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          timeout: 5000
+        });
+      } catch {
+        // Local sign-out must still complete when the device is offline.
+      }
+    }
   },
 
   // ─────────────────────────────
