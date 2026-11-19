@@ -3,6 +3,12 @@
 
 import db  from './db';
 import api from '../services/api';
+import {
+  normalizeOwnerUserId,
+  canSyncSaleForUser,
+  pendingCheckoutStorageKey,
+  clearPendingCheckout
+} from './offlineSaleOwnership.mjs';
 
 const normalizeOfflineId = (value) => {
   if (typeof value !== 'string' || !value.trim()) {
@@ -31,7 +37,8 @@ const offlineIdsMatch = (candidate, canonical) => {
  * saveSaleOffline – called when network is unavailable
  * Stores the cart + metadata in IndexedDB
  */
-export const saveSaleOffline = async (salePayload, requestedOfflineId = salePayload.offlineId) => {
+export const saveSaleOffline = async (salePayload, requestedOfflineId = salePayload.offlineId, ownerUserId) => {
+  const userId = normalizeOwnerUserId(ownerUserId);
   const offlineId = requestedOfflineId == null
     ? `offline_${Date.now()}_${Math.random().toString(36).slice(2)}`
     : normalizeOfflineId(requestedOfflineId);
@@ -39,6 +46,12 @@ export const saveSaleOffline = async (salePayload, requestedOfflineId = salePayl
     .toCollection()
     .filter(sale => offlineIdsMatch(sale.offlineId, offlineId))
     .first();
+  if (existing && String(existing.userId || '') !== userId) {
+    throw new Error('This checkout ID belongs to another staff account or has no verified owner.');
+  }
+  if (existing?.syncStatus === 'owner_unknown') {
+    throw new Error('This saved sale has no verified owner and requires administrator review.');
+  }
   if (existing?.syncStatus === 'rejected') {
     throw new Error('This offline sale was rejected and cannot be resubmitted.');
   }
@@ -72,6 +85,7 @@ export const saveSaleOffline = async (salePayload, requestedOfflineId = salePayl
         : {})
     })),
     offlineId,
+    userId,
     offlineCreatedAt: salePayload.offlineCreatedAt || new Date().toISOString(),
     createdAt: new Date().toISOString(),
     isSynced: false,
@@ -83,30 +97,33 @@ export const saveSaleOffline = async (salePayload, requestedOfflineId = salePayl
   return offlineId;
 };
 
-export const markSaleSynced = async (offlineId) => {
+export const markSaleSynced = async (offlineId, ownerUserId) => {
+  const userId = normalizeOwnerUserId(ownerUserId);
   offlineId = normalizeOfflineId(offlineId);
   const records = await db.pendingSales
     .toCollection()
-    .filter(sale => offlineIdsMatch(sale.offlineId, offlineId))
+    .filter(sale => String(sale.userId || '') === userId && offlineIdsMatch(sale.offlineId, offlineId))
     .toArray();
   await Promise.all(records.map(record => db.pendingSales.update(record.id, {
     isSynced: true,
     syncStatus: 'synced',
     syncError: undefined
   })));
-  const pendingCheckoutId = localStorage.getItem('pos.pendingCheckoutId');
-  if (offlineIdsMatch(pendingCheckoutId, offlineId)) {
-    localStorage.removeItem('pos.pendingCheckoutId');
-    localStorage.removeItem('pos.pendingCheckoutCreatedAt');
-  }
+  clearPendingCheckout(pendingCheckoutStorageKey(userId), offlineId);
   return records.length;
 };
 
-export const getOfflineSales = () =>
-  db.pendingSales
+export const getOfflineSales = async (ownerUserId, { includeAllForReview = false } = {}) => {
+  const userId = normalizeOwnerUserId(ownerUserId);
+  const records = await db.pendingSales
     .toCollection()
     .filter(sale => sale.isSynced === false)
     .toArray();
+  return records.filter(sale =>
+    String(sale.userId || '') === userId ||
+    (includeAllForReview && (!sale.userId || sale.syncStatus === 'owner_unknown'))
+  );
+};
 
 export const approveOfflinePriceConflict = async (saleId) => {
   const sale = await db.pendingSales.get(saleId);
@@ -168,7 +185,7 @@ export const approveOfflinePriceConflict = async (saleId) => {
     payload.offlineConflictApproval = true;
     payload.offlineOriginalPayload = offlineOriginalPayload;
     const { data } = await api.post('/invoices', payload);
-    await markSaleSynced(offlineId);
+    await markSaleSynced(offlineId, sale.userId);
     return data.data;
   } catch (error) {
     const status = error?.response?.status;
@@ -230,10 +247,7 @@ export const rejectOfflinePriceConflict = async (saleId) => {
       decidedBy: resolution.decidedBy
     }
   });
-  const pendingCheckoutId = localStorage.getItem('pos.pendingCheckoutId');
-  if (offlineIdsMatch(pendingCheckoutId, offlineId)) {
-    localStorage.removeItem('pos.pendingCheckoutId');
-  }
+  clearPendingCheckout(pendingCheckoutStorageKey(sale.userId), offlineId);
   return resolution;
 };
 
@@ -241,10 +255,11 @@ export const rejectOfflinePriceConflict = async (saleId) => {
  * syncPendingSales – push all unsynced sales to the server
  * Called automatically when online event fires
  */
-export const syncPendingSales = async () => {
+export const syncPendingSales = async (ownerUserId) => {
+  const userId = normalizeOwnerUserId(ownerUserId);
   const pending = await db.pendingSales
     .toCollection()
-    .filter(sale => sale.isSynced === false && !['blocked', 'rejected'].includes(sale.syncStatus))
+    .filter(sale => canSyncSaleForUser(sale, userId))
     .toArray();
   if (!pending.length) return { synced: 0, failed: 0 };
 
@@ -264,7 +279,7 @@ export const syncPendingSales = async () => {
         offlineId
       };
       await api.post('/invoices', payload);
-      await markSaleSynced(offlineId);
+      await markSaleSynced(offlineId, userId);
       synced++;
     } catch (err) {
       // Keep it in queue unless it's a business logic error (not a network error)
@@ -290,11 +305,15 @@ export const syncPendingSales = async () => {
 /**
  * getPendingCount – reactive count of unsynced sales
  */
-export const getPendingCount = () =>
-  db.pendingSales
+export const getPendingCount = async (ownerUserId) => {
+  if (!ownerUserId) return 0;
+  const userId = normalizeOwnerUserId(ownerUserId);
+  const pending = await db.pendingSales
     .toCollection()
-    .filter(sale => sale.isSynced === false && !['blocked', 'rejected'].includes(sale.syncStatus))
+    .filter(sale => canSyncSaleForUser(sale, userId))
     .count();
+  return pending;
+};
 
 /**
  * cacheProducts – store full product list in IndexedDB for offline POS
