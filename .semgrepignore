@@ -1,0 +1,10 @@
+# Ignore generated or dependency directories.
+# Keep source code, tests, configuration, environment examples and documentation.
+.git/
+**/node_modules/
+**/dist/
+**/dist-e2e/
+**/coverage/
+**/.cache/
+**/playwright-report/
+**/test-results/
