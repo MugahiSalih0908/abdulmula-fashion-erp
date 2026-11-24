@@ -372,6 +372,6 @@ test('C24 a manager can receive a purchase order and pay the supplier (payment c
   assert.deepEqual(paid.body.data.payments.map(p => [p.amount, p.paymentMethod, String(p.recordedBy)]),
     [[30, 'Bank Transfer', String(users.manager._id)]]);
   assert.equal((await m.Supplier.findById(supplier._id)).debtBalance, 0);
-  // SUPPLIER_PAYMENT is not in the audit schema (C14), so no audit record exists. CHANGES at S0-5.
-  assert.equal(await m.AuditLog.countDocuments({ action: 'SUPPLIER_PAYMENT' }), 0);
+  // Changed at S0-5a: SUPPLIER_PAYMENT is in the audit schema (C14), so the payment is audited.
+  assert.equal(await m.AuditLog.countDocuments({ action: 'SUPPLIER_PAYMENT' }), 1);
 });

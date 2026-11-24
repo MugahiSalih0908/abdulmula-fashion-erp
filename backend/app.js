@@ -19,6 +19,7 @@ const rateLimit     = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 const morgan        = require('morgan');
 const errorHandler  = require('./middleware/errorHandler');
+const { createCorsBlockedError } = require('./utils/corsBlockedError');
 
 const createApp = () => {
   const app = express();
@@ -80,7 +81,7 @@ const createApp = () => {
         origin === 'http://localhost:5173' ||
         isApprovedVercelPreview(origin)
       ) return cb(null, true);
-      cb(new Error(`CORS blocked: ${origin}`));
+      cb(createCorsBlockedError(origin));
     },
     credentials:    true,
     methods:        ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],

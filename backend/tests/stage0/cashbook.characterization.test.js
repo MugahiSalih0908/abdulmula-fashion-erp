@@ -75,9 +75,9 @@ test('C13 expected cash = opening + Cash invoices − all expenses − cash supp
   assert.deepEqual({ expectedCash, excess, shortage }, { expectedCash: 520, excess: 80, shortage: 0 });
   assert.deepEqual({ totalSales, totalExpenses, supplierCashPayments, status },
     { totalSales: 500, totalExpenses: 30, supplierCashPayments: 50, status: 'pending_approval' });
-  // C14 behaviour: CASHBOOK_CLOSING_SUBMIT is not in the audit schema, so it is never stored.
-  // CHANGES at S0-5: stored inside the closing transaction.
-  assert.equal(await m.AuditLog.countDocuments({ action: 'CASHBOOK_CLOSING_SUBMIT' }), 0);
+  // Changed at S0-5a: CASHBOOK_CLOSING_SUBMIT is in the audit schema (C14), so log() stores it.
+  // CHANGES at S0-5b-backend: stored inside the closing transaction.
+  assert.equal(await m.AuditLog.countDocuments({ action: 'CASHBOOK_CLOSING_SUBMIT' }), 1);
 });
 
 test('C19 expenses dated on an approved day are accepted, changing its live and reported totals (changes at S0-3, T-6)', async () => {

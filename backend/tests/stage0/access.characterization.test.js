@@ -34,7 +34,7 @@ test.before(async () => {
 });
 test.after(fx.stopSuite);
 
-test('C14 a recursive source scan finds 33 literal audit actions and one dynamic pass-through; 12 actions are not in the AuditLog schema and are dropped with only a console message (changes at S0-5)', async t => {
+test('C14 a recursive source scan finds 33 literal audit actions, all on the list of 39 that the AuditLog schema uses; the audit helpers forward their caller\'s action (changed at S0-5a)', async t => {
   const { files, actions, labels, nonLiteral } = fx.scanAuditActions();
   const allowed = m.AuditLog.schema.path('action').enumValues;
 
@@ -54,18 +54,18 @@ test('C14 a recursive source scan finds 33 literal audit actions and one dynamic
     'SUPPLIER_CREATE', 'SUPPLIER_DELETE', 'SUPPLIER_PAYMENT', 'SUPPLIER_UPDATE',
     'USER_CREATE', 'USER_CREATED_FROM_INVITATION', 'USER_UPDATE'
   ]);
-  // CHANGES at S0-5: every action is allowed (this list becomes empty), and the schema adds
-  // INVOICE_DELETE_REFUSED, CUSTOMER_UPDATE_REJECTED, CUSTOMER_PAYMENT_RECORD and CUSTOMER_PAYMENT_REVERSE.
-  assert.deepEqual([...actions.keys()].filter(action => !allowed.includes(action)).sort(), [
-    'CASHBOOK_CLOSING_APPROVE', 'CASHBOOK_CLOSING_SUBMIT',
-    'INVITATION_CREATED', 'INVITATION_DELETED', 'INVITATION_RESENT',
-    'PURCHASE_ORDER_CREATE', 'PURCHASE_ORDER_DELETE', 'PURCHASE_ORDER_ORDERED',
-    'PURCHASE_ORDER_RECEIVE', 'PURCHASE_ORDER_UPDATE',
-    'SUPPLIER_PAYMENT', 'USER_CREATED_FROM_INVITATION'
-  ]);
-  assert.equal(allowed.length, 22);
+  // Changed at S0-5a: every written action is in the schema (before S0-5a, 12 were missing and
+  // were dropped), and the schema adds INVOICE_DELETE_REFUSED, CUSTOMER_UPDATE_REJECTED,
+  // CUSTOMER_PAYMENT_RECORD, CUSTOMER_PAYMENT_REVERSE and EXCHANGE_RATE_UPDATE.
+  assert.deepEqual([...actions.keys()].filter(action => !allowed.includes(action)).sort(), []);
+  assert.equal(allowed.length, 39);
   // CHANGES at S0-7: STOCK_ADJUST starts being written by the stock-adjustment endpoint.
-  assert.deepEqual(allowed.filter(action => !actions.has(action)), ['STOCK_ADJUST']);
+  // CHANGES at S0-5b-backend: EXCHANGE_RATE_UPDATE starts being written; the other four new
+  // actions leave this list in the later Stage 0 commits that write them.
+  assert.deepEqual(allowed.filter(action => !actions.has(action)), [
+    'STOCK_ADJUST', 'INVOICE_DELETE_REFUSED', 'CUSTOMER_UPDATE_REJECTED',
+    'CUSTOMER_PAYMENT_RECORD', 'CUSTOMER_PAYMENT_REVERSE', 'EXCHANGE_RATE_UPDATE'
+  ]);
 
   // Lower-case literals are labels inside `details`, not audit actions.
   assert.deepEqual(labels.map(label => [label.location, label.value, label.inDetails]), [
@@ -74,27 +74,31 @@ test('C14 a recursive source scan finds 33 literal audit actions and one dynamic
     ['routes/auth.js:218', 'password_reset_completed', true],
     ['routes/staff.js:244', 'password_reset_by_admin', true]
   ]);
-  // Every `action` the scan cannot read as a literal. The only dynamic audit action is log()
-  // forwarding its caller's value (auditLogger.js:13). No caller passes a non-literal (none is
-  // listed here), so the inventory above is complete. Review any new entry before adding it.
+  // Every `action` the scan cannot read as a literal. The only dynamic audit actions are log() and
+  // recordAudit() forwarding their caller's value through the shared entry builder in
+  // utils/auditLogger.js. No caller passes a non-literal (none is listed here), so the inventory
+  // above is complete. Review any new entry before adding it.
   assert.deepEqual(nonLiteral, [
-    'models/AuditLog.js:9 schema', // the enum definition itself
-    'models/AuditLog.js:33 index', // index specification
+    'models/AuditLog.js:10 schema', // the field definition; its enum is the list in utils/auditActions.js
+    'models/AuditLog.js:21 index', // index specification
     'routes/staff.js:268 destructuring', // audit-log list: action filter read from the query string
     'routes/staff.js:270 assignment', // the same filter applied to the query
-    'utils/auditLogger.js:8 parameter', // log() receives the caller's action ...
-    'utils/auditLogger.js:13 shorthand' // ... and writes it: dynamic, resolved through its callers
+    'utils/auditLogger.js:25 parameter', // the entry builder receives the caller's action ...
+    'utils/auditLogger.js:28 shorthand', // ... and stores it: dynamic, resolved through the callers
+    'utils/auditLogger.js:49 assignment' // a safe failure line copies the action only when it is on the list
   ]);
 
-  // Behaviour: the purchase order is created, but its audit entry fails schema validation and
-  // auditLogger only reports it on the console. CHANGES at S0-5: the entry is stored.
+  // Behaviour: the purchase order is created and its audit entry is stored. Changed at S0-5a:
+  // before S0-5a the entry failed schema validation and was reported only on the console. The
+  // shared setup's order is audited too, so the count is for this order.
   const consoleError = t.mock.method(console, 'error', () => {});
   const res = await fx.api(users.admin).post('/api/purchase-orders',
     { supplierId: String(data.supplier._id), items: [{ productId: String(data.product._id), quantity: 1, unitCost: 7 }] });
   assert.equal(res.status, 201);
-  assert.equal(await m.AuditLog.countDocuments({ action: 'PURCHASE_ORDER_CREATE' }), 0);
+  assert.equal(await m.AuditLog.countDocuments({ action: 'PURCHASE_ORDER_CREATE', entityId: res.body.data._id }), 1);
   const messages = consoleError.mock.calls.map(call => call.arguments.join(' '));
-  assert.ok(messages.some(text => text.startsWith('Audit log error:') && text.includes('PURCHASE_ORDER_CREATE')));
+  assert.ok(!messages.some(text => text.startsWith('Audit log error:')));
+  assert.ok(!messages.some(text => text.includes('"event":"audit.')));
 });
 
 test('C15a staff receive cost prices, invoice unit costs, inventory value at cost, other cashiers\' sales and revenue as "profit" (changes at S0-4)', async () => {
