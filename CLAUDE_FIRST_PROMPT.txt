@@ -1,0 +1,18 @@
+We are continuing Abdulmula Fashion ERP. First read @CLAUDE.md and @docs/PROJECT_HANDOFF_2026-11-21.md fully.
+
+Work in the currently opened local repository only. Start in Plan mode. Verify the current branch, working tree, remote tracking, latest commits, and CI config before doing anything. The expected local branch is security/auth-session-hardening-2026-11-21, but verify rather than assume.
+
+Do a read-only security design review of the current authentication/session implementation. Map login, refresh, /me/session bootstrap, logout, logout-all, invitation acceptance, staff deactivation, admin password reset, CSRF, CORS, all frontend token callers, and Dexie/Workbox offline behavior. Identify every file and test affected.
+
+Then present a concrete implementation proposal for:
+1. HttpOnly Secure refresh cookie on api.abdulmulafashion.com, with no refresh token in JSON/localStorage/IndexedDB.
+2. Hashed refresh token/session storage, safe atomic rotation, reuse detection and per-session/all-session revocation.
+3. Access token held only in frontend memory and restored through an authenticated session bootstrap after page reload.
+4. CSRF protection suitable for app.abdulmulafashion.com calling api.abdulmulafashion.com with credentials.
+5. Invitation auto-login and staff disable/password-reset revocation.
+6. Logout and account switching, including React Query/cache clearing.
+7. Offline POS behavior and pendingSales ownership.
+
+Ask the owner the unresolved question: must staff be able to close and reopen the installed PWA while fully offline and continue POS without signing in again? Offer safe options. Do not choose without the owner.
+
+Do not edit code, run destructive commands, access .env/secrets, mutate databases, modify Vercel/Render settings, push, open/merge PRs or deploy. Do not run npm audit fix --force. Give a phased test-first plan and wait for owner approval before implementation.

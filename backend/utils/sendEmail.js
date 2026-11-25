@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const validator = require('validator');
 const EmailLog = require('../models/EmailLog');
 const { validateEmailDelivery, isEmailDeliveryBlocked } = require('./emailConfig');
+const { isInsideTransaction } = require('./transactions');
 
 // Resend is initialized lazily only after delivery mode and provider config are validated.
 
@@ -245,6 +246,16 @@ const sendEmail = async ({
   relatedEntity,
   relatedEntityId
 }) => {
+  // D11, MR-8: never inside a runTransaction() callback, which may run again. Checked first:
+  // before the test-mode return, any delivery record or any provider call. The error has no
+  // status (a response gets the generic 500) and deliberately no EMAIL_ code, which the error
+  // handler would turn into a public code.
+  if (isInsideTransaction()) {
+    const error = new Error('Email cannot be sent inside a transaction callback.');
+    error.name = 'EmailInsideTransactionError';
+    throw error;
+  }
+
   if (process.env.NODE_ENV === 'test') {
     return { id: 'test-mode', status: 'sent', skipped: true };
   }

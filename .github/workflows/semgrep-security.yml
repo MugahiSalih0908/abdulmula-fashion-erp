@@ -1,0 +1,230 @@
+name: Semgrep security scanning
+
+on:
+  push:
+    branches:
+      - main
+      - security/**
+
+  pull_request:
+    branches:
+      - main
+
+  schedule:
+    - cron: '0 4 * * 1'
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report-only:
+    name: Semgrep report-only scan
+    if: >-
+      ${{
+        github.event_name == 'pull_request' ||
+        startsWith(github.ref, 'refs/heads/security/') ||
+        (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Semgrep summary regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Python interpreter: $(command -v python3)"
+          python3 -VV
+          python3 -I -B -W error .github/scripts/test_semgrep_summary.py
+
+      - name: Validate custom Semgrep rules and scan
+        shell: bash
+        env:
+          SEMGREP_IMAGE: semgrep/semgrep@sha256:9e7a5ea2466f5a9b7f308a1c6087ced2626b988869d432b326668578abf60944
+        run: |
+          set -euo pipefail
+
+          outdir="$RUNNER_TEMP/semgrep-output"
+          validate_log="$RUNNER_TEMP/semgrep-validation-private.log"
+          scan_log="$RUNNER_TEMP/semgrep-scan-private.log"
+
+          mkdir -p "$outdir"
+          chmod 0777 "$outdir"
+
+          trap 'rm -rf "$outdir"; rm -f "$validate_log" "$scan_log"' EXIT
+
+          if ! docker run --rm --pull=always \
+            --volume "$GITHUB_WORKSPACE:/src:ro" \
+            --workdir /src \
+            "$SEMGREP_IMAGE" \
+            semgrep scan \
+              --metrics=off \
+              --disable-version-check \
+              --config /src/.semgrep/abdulmula-security.yml \
+              --validate \
+              >"$validate_log" 2>&1; then
+            echo "::error::Semgrep custom-rule validation failed. Detailed output withheld."
+            exit 1
+          fi
+
+          echo "Semgrep custom-rule validation passed."
+
+          if ! docker run --rm --pull=always \
+            --volume "$GITHUB_WORKSPACE:/src:ro" \
+            --volume "$outdir:/out:rw" \
+            --workdir /src \
+            "$SEMGREP_IMAGE" \
+            semgrep scan \
+              --metrics=off \
+              --disable-version-check \
+              --config p/javascript \
+              --config p/nodejs \
+              --config p/react \
+              --config p/jwt \
+              --config p/secrets \
+              --config p/owasp-top-ten \
+              --config p/github-actions \
+              --config /src/.semgrep/abdulmula-security.yml \
+              --sarif \
+              --sarif-output=/out/semgrep.sarif \
+              /src \
+              >"$scan_log" 2>&1; then
+            echo "::error::Semgrep scan failed. Detailed output withheld."
+            exit 1
+          fi
+
+          if [ ! -s "$outdir/semgrep.sarif" ]; then
+            echo "::error::Semgrep did not produce a valid non-empty SARIF report."
+            exit 1
+          fi
+
+          python3 .github/scripts/semgrep-summary.py "$outdir/semgrep.sarif"
+
+          echo "Report-only scan completed. Findings details and SARIF were not published."
+
+  main-code-scanning:
+    name: Semgrep main branch Code Scanning
+    if: >-
+      ${{
+        github.ref == 'refs/heads/main' &&
+        (github.event_name == 'push' ||
+         github.event_name == 'schedule' ||
+         github.event_name == 'workflow_dispatch')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Semgrep summary regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Python interpreter: $(command -v python3)"
+          python3 -VV
+          python3 -I -B -W error .github/scripts/test_semgrep_summary.py
+
+      - name: Validate custom Semgrep rules and scan
+        shell: bash
+        env:
+          SEMGREP_IMAGE: semgrep/semgrep@sha256:9e7a5ea2466f5a9b7f308a1c6087ced2626b988869d432b326668578abf60944
+        run: |
+          set -euo pipefail
+
+          outdir="$RUNNER_TEMP/semgrep-output"
+          validate_log="$RUNNER_TEMP/semgrep-validation-private.log"
+          scan_log="$RUNNER_TEMP/semgrep-scan-private.log"
+          upload_file="$GITHUB_WORKSPACE/semgrep.sarif"
+
+          mkdir -p "$outdir"
+          chmod 0777 "$outdir"
+
+          trap 'rm -f "$validate_log" "$scan_log"' EXIT
+
+          if [ -e "$upload_file" ]; then
+            echo "::error::Temporary SARIF destination already exists. Stop."
+            exit 1
+          fi
+
+          if ! docker run --rm --pull=always \
+            --volume "$GITHUB_WORKSPACE:/src:ro" \
+            --workdir /src \
+            "$SEMGREP_IMAGE" \
+            semgrep scan \
+              --metrics=off \
+              --disable-version-check \
+              --config /src/.semgrep/abdulmula-security.yml \
+              --validate \
+              >"$validate_log" 2>&1; then
+            echo "::error::Semgrep custom-rule validation failed. Detailed output withheld."
+            exit 1
+          fi
+
+          echo "Semgrep custom-rule validation passed."
+
+          if ! docker run --rm --pull=always \
+            --volume "$GITHUB_WORKSPACE:/src:ro" \
+            --volume "$outdir:/out:rw" \
+            --workdir /src \
+            "$SEMGREP_IMAGE" \
+            semgrep scan \
+              --metrics=off \
+              --disable-version-check \
+              --config p/javascript \
+              --config p/nodejs \
+              --config p/react \
+              --config p/jwt \
+              --config p/secrets \
+              --config p/owasp-top-ten \
+              --config p/github-actions \
+              --config /src/.semgrep/abdulmula-security.yml \
+              --sarif \
+              --sarif-output=/out/semgrep.sarif \
+              /src \
+              >"$scan_log" 2>&1; then
+            echo "::error::Semgrep scan failed. Detailed output withheld."
+            exit 1
+          fi
+
+          if [ ! -s "$outdir/semgrep.sarif" ]; then
+            echo "::error::Semgrep did not produce a valid non-empty SARIF report."
+            exit 1
+          fi
+
+          python3 .github/scripts/semgrep-summary.py "$outdir/semgrep.sarif"
+          cp "$outdir/semgrep.sarif" "$upload_file"
+
+          echo "SARIF prepared for the main branch Code Scanning upload."
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: success()
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep-abdulmula-main
+
+      - name: Remove temporary Semgrep files
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/semgrep-output"
+          rm -f "$RUNNER_TEMP/semgrep-validation-private.log"
+          rm -f "$RUNNER_TEMP/semgrep-scan-private.log"
+          rm -f "$GITHUB_WORKSPACE/semgrep.sarif"

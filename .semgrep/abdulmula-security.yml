@@ -1,0 +1,166 @@
+rules:
+  - id: abdulmula-auth-token-in-localstorage
+    message: "Review this browser storage operation: authentication tokens should not be persisted in localStorage. Prefer a server-managed Secure, HttpOnly session cookie."
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: localStorage.setItem("token", $VALUE)
+      - pattern: localStorage.setItem("accessToken", $VALUE)
+      - pattern: localStorage.setItem("refreshToken", $VALUE)
+      - pattern: localStorage.setItem("access_token", $VALUE)
+      - pattern: localStorage.setItem("refresh_token", $VALUE)
+      - pattern: window.localStorage.setItem("token", $VALUE)
+      - pattern: window.localStorage.setItem("accessToken", $VALUE)
+      - pattern: window.localStorage.setItem("refreshToken", $VALUE)
+      - pattern: window.localStorage.setItem("access_token", $VALUE)
+      - pattern: window.localStorage.setItem("refresh_token", $VALUE)
+
+  - id: abdulmula-refresh-token-in-backend-object
+    message: "Review this refreshToken property. Refresh credentials should not be exposed in ordinary API JSON responses."
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      category: security
+      confidence: MEDIUM
+    patterns:
+      - pattern: 'refreshToken: $TOKEN'
+      - pattern-inside: |
+          $OBJECT.json({
+            ...
+          })
+    paths:
+      include:
+        - backend/**/*.js
+        - backend/**/*.mjs
+
+  - id: abdulmula-jwt-verify-without-explicit-algorithms
+    message: "Review this two-argument jwt.verify call. Explicitly allow-list the expected signing algorithms."
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      category: security
+      confidence: MEDIUM
+    pattern-either:
+      - pattern: jwt.verify($TOKEN, $SECRET)
+      - pattern: jsonwebtoken.verify($TOKEN, $SECRET)
+    paths:
+      include:
+        - backend/**/*.js
+        - backend/**/*.mjs
+
+  - id: abdulmula-cors-wildcard-with-credentials
+    message: "Wildcard CORS origin combined with credentials is unsafe. Use an explicit origin allow-list."
+    severity: ERROR
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern-either:
+      - pattern: |
+          cors({... , origin: "*", ..., credentials: true, ...})
+      - pattern: |
+          cors({... , origin: '*', ..., credentials: true, ...})
+      - pattern: |
+          cors({..., credentials: true, ..., origin: "*", ...})
+      - pattern: |
+          cors({..., credentials: true, ..., origin: '*', ...})
+
+  - id: abdulmula-express-cookie-http-only-disabled
+    message: "Review this Express cookie configuration: httpOnly is explicitly false. Authentication cookies should normally set httpOnly: true."
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern: |
+      $RESPONSE.cookie($NAME, $VALUE, {..., httpOnly: false, ...})
+    paths:
+      include:
+        - backend/**/*.js
+        - backend/**/*.mjs
+
+  - id: abdulmula-express-cookie-secure-disabled
+    message: "Review this Express cookie configuration: secure is explicitly false. Production authentication cookies should set secure: true."
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern: |
+      $RESPONSE.cookie($NAME, $VALUE, {..., secure: false, ...})
+    paths:
+      include:
+        - backend/**/*.js
+        - backend/**/*.mjs
+
+  - id: abdulmula-raw-refresh-token-array-storage
+    message: "Review whether this refresh credential is being stored raw. Prefer storing only a cryptographic hash of the session secret."
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern: $USER.refreshTokens.push($TOKEN)
+    paths:
+      include:
+        - backend/**/*.js
+        - backend/**/*.mjs
+
+  - id: abdulmula-workbox-private-api-cache
+    message: "Review whether this Workbox runtime cache stores private authenticated API responses. Private business data should not be cached by a shared service-worker route."
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      category: security
+      confidence: MEDIUM
+    pattern-regex: '(?is)(?:runtimeCaching|workbox).{0,1200}/api/(?:products|customers|dashboard)'
+    paths:
+      include:
+        - frontend/**
+
+  - id: abdulmula-axios-credentialed-request-review
+    message: "Review this credentialed Axios client for strict CORS origin validation and CSRF protection. withCredentials is not inherently unsafe."
+    severity: INFO
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      category: security
+      confidence: MEDIUM
+    pattern: |
+      axios.create({... , withCredentials: true, ...})
+
+  - id: abdulmula-production-host-in-test
+    message: "Tests should use isolated test endpoints, not the production Abdulmula Fashion hostname."
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    metadata:
+      category: security
+      confidence: HIGH
+    pattern-regex: '(?i)https?://(?:api|app)\.abdulmulafashion\.com'
+    paths:
+      include:
+        - "**/*.test.*"
+        - "**/*.spec.*"
+        - "**/e2e/**"
