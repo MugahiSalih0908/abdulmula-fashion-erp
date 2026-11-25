@@ -38,6 +38,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Run Semgrep summary regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Python interpreter: $(command -v python3)"
+          python3 -VV
+          python3 -I -B -W error .github/scripts/test_semgrep_summary.py
+
       - name: Validate custom Semgrep rules and scan
         shell: bash
         env:
@@ -124,6 +132,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Run Semgrep summary regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Python interpreter: $(command -v python3)"
+          python3 -VV
+          python3 -I -B -W error .github/scripts/test_semgrep_summary.py
 
       - name: Validate custom Semgrep rules and scan
         shell: bash
